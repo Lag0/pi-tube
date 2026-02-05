@@ -25,7 +25,7 @@ class Config:
     GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
     
     # Default paths
-    DEFAULT_OUTPUT_DIR: Path = Path.cwd() / "output"
+    DEFAULT_OUTPUT_DIR: Path = Path.home() / "pi-tube"
     DEFAULT_TEMP_DIR: Path = Path("/tmp/pi-tube")
     
     # Audio settings for transcription (optimized for speech recognition)
@@ -47,3 +47,9 @@ class Config:
         """Ensure temp directory exists and return path."""
         cls.DEFAULT_TEMP_DIR.mkdir(parents=True, exist_ok=True)
         return cls.DEFAULT_TEMP_DIR
+    
+    @classmethod
+    def ensure_output_dir(cls) -> Path:
+        """Ensure output directory exists and return path."""
+        cls.DEFAULT_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        return cls.DEFAULT_OUTPUT_DIR

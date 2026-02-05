@@ -101,12 +101,10 @@ def _transcribe_with_provider(
         # Perform transcription
         result = transcriber.transcribe(audio_path, language=language)
         
-        # Determine output path
+        # Determine output path - save in ~/pi-tube/ with video name
         if output is None:
-            if is_youtube_url(input_source):
-                output = audio_path.with_suffix(".txt")
-            else:
-                output = Path(input_source).with_suffix(".txt")
+            output_dir = Config.ensure_output_dir()
+            output = output_dir / audio_path.with_suffix(".txt").name
         
         # Save transcription
         result.save(output)

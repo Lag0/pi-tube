@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Optional
 
 from deepgram import DeepgramClient
+from deepgram.core.api_error import ApiError
 from rich.console import Console
 
 from ..config import Config
@@ -47,7 +48,7 @@ class DeepgramProvider(TranscriptionProvider):
         
         Args:
             audio_path: Path to the audio file
-            language: Optional language code (e.g., "pt-BR", "en-US")
+            language: Optional language code (e.g., "pt", "en", "es")
         
         Returns:
             TranscriptionResult with the transcribed text
@@ -78,30 +79,41 @@ class DeepgramProvider(TranscriptionProvider):
         else:
             options["detect_language"] = True
         
-        # Perform transcription using the new SDK v5 API
-        response = self.client.listen.v1.media.transcribe_file(**options)
-        
-        # Extract results
-        if not response.results or not response.results.channels:
-            raise ValueError("No transcription results returned")
-        
-        channel = response.results.channels[0]
-        if not channel.alternatives:
-            raise ValueError("No transcription alternatives returned")
-        
-        alternative = channel.alternatives[0]
-        
-        # Get detected language if available
-        detected_language = language
-        if hasattr(response.results, 'language') and response.results.language:
-            detected_language = response.results.language
-        
-        console.print(f"[green]✓ Transcription complete[/green]")
-        
-        return TranscriptionResult(
-            text=alternative.transcript,
-            confidence=alternative.confidence,
-            language=detected_language,
-            provider=self.name,
-        )
-
+        try:
+            # Perform transcription using SDK v5 API
+            response = self.client.listen.v1.media.transcribe_file(**options)
+            
+            # Extract results
+            if not response.results or not response.results.channels:
+                raise ValueError("No transcription results returned")
+            
+            channel = response.results.channels[0]
+            if not channel.alternatives:
+                raise ValueError("No transcription alternatives returned")
+            
+            alternative = channel.alternatives[0]
+            
+            # Get detected language if available
+            detected_language = language or "auto"
+            if hasattr(channel, 'detected_language') and channel.detected_language:
+                detected_language = channel.detected_language
+            
+            console.print(f"[green]✓ Transcription complete[/green]")
+            
+            return TranscriptionResult(
+                text=alternative.transcript,
+                confidence=alternative.confidence,
+                language=detected_language,
+                provider=self.name,
+            )
+            
+        except ApiError as e:
+            # Handle specific API errors
+            if e.status_code == 401:
+                raise ValueError("Invalid Deepgram API key. Check your configuration.")
+            elif e.status_code == 429:
+                raise ValueError("Rate limit exceeded. Please try again later.")
+            elif e.status_code >= 500:
+                raise ValueError(f"Deepgram server error. Please try again. (Status {e.status_code})")
+            else:
+                raise ValueError(f"Deepgram API error: {e.body}")
