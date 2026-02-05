@@ -57,9 +57,19 @@ def download_audio(
     if not filename:
         info = get_video_info(url)
         filename = info.get("title", "audio")
-        # Sanitize filename
+        # Sanitize filename same as slugify but keep some chars for filesystem if needed, 
+        # but for consistency with CLI we should be careful. 
+        # Actually proper yt-dlp sanitization is better here for the temp file.
         filename = re.sub(r'[<>:"/\\|?*]', "_", filename)
     
+    # Check if file already exists before downloading
+    # Check common audio extensions
+    for ext in ["mp3", "m4a", "webm", "opus", "wav"]:
+        existing_path = output_dir / f"{filename}.{ext}"
+        if existing_path.exists():
+            console.print(f"[green]✓ Audio already available:[/green] {existing_path}")
+            return existing_path
+            
     output_template = str(output_dir / f"{filename}.%(ext)s")
     
     ydl_opts = {

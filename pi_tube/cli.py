@@ -38,6 +38,10 @@ def get_provider(provider: Provider):
     else:
         raise ValueError(f"Unknown provider: {provider}")
 
+from .utils import slugify
+
+# ... imports ...
+
 
 def _transcribe_with_provider(
     provider: Provider,
@@ -67,6 +71,23 @@ def _transcribe_with_provider(
                 title="Pi-Tube",
                 border_style="blue",
             ))
+            
+            # Smart check: Check if transcription already exists BEFORE download
+            if output is None:
+                from .downloader import get_video_info
+                info = get_video_info(input_source)
+                title = info.get("title", "video")
+                slug_name = slugify(title)
+                
+                output_dir = Config.ensure_output_dir()
+                # Check for any file ending with the slugified name
+                # format is YYYY-MM-DD-slug-name.txt
+                existing_files = list(output_dir.glob(f"*-{slug_name}.txt"))
+                
+                if existing_files:
+                    console.print(f"[green]✓ Transcription already exists:[/green] {existing_files[0]}")
+                    return
+
             audio_path = download_audio(input_source)
             cleanup_audio = not keep_audio
         
@@ -104,17 +125,12 @@ def _transcribe_with_provider(
         # Determine output path - save in ~/pi-tube/ with date prefix
         if output is None:
             from datetime import datetime
-            import re
             
             date_prefix = datetime.now().strftime("%Y-%m-%d")
             output_dir = Config.ensure_output_dir()
             
-            # Normalize filename: lowercase, remove special chars, replace spaces with hyphens
-            raw_name = audio_path.stem
-            # Replace non-alphanumeric chars (except hyphens) with spaces, then strip
-            clean_name = re.sub(r'[^a-zA-Z0-9\s-]', '', raw_name)
-            # Replace multiple spaces/hyphens with single hyphen and lowercase
-            normalized_name = re.sub(r'[-\s]+', '-', clean_name).strip('-').lower()
+            # Normalize filename using shared utility
+            normalized_name = slugify(audio_path.stem)
             
             filename = f"{date_prefix}-{normalized_name}.txt"
             output = output_dir / filename
