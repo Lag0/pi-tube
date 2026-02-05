@@ -5,7 +5,7 @@ set -e
 # Usage: curl -fsSL https://raw.githubusercontent.com/Lag0/pi-tube/master/install.sh | bash
 
 REPO="Lag0/pi-tube"
-INSTALL_DIR="/usr/local/bin"
+SKILL_DIR="$HOME/.agent/skills/pi-tube"
 
 echo "🎬 Installing Pi-Tube..."
 
@@ -46,14 +46,21 @@ fi
 echo "📥 Installing pi-tube..."
 pipx install "git+https://github.com/${REPO}.git" --force
 
+# Install SKILL.md for AI agents
+echo "🤖 Installing AI agent skill..."
+mkdir -p "$SKILL_DIR"
+curl -fsSL "https://raw.githubusercontent.com/${REPO}/master/.agent/skills/pi-tube/SKILL.md" -o "$SKILL_DIR/SKILL.md"
+
 echo ""
 echo "✅ Pi-Tube installed successfully!"
 echo ""
 echo "Usage:"
-echo "  pi-tube transcribe \"https://youtube.com/watch?v=...\" --provider deepgram"
-echo "  pi-tube transcribe \"https://youtube.com/watch?v=...\" --provider groq"
-echo "  pi-tube download \"https://youtube.com/watch?v=...\""
+echo "  pi-tube deepgram \"https://youtube.com/watch?v=...\""
+echo "  pi-tube groq \"https://youtube.com/watch?v=...\""
+echo "  pi-tube dl \"https://youtube.com/watch?v=...\""
 echo ""
-echo "⚠️  Don't forget to set your API keys:"
-echo "  export DEEPGRAM_API_KEY=your_key"
-echo "  export GROQ_API_KEY=your_key"
+echo "⚠️  Configure your API keys:"
+echo "  pi-tube config set deepgram YOUR_KEY"
+echo "  pi-tube config set groq YOUR_KEY"
+echo ""
+echo "🤖 AI agent skill installed at: $SKILL_DIR/SKILL.md"
