@@ -7,7 +7,7 @@ set -e
 REPO="Lag0/pi-tube"
 SKILL_DIR="$HOME/.agent/skills/pi-tube"
 
-echo "🎬 Installing Pi-Tube (v3)..."
+echo "🎬 Installing Pi-Tube (v4)..."
 
 # Check for Python 3.11+
 if ! command -v python3 &> /dev/null; then
@@ -36,6 +36,20 @@ if ! command -v ffmpeg &> /dev/null; then
     else
         echo "❌ ffmpeg not found and cannot install via sudo/brew."
         echo "   Please install ffmpeg manually or run as root."
+        exit 1
+    fi
+fi
+
+# Check for git (required for pipx install git+url)
+if ! command -v git &> /dev/null; then
+    echo "⚠️  git not found. Installing..."
+    if can_sudo; then
+        sudo apt-get update && sudo apt-get install -y git
+    elif command -v brew &> /dev/null; then
+        brew install git
+    else
+        echo "❌ git not found and cannot install via sudo/brew."
+        echo "   Please install git manually."
         exit 1
     fi
 fi
