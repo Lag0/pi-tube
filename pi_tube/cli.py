@@ -104,9 +104,19 @@ def _transcribe_with_provider(
         # Determine output path - save in ~/pi-tube/ with date prefix
         if output is None:
             from datetime import datetime
+            import re
+            
             date_prefix = datetime.now().strftime("%Y-%m-%d")
             output_dir = Config.ensure_output_dir()
-            filename = f"{date_prefix}-{audio_path.stem}.txt"
+            
+            # Normalize filename: lowercase, remove special chars, replace spaces with hyphens
+            raw_name = audio_path.stem
+            # Replace non-alphanumeric chars (except hyphens) with spaces, then strip
+            clean_name = re.sub(r'[^a-zA-Z0-9\s-]', '', raw_name)
+            # Replace multiple spaces/hyphens with single hyphen and lowercase
+            normalized_name = re.sub(r'[-\s]+', '-', clean_name).strip('-').lower()
+            
+            filename = f"{date_prefix}-{normalized_name}.txt"
             output = output_dir / filename
         
         # Save transcription
