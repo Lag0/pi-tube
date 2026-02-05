@@ -28,9 +28,9 @@ class DeepgramProvider(TranscriptionProvider):
             if not self.api_key:
                 raise ValueError(
                     "Deepgram API key not configured. "
-                    "Set DEEPGRAM_API_KEY environment variable."
+                    "Run: pi-tube config set deepgram YOUR_API_KEY"
                 )
-            self._client = DeepgramClient(self.api_key)
+            self._client = DeepgramClient(api_key=self.api_key)
         return self._client
     
     def is_configured(self) -> bool:
@@ -63,20 +63,23 @@ class DeepgramProvider(TranscriptionProvider):
         with open(audio_path, "rb") as f:
             buffer_data = f.read()
         
-        # Configure transcription options
+        # Build transcription options
         options = {
+            "request": buffer_data,
             "model": "nova-3",
             "smart_format": True,
             "punctuate": True,
             "paragraphs": True,
-            "language": language or "pt-BR",
         }
         
-        # Perform transcription using the listen API
-        response = self.client.listen.rest.v("1").transcribe_file(
-            {"buffer": buffer_data},
-            options,
-        )
+        # Only set language if explicitly provided, otherwise let Deepgram detect
+        if language:
+            options["language"] = language
+        else:
+            options["detect_language"] = True
+        
+        # Perform transcription using the new SDK v5 API
+        response = self.client.listen.v1.media.transcribe_file(**options)
         
         # Extract results
         if not response.results or not response.results.channels:
@@ -88,11 +91,17 @@ class DeepgramProvider(TranscriptionProvider):
         
         alternative = channel.alternatives[0]
         
+        # Get detected language if available
+        detected_language = language
+        if hasattr(response.results, 'language') and response.results.language:
+            detected_language = response.results.language
+        
         console.print(f"[green]✓ Transcription complete[/green]")
         
         return TranscriptionResult(
             text=alternative.transcript,
             confidence=alternative.confidence,
-            language=language or "pt-BR",
+            language=detected_language,
             provider=self.name,
         )
+
