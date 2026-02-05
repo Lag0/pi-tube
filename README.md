@@ -11,16 +11,26 @@ CLI para download e transcrição de vídeos do YouTube usando modelos cloud de 
 
 ## Instalação
 
+### Instalação Rápida (Recomendada)
+
 ```bash
-# Clone o repositório
-git clone https://github.com/brunolago/pi-tube.git
+curl -fsSL https://raw.githubusercontent.com/Lag0/pi-tube/master/install.sh | bash
+```
+
+### Instalação Manual com pipx
+
+```bash
+pip install --user pipx
+pipx ensurepath
+pipx install git+https://github.com/Lag0/pi-tube.git
+```
+
+### Instalação para Desenvolvimento
+
+```bash
+git clone https://github.com/Lag0/pi-tube.git
 cd pi-tube
-
-# Instale com UV
 uv sync
-
-# Ou com pip
-pip install -e .
 ```
 
 ## Configuração
