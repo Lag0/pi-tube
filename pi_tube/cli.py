@@ -22,6 +22,30 @@ app = typer.Typer(
 )
 console = Console()
 
+@app.callback()
+def main_callback(ctx: typer.Context):
+    """
+    Pi-Tube: AI-powered YouTube transcription.
+    """
+    # Check for updates only if not running 'pi-tube version' or 'config'
+    # to keep fast commands fast, though async check would be better.
+    # For now, we do a quick synchronous check with short timeout.
+    from .utils import check_latest_version
+    
+    # Skip check for version command to avoid circular logic or double printing
+    if ctx.invoked_subcommand != "version":
+        latest = check_latest_version(__version__)
+        if latest:
+            console.print(
+                Panel(
+                    f"New version available: [bold green]{latest}[/bold green]\n"
+                    f"Current version: {__version__}\n\n"
+                    f"Run [bold cyan]pipx upgrade pi-tube[/bold cyan] to update.",
+                    title="Update Available",
+                    border_style="yellow",
+                )
+            )
+
 
 class Provider(str, Enum):
     """Available transcription providers."""

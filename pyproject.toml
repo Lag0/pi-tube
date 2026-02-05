@@ -1,6 +1,6 @@
 [project]
 name = "pi-tube"
-version = "0.1.5"
+version = "0.1.6"
 description = "CLI for YouTube video download and transcription using cloud AI models (Deepgram Nova 3, Groq Whisper)"
 readme = "README.md"
 requires-python = ">=3.11"
