@@ -1,90 +1,117 @@
 ---
 name: pi-tube
 description: CLI for YouTube video download and transcription using cloud AI (Deepgram Nova 3, Groq Whisper)
-requirements:
-  bins:
-    - ffmpeg
-    - python3
-    - yt-dlp
-  env:
-    - DEEPGRAM_API_KEY (optional)
-    - GROQ_API_KEY (optional)
+homepage: https://github.com/Lag0/pi-tube
+metadata: { "openclaw": { "emoji": "🎬", "homepage": "https://github.com/Lag0/pi-tube" } }
 ---
 
-# Pi-Tube - YouTube Transcription CLI
+# Pi-Tube: YouTube Transcription CLI
 
-Pi-Tube is a CLI tool for downloading and transcribing YouTube videos using cloud AI models.
+## When to use
 
-## Installation
+Use this skill when the user asks to:
+
+- transcribe a YouTube video
+- download audio/video from YouTube
+- convert video to text
+- get transcription using Deepgram or Groq/Whisper
+
+## Behavioral rules
+
+- Do everything automatically and quietly
+- Only message the user when:
+  - You need the YouTube URL or file path
+  - You need to know which provider to use (deepgram or groq)
+  - Installation or transcription fails
+  - API key configuration is needed
+
+## Inputs to ask the user for
+
+1. **YouTube URL** or **local file path**
+2. **Provider** (optional): `deepgram` or `groq` (default: groq)
+3. **Output file** (optional): where to save transcription
+
+---
+
+## Step 1: Check if pi-tube is installed
+
+```bash
+which pi-tube || echo "NOT_INSTALLED"
+```
+
+If `NOT_INSTALLED`, proceed to Step 2. Otherwise skip to Step 3.
+
+## Step 2: Install pi-tube (auto-install)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Lag0/pi-tube/master/install.sh | bash
 ```
 
-## Configuration
+This will install:
+- pi-tube CLI via pipx
+- ffmpeg (if not present)
+- yt-dlp (via pip dependency)
 
-Before using, configure at least one API key:
+## Step 3: Check API key configuration
 
 ```bash
-# For Deepgram Nova 3
-pi-tube config set deepgram YOUR_DEEPGRAM_API_KEY
-
-# For Groq Whisper
-pi-tube config set groq YOUR_GROQ_API_KEY
-
-# Verify configuration
 pi-tube config show
 ```
 
-## Commands
-
-### Transcribe YouTube Video
+If the desired provider shows "✗ Not set", ask the user for the API key and configure:
 
 ```bash
+# For Deepgram
+pi-tube config set deepgram USER_API_KEY
+
+# For Groq
+pi-tube config set groq USER_API_KEY
+```
+
+## Step 4: Transcribe
+
+### YouTube video:
+
+```bash
+# Using Groq Whisper (default)
+pi-tube groq "https://youtube.com/watch?v=VIDEO_ID"
+
 # Using Deepgram Nova 3
 pi-tube deepgram "https://youtube.com/watch?v=VIDEO_ID"
 
-# Using Groq Whisper Large V3 Turbo  
-pi-tube groq "https://youtube.com/watch?v=VIDEO_ID"
-
-# Save to specific file
-pi-tube deepgram "https://youtube.com/watch?v=VIDEO_ID" -o output.txt
+# With custom output
+pi-tube groq "https://youtube.com/watch?v=VIDEO_ID" -o output.txt
 
 # Specify language
-pi-tube groq "https://youtube.com/watch?v=VIDEO_ID" -l pt
+pi-tube deepgram "https://youtube.com/watch?v=VIDEO_ID" -l pt
 ```
 
-### Transcribe Local File
+### Local file:
 
 ```bash
-pi-tube deepgram /path/to/video.mp4
-pi-tube groq /path/to/audio.mp3 -o transcription.txt
+pi-tube groq /path/to/video.mp4
+pi-tube deepgram /path/to/audio.mp3 -o transcription.txt
 ```
 
-### Download Only
+## Step 5: Download only (if requested)
 
 ```bash
-# Download audio (default)
-pi-tube dl "https://youtube.com/watch?v=VIDEO_ID"
+# Download audio
+pi-tube dl "https://youtube.com/watch?v=VIDEO_ID" --audio
 
 # Download video
 pi-tube dl "https://youtube.com/watch?v=VIDEO_ID" --video
 ```
 
-### Check Provider Status
+---
 
-```bash
-pi-tube providers
-```
+## Provider comparison
+
+| Provider | Model | Speed | Best for |
+|----------|-------|-------|----------|
+| groq | Whisper Large V3 Turbo | Fast | General use |
+| deepgram | Nova 3 | Very Fast | High accuracy |
 
 ## Output
 
-Transcriptions are saved as `.txt` files by default in the current directory.
-Use `-o` flag to specify custom output path.
-
-## Provider Comparison
-
-| Provider | Model | Speed | Accuracy |
-|----------|-------|-------|----------|
-| deepgram | Nova 3 | Very Fast | Excellent |
-| groq | Whisper Large V3 Turbo | Fast | Excellent |
+Transcriptions are saved as `.txt` files in the current directory by default.
