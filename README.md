@@ -5,7 +5,9 @@ CLI para download e transcrição de vídeos do YouTube usando modelos cloud de 
 ## Features
 
 - 🎬 **Download de YouTube**: Baixa áudio/vídeo de URLs do YouTube
-- 🎙️ **Transcrição Cloud**: Suporta Deepgram Nova 3 e Groq Whisper Large V3
+- 🎙️ **Transcrição Cloud**: Deepgram Nova 3 e Groq Whisper
+- 🗣️ **Diarização**: Identifica quem está falando (Speaker Ident.)
+- 📝 **Sumarização**: Gera um resumo automático do conteúdo
 - 📁 **Arquivos Locais**: Transcreve vídeos e áudios locais
 - 🔧 **Conversão Automática**: Converte áudio para formato otimizado (16kHz mono)
 

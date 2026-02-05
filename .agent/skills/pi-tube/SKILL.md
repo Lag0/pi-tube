@@ -14,6 +14,7 @@ Use this skill when the user asks to:
 - transcribe a YouTube video
 - download audio/video from YouTube
 - convert video to text
+- get transcription with speaker identification and summary
 - get transcription using Deepgram or Groq/Whisper
 
 ## Behavioral rules

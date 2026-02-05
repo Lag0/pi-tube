@@ -186,7 +186,7 @@ wheels = [
 
 [[package]]
 name = "pi-tube"
-version = "0.1.3"
+version = "0.1.4"
 source = { editable = "." }
 dependencies = [
     { name = "deepgram-sdk" },

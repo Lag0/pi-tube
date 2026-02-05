@@ -71,6 +71,8 @@ class DeepgramProvider(TranscriptionProvider):
             "smart_format": True,
             "punctuate": True,
             "paragraphs": True,
+            "diarize": True,
+            "summarize": "v2",
         }
         
         # Only set language if explicitly provided, otherwise let Deepgram detect
@@ -93,15 +95,37 @@ class DeepgramProvider(TranscriptionProvider):
             
             alternative = channel.alternatives[0]
             
+            # Function to format transcript with speaker labels
+            final_transcript = ""
+            
+            # Add summary if available
+            if hasattr(response.results, 'summary') and response.results.summary:
+                summary_text = response.results.summary.short
+                final_transcript += f"📝 SUMMARY:\n{summary_text}\n\n{'='*40}\n\n"
+            
+            # Format paragraphs with speakers
+            if hasattr(alternative, 'paragraphs') and alternative.paragraphs:
+                for paragraph in alternative.paragraphs.paragraphs:
+                    speaker = paragraph.speaker
+                    # Format sentences for better readability
+                    formatted_text = ""
+                    for sentence in paragraph.sentences:
+                        formatted_text += sentence.text + " "
+                    
+                    final_transcript += f"[Speaker {speaker}]: {formatted_text.strip()}\n\n"
+            else:
+                # Fallback to plain transcript if no paragraphs
+                final_transcript += alternative.transcript
+            
             # Get detected language if available
             detected_language = language or "auto"
             if hasattr(channel, 'detected_language') and channel.detected_language:
                 detected_language = channel.detected_language
             
-            console.print(f"[green]✓ Transcription complete[/green]")
+            console.print(f"[green]✓ Transcription complete (Diarization + Summary)[/green]")
             
             return TranscriptionResult(
-                text=alternative.transcript,
+                text=final_transcript.strip(),
                 confidence=alternative.confidence,
                 language=detected_language,
                 provider=self.name,
