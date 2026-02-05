@@ -118,3 +118,17 @@ Transcriptions are saved to `~/pi-tube/YYYY-MM-DD-<video_name>.txt` by default.
 Use `-o` to specify a custom output path.
 
 Temporary files are stored in `~/pi-tube/.tmp/` and cleaned up automatically.
+
+## Update
+
+To update pi-tube to the latest version:
+
+```bash
+pipx upgrade pi-tube
+```
+
+Or run the install script again:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Lag0/pi-tube/master/install.sh | bash
+```

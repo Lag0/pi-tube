@@ -99,6 +99,20 @@ pi-tube dl "https://youtube.com/watch?v=..." --video
 pi-tube providers
 ```
 
+## Atualização
+
+Para atualizar o pi-tube para a versão mais recente:
+
+```bash
+pipx upgrade pi-tube
+```
+
+Ou reinstale forçadamente:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Lag0/pi-tube/master/install.sh | bash
+```
+
 ## Output
 
 As transcrições são salvas em `~/pi-tube/YYYY-MM-DD-<nome_do_video>.txt` por padrão.
