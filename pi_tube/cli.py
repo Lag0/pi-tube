@@ -32,19 +32,18 @@ def main_callback(ctx: typer.Context):
     # For now, we do a quick synchronous check with short timeout.
     from .utils import check_latest_version
     
-    # Skip check for version command to avoid circular logic or double printing
-    if ctx.invoked_subcommand != "version":
-        latest = check_latest_version(__version__)
-        if latest:
-            console.print(
-                Panel(
-                    f"New version available: [bold green]{latest}[/bold green]\n"
-                    f"Current version: {__version__}\n\n"
-                    f"Run [bold cyan]pipx upgrade pi-tube[/bold cyan] to update.",
-                    title="Update Available",
-                    border_style="yellow",
-                )
+    # Run the check
+    latest = check_latest_version(__version__)
+    if latest:
+        console.print(
+            Panel(
+                f"New version available: [bold green]{latest}[/bold green]\n"
+                f"Current version: {__version__}\n\n"
+                f"Run [bold cyan]pipx upgrade pi-tube[/bold cyan] to update.",
+                title="Update Available",
+                border_style="yellow",
             )
+        )
 
 
 class Provider(str, Enum):
