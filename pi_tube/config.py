@@ -7,6 +7,15 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
+# Load config from ~/.config/pi-tube/config
+_config_file = Path.home() / ".config" / "pi-tube" / "config"
+if _config_file.exists():
+    for line in _config_file.read_text().strip().split("\n"):
+        if "=" in line and not line.startswith("#"):
+            key, value = line.split("=", 1)
+            if key not in os.environ:  # Don't override env vars
+                os.environ[key] = value
+
 
 class Config:
     """Application configuration."""

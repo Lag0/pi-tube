@@ -35,17 +35,24 @@ uv sync
 
 ## Configuração
 
-Copie o arquivo de exemplo e adicione suas API keys:
+Configure as API keys usando o comando `config`:
 
 ```bash
-cp .env.example .env
+# Configurar Deepgram
+pi-tube config set deepgram YOUR_DEEPGRAM_KEY
+
+# Configurar Groq
+pi-tube config set groq YOUR_GROQ_KEY
+
+# Ver status da configuração
+pi-tube config show
 ```
 
-Edite o `.env`:
+Ou via variáveis de ambiente:
 
-```env
-DEEPGRAM_API_KEY=your_deepgram_key
-GROQ_API_KEY=your_groq_key
+```bash
+export DEEPGRAM_API_KEY=your_deepgram_key
+export GROQ_API_KEY=your_groq_key
 ```
 
 ## Uso
@@ -53,34 +60,37 @@ GROQ_API_KEY=your_groq_key
 ### Transcrever vídeo do YouTube
 
 ```bash
-# Usando Groq Whisper (padrão)
-pi-tube transcribe "https://youtube.com/watch?v=..." 
+# Usando Groq Whisper
+pi-tube groq "https://youtube.com/watch?v=..."
 
 # Usando Deepgram Nova 3
-pi-tube transcribe "https://youtube.com/watch?v=..." --provider deepgram
+pi-tube deepgram "https://youtube.com/watch?v=..."
 
 # Com output customizado
-pi-tube transcribe "https://youtube.com/watch?v=..." -o ./transcripts/video.txt
+pi-tube groq "https://youtube.com/watch?v=..." -o ./transcripts/video.txt
 ```
 
 ### Transcrever arquivo local
 
 ```bash
 # Vídeo local
-pi-tube transcribe /path/to/video.mp4 --provider groq
+pi-tube groq /path/to/video.mp4
 
 # Áudio local
-pi-tube transcribe /path/to/audio.mp3 -o transcricao.txt
+pi-tube deepgram /path/to/audio.mp3 -o transcricao.txt
 ```
 
-### Download apenas
+### Download
 
 ```bash
-# Download de áudio
-pi-tube download "https://youtube.com/watch?v=..." --output ./downloads
+# Download de áudio (padrão)
+pi-tube dl "https://youtube.com/watch?v=..."
+
+# Download de áudio explícito
+pi-tube dl "https://youtube.com/watch?v=..." --audio
 
 # Download de vídeo
-pi-tube download "https://youtube.com/watch?v=..." --video
+pi-tube dl "https://youtube.com/watch?v=..." --video
 ```
 
 ### Verificar providers configurados

@@ -39,52 +39,21 @@ def get_provider(provider: Provider):
         raise ValueError(f"Unknown provider: {provider}")
 
 
-@app.command()
-def transcribe(
-    input_source: str = typer.Argument(
-        ...,
-        help="YouTube URL or path to local video/audio file",
-    ),
-    provider: Provider = typer.Option(
-        Provider.groq,
-        "--provider", "-p",
-        help="Transcription provider to use",
-    ),
-    output: Optional[Path] = typer.Option(
-        None,
-        "--output", "-o",
-        help="Output path for transcription (default: same as input with .txt)",
-    ),
-    language: Optional[str] = typer.Option(
-        None,
-        "--language", "-l",
-        help="Language code (e.g., 'pt' for Portuguese, 'en' for English)",
-    ),
-    keep_audio: bool = typer.Option(
-        False,
-        "--keep-audio", "-k",
-        help="Keep downloaded/extracted audio file",
-    ),
+def _transcribe_with_provider(
+    provider: Provider,
+    input_source: str,
+    output: Optional[Path] = None,
+    language: Optional[str] = None,
+    keep_audio: bool = False,
 ):
-    """
-    Transcribe audio from YouTube URL or local file.
-    
-    Examples:
-    
-        pi-tube transcribe "https://youtube.com/watch?v=..." --provider deepgram
-        
-        pi-tube transcribe /path/to/video.mp4 --provider groq
-        
-        pi-tube transcribe audio.mp3 -o transcript.txt
-    """
+    """Common transcription logic for all providers."""
     try:
-        # Get transcription provider
         transcriber = get_provider(provider)
         
         if not transcriber.is_configured():
             console.print(
                 f"[red]Error:[/red] {provider.value} API key not configured.\n"
-                f"Set {provider.value.upper()}_API_KEY environment variable."
+                f"Run: pi-tube config set {provider.value} YOUR_API_KEY"
             )
             raise typer.Exit(1)
         
@@ -164,7 +133,75 @@ def transcribe(
 
 
 @app.command()
-def download(
+def deepgram(
+    input_source: str = typer.Argument(
+        ...,
+        help="YouTube URL or path to local video/audio file",
+    ),
+    output: Optional[Path] = typer.Option(
+        None,
+        "--output", "-o",
+        help="Output path for transcription",
+    ),
+    language: Optional[str] = typer.Option(
+        None,
+        "--language", "-l",
+        help="Language code (e.g., 'pt', 'en')",
+    ),
+    keep_audio: bool = typer.Option(
+        False,
+        "--keep-audio", "-k",
+        help="Keep downloaded/extracted audio file",
+    ),
+):
+    """
+    Transcribe using Deepgram Nova 3.
+    
+    Examples:
+    
+        pi-tube deepgram "https://youtube.com/watch?v=..."
+        
+        pi-tube deepgram video.mp4 -o transcricao.txt
+    """
+    _transcribe_with_provider(Provider.deepgram, input_source, output, language, keep_audio)
+
+
+@app.command()
+def groq(
+    input_source: str = typer.Argument(
+        ...,
+        help="YouTube URL or path to local video/audio file",
+    ),
+    output: Optional[Path] = typer.Option(
+        None,
+        "--output", "-o",
+        help="Output path for transcription",
+    ),
+    language: Optional[str] = typer.Option(
+        None,
+        "--language", "-l",
+        help="Language code (e.g., 'pt', 'en')",
+    ),
+    keep_audio: bool = typer.Option(
+        False,
+        "--keep-audio", "-k",
+        help="Keep downloaded/extracted audio file",
+    ),
+):
+    """
+    Transcribe using Groq Whisper Large V3 Turbo.
+    
+    Examples:
+    
+        pi-tube groq "https://youtube.com/watch?v=..."
+        
+        pi-tube groq video.mp4 -o transcricao.txt
+    """
+    _transcribe_with_provider(Provider.groq, input_source, output, language, keep_audio)
+
+
+@app.command()
+def dl(
     url: str = typer.Argument(
         ...,
         help="YouTube URL to download",
@@ -174,25 +211,35 @@ def download(
         "--output", "-o",
         help="Output directory for downloaded file",
     ),
-    audio_only: bool = typer.Option(
-        True,
-        "--audio-only/--video",
-        help="Download audio only (default) or full video",
+    audio: bool = typer.Option(
+        False,
+        "--audio",
+        help="Download audio only",
+    ),
+    video: bool = typer.Option(
+        False,
+        "--video",
+        help="Download video",
     ),
 ):
     """
-    Download audio/video from YouTube.
+    Download audio or video from YouTube.
     
     Examples:
     
-        pi-tube download "https://youtube.com/watch?v=..." --output ./downloads
+        pi-tube dl "https://youtube.com/watch?v=..."
         
-        pi-tube download "https://youtube.com/watch?v=..." --video
+        pi-tube dl "https://youtube.com/watch?v=..." --audio
+        
+        pi-tube dl "https://youtube.com/watch?v=..." --video
     """
     try:
         if not is_youtube_url(url):
             console.print(f"[red]Error:[/red] Invalid YouTube URL: {url}")
             raise typer.Exit(1)
+        
+        # Default to audio if neither specified
+        download_video_flag = video and not audio
         
         console.print(Panel(
             f"[bold]Downloading from YouTube[/bold]\n{url}",
@@ -200,11 +247,11 @@ def download(
             border_style="blue",
         ))
         
-        if audio_only:
-            output_path = download_audio(url, output_dir=output)
-        else:
+        if download_video_flag:
             from .downloader import download_video
             output_path = download_video(url, output_dir=output)
+        else:
+            output_path = download_audio(url, output_dir=output)
         
         console.print(Panel(
             f"[bold green]Download Complete[/bold green]\n\n"
@@ -226,32 +273,117 @@ def providers():
     table.add_column("Status", style="green")
     
     # Check Deepgram
-    deepgram = DeepgramProvider()
+    dg = DeepgramProvider()
     table.add_row(
         "deepgram",
         "Nova 3",
-        "✓ Configured" if deepgram.is_configured() else "✗ Not configured",
+        "✓ Configured" if dg.is_configured() else "✗ Not configured",
     )
     
     # Check Groq
-    groq = GroqProvider()
+    gq = GroqProvider()
     table.add_row(
         "groq",
         "Whisper Large V3 Turbo",
-        "✓ Configured" if groq.is_configured() else "✗ Not configured",
+        "✓ Configured" if gq.is_configured() else "✗ Not configured",
     )
     
     console.print(table)
     
-    console.print("\n[dim]Set API keys via environment variables:[/dim]")
-    console.print("  DEEPGRAM_API_KEY=your_key")
-    console.print("  GROQ_API_KEY=your_key")
+    console.print("\n[dim]Configure with: pi-tube config set <provider> <api_key>[/dim]")
 
 
 @app.command()
 def version():
     """Show Pi-Tube version."""
     console.print(f"Pi-Tube v{__version__}")
+
+
+# Config subcommand app
+config_app = typer.Typer(help="Manage API keys configuration")
+app.add_typer(config_app, name="config")
+
+
+def _get_config_path() -> tuple[Path, Path]:
+    """Get config directory and file paths."""
+    config_dir = Path.home() / ".config" / "pi-tube"
+    config_file = config_dir / "config"
+    return config_dir, config_file
+
+
+def _load_config() -> dict:
+    """Load current config from file."""
+    _, config_file = _get_config_path()
+    current_config = {}
+    if config_file.exists():
+        for line in config_file.read_text().strip().split("\n"):
+            if "=" in line and not line.startswith("#"):
+                key, value = line.split("=", 1)
+                current_config[key] = value
+    return current_config
+
+
+def _save_config(config: dict):
+    """Save config to file."""
+    config_dir, config_file = _get_config_path()
+    config_dir.mkdir(parents=True, exist_ok=True)
+    config_file.write_text("\n".join(f"{k}={v}" for k, v in config.items()) + "\n")
+
+
+@config_app.command("set")
+def config_set(
+    provider: str = typer.Argument(
+        ...,
+        help="Provider name (deepgram or groq)",
+    ),
+    api_key: str = typer.Argument(
+        ...,
+        help="API key value",
+    ),
+):
+    """
+    Set an API key for a provider.
+    
+    Examples:
+    
+        pi-tube config set deepgram YOUR_DEEPGRAM_KEY
+        
+        pi-tube config set groq YOUR_GROQ_KEY
+    """
+    provider_lower = provider.lower()
+    key_map = {
+        "deepgram": "DEEPGRAM_API_KEY",
+        "groq": "GROQ_API_KEY",
+    }
+    
+    if provider_lower not in key_map:
+        console.print(f"[red]Error:[/red] Unknown provider '{provider}'")
+        console.print("Available providers: deepgram, groq")
+        raise typer.Exit(1)
+    
+    config = _load_config()
+    config[key_map[provider_lower]] = api_key
+    _save_config(config)
+    
+    console.print(f"[green]✓ {provider_lower} API key saved[/green]")
+
+
+@config_app.command("show")
+def config_show():
+    """Show current configuration status."""
+    import os
+    
+    _, config_file = _get_config_path()
+    config = _load_config()
+    
+    console.print(Panel("[bold]Pi-Tube Configuration[/bold]", border_style="blue"))
+    
+    deepgram_status = "✓ Set" if config.get("DEEPGRAM_API_KEY") or os.getenv("DEEPGRAM_API_KEY") else "✗ Not set"
+    groq_status = "✓ Set" if config.get("GROQ_API_KEY") or os.getenv("GROQ_API_KEY") else "✗ Not set"
+    
+    console.print(f"DEEPGRAM_API_KEY: {deepgram_status}")
+    console.print(f"GROQ_API_KEY: {groq_status}")
+    console.print(f"\n[dim]Config file: {config_file}[/dim]")
 
 
 def main():
