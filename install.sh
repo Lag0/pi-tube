@@ -7,7 +7,7 @@ set -e
 REPO="Lag0/pi-tube"
 SKILL_DIR="$HOME/.agent/skills/pi-tube"
 
-echo "🎬 Installing Pi-Tube (v2)..."
+echo "🎬 Installing Pi-Tube (v3)..."
 
 # Check for Python 3.11+
 if ! command -v python3 &> /dev/null; then
@@ -21,15 +21,21 @@ if [[ $(echo "$PYTHON_VERSION < 3.11" | bc -l) -eq 1 ]]; then
     exit 1
 fi
 
+# Function to check if we have sudo access without password
+can_sudo() {
+    command -v sudo &> /dev/null && sudo -n true 2> /dev/null
+}
+
 # Check for ffmpeg
 if ! command -v ffmpeg &> /dev/null; then
     echo "⚠️  ffmpeg not found. Installing..."
-    if command -v apt-get &> /dev/null; then
+    if can_sudo; then
         sudo apt-get update && sudo apt-get install -y ffmpeg
     elif command -v brew &> /dev/null; then
         brew install ffmpeg
     else
-        echo "❌ Please install ffmpeg manually"
+        echo "❌ ffmpeg not found and cannot install via sudo/brew."
+        echo "   Please install ffmpeg manually or run as root."
         exit 1
     fi
 fi
@@ -39,18 +45,25 @@ if ! command -v pipx &> /dev/null; then
     echo "📦 Installing pipx..."
     INSTALLED_PIPX=false
     
-    # Try apt-get
-    if command -v apt-get &> /dev/null; then
-        echo "   Attempting install via apt-get..."
-        if sudo apt-get update && sudo apt-get install -y pipx; then
-            pipx ensurepath || true
-            INSTALLED_PIPX=true
-        else
-            echo "⚠️  Apt install failed. Trying next method..."
+    # Try apt-get ONLY if we are root or have passwordless sudo
+    if [ "$EUID" -eq 0 ] || can_sudo; then
+        if command -v apt-get &> /dev/null; then
+            echo "   Attempting install via system package manager..."
+            
+            # Use sudo if not root
+            CMD_PREFIX=""
+            [ "$EUID" -ne 0 ] && CMD_PREFIX="sudo"
+            
+            if $CMD_PREFIX apt-get update && $CMD_PREFIX apt-get install -y pipx; then
+                pipx ensurepath || true
+                INSTALLED_PIPX=true
+            else
+                echo "⚠️  System install failed. Falling back to user install..."
+            fi
         fi
     fi
 
-    # Try brew if apt failed or didn't exist
+    # Try brew if on macOS/Linuxbrew
     if [ "$INSTALLED_PIPX" = false ] && command -v brew &> /dev/null; then
         echo "   Attempting install via brew..."
         if brew install pipx; then
@@ -59,11 +72,16 @@ if ! command -v pipx &> /dev/null; then
         fi
     fi
 
-    # Fallback to pip
+    # Fallback to pip user install (Agent friendly 🤖)
     if [ "$INSTALLED_PIPX" = false ]; then
-        echo "⚠️  System package managers failed or not found. Attempting pip install..."
-        if ! python3 -m pip install --user pipx; then
-            echo "⚠️  Standard pip install failed. Retrying with --break-system-packages (safe for --user install)..."
+        echo "ℹ️  Performing user-local installation (Agent friendly mode)..."
+        
+        # Try standard user install first
+        if python3 -m pip install --user pipx > /dev/null 2>&1; then
+            echo "✅ pipx installed via pip --user"
+        else
+            echo "⚠️  Standard pip install failed (likely PEP 668). forcing --break-system-packages..."
+            # This is safe for --user installs as it doesn't break system packages, just allows user site-packages to coexist
             python3 -m pip install --user pipx --break-system-packages
         fi
         python3 -m pipx ensurepath
