@@ -28,7 +28,7 @@ Use this skill when the user asks to:
 ## Inputs to ask the user for
 
 1. **YouTube URL** or **local file path**
-2. **Provider** (optional): `deepgram` or `groq` (default: groq)
+2. **Provider** (optional): `deepgram` or `groq` (default: deepgram)
 3. **Output file** (optional): where to save transcription
 
 ---
