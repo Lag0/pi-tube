@@ -7,26 +7,14 @@ set -e
 REPO="Lag0/pi-tube"
 SKILL_DIR="$HOME/.agent/skills/pi-tube"
 
-echo "🎬 Installing Pi-Tube (v4)..."
-
-# Check for Python 3.11+
-if ! command -v python3 &> /dev/null; then
-    echo "❌ Python 3 is required. Please install Python 3.11+"
-    exit 1
-fi
-
-PYTHON_VERSION=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
-if [[ $(echo "$PYTHON_VERSION < 3.11" | bc -l) -eq 1 ]]; then
-    echo "❌ Python 3.11+ is required. Found: $PYTHON_VERSION"
-    exit 1
-fi
+echo "🎬 Installing Pi-Tube (v5 with uv)..."
 
 # Function to check if we have sudo access without password
 can_sudo() {
     command -v sudo &> /dev/null && sudo -n true 2> /dev/null
 }
 
-# Check for ffmpeg
+# Check for ffmpeg (Still needed as system dependency)
 if ! command -v ffmpeg &> /dev/null; then
     echo "⚠️  ffmpeg not found. Installing..."
     if can_sudo; then
@@ -40,73 +28,37 @@ if ! command -v ffmpeg &> /dev/null; then
     fi
 fi
 
-# Check for git (required for pipx install git+url)
-if ! command -v git &> /dev/null; then
-    echo "⚠️  git not found. Installing..."
-    if can_sudo; then
-        sudo apt-get update && sudo apt-get install -y git
-    elif command -v brew &> /dev/null; then
-        brew install git
+# Install uv (The blazing fast python package manager)
+if ! command -v uv &> /dev/null; then
+    echo "⚡ Installing uv..."
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    
+    # Add to current session path
+    if [ -f "$HOME/.cargo/env" ]; then
+        . "$HOME/.cargo/env"
+    elif [ -f "$HOME/.local/bin/env" ]; then
+         . "$HOME/.local/bin/env"
     else
-        echo "❌ git not found and cannot install via sudo/brew."
-        echo "   Please install git manually."
-        exit 1
+        # Fallback path addition
+        export PATH="$HOME/.cargo/bin:$HOME/.local/bin:$PATH"
     fi
+else
+    echo "✅ uv is already installed"
 fi
 
-# Install pipx if not available
-if ! command -v pipx &> /dev/null; then
-    echo "📦 Installing pipx..."
-    INSTALLED_PIPX=false
-    
-    # Try apt-get ONLY if we are root or have passwordless sudo
-    if [ "$EUID" -eq 0 ] || can_sudo; then
-        if command -v apt-get &> /dev/null; then
-            echo "   Attempting install via system package manager..."
-            
-            # Use sudo if not root
-            CMD_PREFIX=""
-            [ "$EUID" -ne 0 ] && CMD_PREFIX="sudo"
-            
-            if $CMD_PREFIX apt-get update && $CMD_PREFIX apt-get install -y pipx; then
-                pipx ensurepath || true
-                INSTALLED_PIPX=true
-            else
-                echo "⚠️  System install failed. Falling back to user install..."
-            fi
-        fi
-    fi
-
-    # Try brew if on macOS/Linuxbrew
-    if [ "$INSTALLED_PIPX" = false ] && command -v brew &> /dev/null; then
-        echo "   Attempting install via brew..."
-        if brew install pipx; then
-            pipx ensurepath || true
-            INSTALLED_PIPX=true
-        fi
-    fi
-
-    # Fallback to pip user install (Agent friendly 🤖)
-    if [ "$INSTALLED_PIPX" = false ]; then
-        echo "ℹ️  Performing user-local installation (Agent friendly mode)..."
-        
-        # Try standard user install first
-        if python3 -m pip install --user pipx > /dev/null 2>&1; then
-            echo "✅ pipx installed via pip --user"
-        else
-            echo "⚠️  Standard pip install failed (likely PEP 668). forcing --break-system-packages..."
-            # This is safe for --user installs as it doesn't break system packages, just allows user site-packages to coexist
-            python3 -m pip install --user pipx --break-system-packages
-        fi
-        python3 -m pipx ensurepath
-    fi
-    
-    export PATH="$HOME/.local/bin:$PATH"
+# Verify uv installation
+if ! command -v uv &> /dev/null; then
+     echo "❌ Failed to install or find uv. Please install it manually: curl -LsSf https://astral.sh/uv/install.sh | sh"
+     exit 1
 fi
 
-# Install pi-tube
+# Install pi-tube using uv tool
 echo "📥 Installing pi-tube..."
-pipx install "git+https://github.com/${REPO}.git" --force
+# force reinstall to ensure latest version from git
+uv tool install "git+https://github.com/${REPO}.git" --force --python 3.12
+
+# Ensure the bin path is in PATH for this session
+export PATH="$HOME/.local/bin:$PATH"
 
 # Install SKILL.md for AI agents
 echo "🤖 Installing AI agent skill..."
