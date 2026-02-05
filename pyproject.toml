@@ -1,0 +1,22 @@
+[project]
+name = "pi-tube"
+version = "0.1.0"
+description = "CLI for YouTube video download and transcription using cloud AI models (Deepgram Nova 3, Groq Whisper)"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "deepgram-sdk>=5.3.2",
+    "ffmpeg-python>=0.2.0",
+    "groq>=1.0.0",
+    "python-dotenv>=1.2.1",
+    "rich>=14.3.2",
+    "typer[all]>=0.21.1",
+    "yt-dlp>=2026.2.4",
+]
+
+[project.scripts]
+pi-tube = "pi_tube.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
