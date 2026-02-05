@@ -101,10 +101,13 @@ def _transcribe_with_provider(
         # Perform transcription
         result = transcriber.transcribe(audio_path, language=language)
         
-        # Determine output path - save in ~/pi-tube/ with video name
+        # Determine output path - save in ~/pi-tube/ with date prefix
         if output is None:
+            from datetime import datetime
+            date_prefix = datetime.now().strftime("%Y-%m-%d")
             output_dir = Config.ensure_output_dir()
-            output = output_dir / audio_path.with_suffix(".txt").name
+            filename = f"{date_prefix}-{audio_path.stem}.txt"
+            output = output_dir / filename
         
         # Save transcription
         result.save(output)

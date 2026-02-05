@@ -99,6 +99,11 @@ pi-tube dl "https://youtube.com/watch?v=..." --video
 pi-tube providers
 ```
 
+## Output
+
+As transcrições são salvas em `~/pi-tube/YYYY-MM-DD-<nome_do_video>.txt` por padrão.
+Use `-o` para especificar um caminho customizado.
+
 ## Requisitos
 
 - Python 3.11+

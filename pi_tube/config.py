@@ -26,7 +26,7 @@ class Config:
     
     # Default paths
     DEFAULT_OUTPUT_DIR: Path = Path.home() / "pi-tube"
-    DEFAULT_TEMP_DIR: Path = Path("/tmp/pi-tube")
+    DEFAULT_TEMP_DIR: Path = Path.home() / "pi-tube" / ".tmp"
     
     # Audio settings for transcription (optimized for speech recognition)
     AUDIO_SAMPLE_RATE: int = 16000

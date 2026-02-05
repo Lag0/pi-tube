@@ -114,4 +114,7 @@ pi-tube dl "https://youtube.com/watch?v=VIDEO_ID" --video
 
 ## Output
 
-Transcriptions are saved as `.txt` files in the current directory by default.
+Transcriptions are saved to `~/pi-tube/YYYY-MM-DD-<video_name>.txt` by default.
+Use `-o` to specify a custom output path.
+
+Temporary files are stored in `~/pi-tube/.tmp/` and cleaned up automatically.
