@@ -5,6 +5,7 @@ requirements:
   bins:
     - ffmpeg
     - python3
+    - yt-dlp
   env:
     - DEEPGRAM_API_KEY (optional)
     - GROQ_API_KEY (optional)
