@@ -7,7 +7,7 @@ set -e
 REPO="Lag0/pi-tube"
 SKILL_DIR="$HOME/.agent/skills/pi-tube"
 
-echo "🎬 Installing Pi-Tube..."
+echo "🎬 Installing Pi-Tube (v2)..."
 
 # Check for Python 3.11+
 if ! command -v python3 &> /dev/null; then
@@ -37,20 +37,38 @@ fi
 # Install pipx if not available
 if ! command -v pipx &> /dev/null; then
     echo "📦 Installing pipx..."
+    INSTALLED_PIPX=false
+    
+    # Try apt-get
     if command -v apt-get &> /dev/null; then
-        sudo apt-get update && sudo apt-get install -y pipx
-        pipx ensurepath || true
-    elif command -v brew &> /dev/null; then
-        brew install pipx
-        pipx ensurepath || true
-    else
-        echo "⚠️  System package manager not found. Attempting pip install..."
+        echo "   Attempting install via apt-get..."
+        if sudo apt-get update && sudo apt-get install -y pipx; then
+            pipx ensurepath || true
+            INSTALLED_PIPX=true
+        else
+            echo "⚠️  Apt install failed. Trying next method..."
+        fi
+    fi
+
+    # Try brew if apt failed or didn't exist
+    if [ "$INSTALLED_PIPX" = false ] && command -v brew &> /dev/null; then
+        echo "   Attempting install via brew..."
+        if brew install pipx; then
+            pipx ensurepath || true
+            INSTALLED_PIPX=true
+        fi
+    fi
+
+    # Fallback to pip
+    if [ "$INSTALLED_PIPX" = false ]; then
+        echo "⚠️  System package managers failed or not found. Attempting pip install..."
         if ! python3 -m pip install --user pipx; then
-            echo "⚠️  Standard pip install failed. Retrying with --break-system-packages..."
+            echo "⚠️  Standard pip install failed. Retrying with --break-system-packages (safe for --user install)..."
             python3 -m pip install --user pipx --break-system-packages
         fi
         python3 -m pipx ensurepath
     fi
+    
     export PATH="$HOME/.local/bin:$PATH"
 fi
 
