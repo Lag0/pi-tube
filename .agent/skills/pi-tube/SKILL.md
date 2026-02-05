@@ -115,7 +115,7 @@ pi-tube dl "https://youtube.com/watch?v=VIDEO_ID" --video
 
 ## Output
 
-Transcriptions are saved to `~/pi-tube/YYYY-MM-DD-<video_name>.txt` by default.
+Transcriptions are saved to `~/pi-tube/YYYY-MM-DD-<video_name>.md` by default.
 Use `-o` to specify a custom output path.
 
 **Smart Skip**: If the transcription file already exists, the tool will skip download and transcription automatically.

@@ -105,8 +105,8 @@ def _transcribe_with_provider(
                 
                 output_dir = Config.ensure_output_dir()
                 # Check for any file ending with the slugified name
-                # format is YYYY-MM-DD-slug-name.txt
-                existing_files = list(output_dir.glob(f"*-{slug_name}.txt"))
+                # format is YYYY-MM-DD-slug-name.md
+                existing_files = list(output_dir.glob(f"*-{slug_name}.md"))
                 
                 if existing_files:
                     console.print(f"[green]✓ Transcription already exists:[/green] {existing_files[0]}")
@@ -156,7 +156,7 @@ def _transcribe_with_provider(
             # Normalize filename using shared utility
             normalized_name = slugify(audio_path.stem)
             
-            filename = f"{date_prefix}-{normalized_name}.txt"
+            filename = f"{date_prefix}-{normalized_name}.md"
             output = output_dir / filename
         
         # Save transcription

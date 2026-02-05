@@ -117,7 +117,7 @@ curl -fsSL https://raw.githubusercontent.com/Lag0/pi-tube/master/install.sh | ba
 
 ## Output
 
-As transcrições são salvas em `~/pi-tube/YYYY-MM-DD-<nome_do_video>.txt` por padrão.
+As transcrições são salvas em `~/pi-tube/YYYY-MM-DD-<nome_do_video>.md` por padrão.
 Use `-o` para especificar um caminho customizado.
 
 > **Smart Skip**: Se a transcrição já existir, o pi-tube pulará automaticamente o download e o processamento.

@@ -101,7 +101,7 @@ class DeepgramProvider(TranscriptionProvider):
             # Add summary if available
             if hasattr(response.results, 'summary') and response.results.summary:
                 summary_text = response.results.summary.short
-                final_transcript += f"📝 SUMMARY:\n{summary_text}\n\n{'='*40}\n\n"
+                final_transcript += f"# 📝 Summary\n\n{summary_text}\n\n---\n\n"
             
             # Format paragraphs with speakers
             if hasattr(alternative, 'paragraphs') and alternative.paragraphs:
@@ -112,7 +112,7 @@ class DeepgramProvider(TranscriptionProvider):
                     for sentence in paragraph.sentences:
                         formatted_text += sentence.text + " "
                     
-                    final_transcript += f"[Speaker {speaker}]: {formatted_text.strip()}\n\n"
+                    final_transcript += f"**Speaker {speaker}**: {formatted_text.strip()}\n\n"
             else:
                 # Fallback to plain transcript if no paragraphs
                 final_transcript += alternative.transcript
