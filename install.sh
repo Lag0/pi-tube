@@ -37,8 +37,20 @@ fi
 # Install pipx if not available
 if ! command -v pipx &> /dev/null; then
     echo "📦 Installing pipx..."
-    python3 -m pip install --user pipx
-    python3 -m pipx ensurepath
+    if command -v apt-get &> /dev/null; then
+        sudo apt-get update && sudo apt-get install -y pipx
+        pipx ensurepath || true
+    elif command -v brew &> /dev/null; then
+        brew install pipx
+        pipx ensurepath || true
+    else
+        echo "⚠️  System package manager not found. Attempting pip install..."
+        if ! python3 -m pip install --user pipx; then
+            echo "⚠️  Standard pip install failed. Retrying with --break-system-packages..."
+            python3 -m pip install --user pipx --break-system-packages
+        fi
+        python3 -m pipx ensurepath
+    fi
     export PATH="$HOME/.local/bin:$PATH"
 fi
 
