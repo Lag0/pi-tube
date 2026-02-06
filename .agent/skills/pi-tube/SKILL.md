@@ -2,7 +2,7 @@
 name: pi-tube
 description: CLI for YouTube video download and transcription using cloud AI (Deepgram Nova 3, Groq Whisper)
 homepage: https://github.com/Lag0/pi-tube
-metadata: { "openclaw": { "emoji": "🎬", "homepage": "https://github.com/Lag0/pi-tube" } }
+metadata: { "openclaw": { "emoji": "🎬", "homepage": "https://github.com/Lag0/pi-tube", "requires": { "bins": ["ffmpeg", "yt-dlp"], "anyEnv": ["DEEPGRAM_API_KEY", "GROQ_API_KEY"] }, "install": [{ "id": "script", "kind": "download", "url": "https://raw.githubusercontent.com/Lag0/pi-tube/master/install.sh", "label": "Install Pi-Tube" }] } }
 ---
 
 # Pi-Tube: YouTube Transcription CLI
@@ -49,9 +49,15 @@ curl -fsSL https://raw.githubusercontent.com/Lag0/pi-tube/master/install.sh | ba
 ```
 
 This will install:
-- pi-tube CLI via pipx
+- pi-tube CLI via uv tool
+- yt-dlp CLI via uv tool
 - ffmpeg (if not present)
-- yt-dlp (via pip dependency)
+
+> **Skill Directory:** The install script saves this skill to `~/.agent/skills/pi-tube/`.
+> If your agent uses a different skills directory (e.g., `~/.openclaw/skills/`), copy the folder:
+> ```bash
+> mkdir -p ~/.openclaw/skills && cp -r ~/.agent/skills/pi-tube ~/.openclaw/skills/
+> ```
 
 ## Step 3: Check API key configuration
 

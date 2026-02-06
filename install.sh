@@ -57,6 +57,10 @@ echo "📥 Installing pi-tube..."
 # force reinstall to ensure latest version from git
 uv tool install "git+https://github.com/${REPO}.git" --force --python 3.12
 
+# Install yt-dlp as a standalone tool (ensures it's in PATH)
+echo "📥 Installing yt-dlp..."
+uv tool install yt-dlp --force
+
 # Ensure the bin path is in PATH for this session
 export PATH="$HOME/.local/bin:$PATH"
 
