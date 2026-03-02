@@ -26,7 +26,32 @@ function buildFrontmatter(artifact: OutputArtifact): string {
   return lines.join("\n");
 }
 
+function formatTimestamp(milliseconds: number): string {
+  const normalized = Math.max(0, milliseconds);
+  const hours = Math.floor(normalized / 3_600_000);
+  const minutes = Math.floor((normalized % 3_600_000) / 60_000);
+  const seconds = Math.floor((normalized % 60_000) / 1000);
+  const ms = normalized % 1000;
+
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(
+    seconds,
+  ).padStart(2, "0")}.${String(ms).padStart(3, "0")}`;
+}
+
 export function renderMarkdown(artifact: OutputArtifact): string {
+  const segments = artifact.transcript.segments ?? [];
+  const segmentLines =
+    segments.length > 0
+      ? [
+          "",
+          "### Timestamped Segments",
+          ...segments.map(
+            (segment) =>
+              `- [${formatTimestamp(segment.start_ms)} - ${formatTimestamp(segment.end_ms)}] ${segment.text}`,
+          ),
+        ]
+      : [];
+
   const lines = [
     buildFrontmatter(artifact),
     "",
@@ -37,6 +62,7 @@ export function renderMarkdown(artifact: OutputArtifact): string {
     ...artifact.summary.key_points.map((point) => `- ${point}`),
     "",
     "## Transcript",
+    ...segmentLines,
     "",
     "### Full Text",
     artifact.transcript.full_text,

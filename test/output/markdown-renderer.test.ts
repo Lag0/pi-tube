@@ -42,6 +42,28 @@ describe("markdown renderer", () => {
 
     expect(markdown).toContain("## Transcript");
     expect(markdown).toContain("### Full Text");
+    expect(markdown).not.toContain("### Timestamped Segments");
     expect(markdown).toContain("hello world");
+  });
+
+  test("renders timestamped transcript lines when segments are available", () => {
+    const artifact = buildOutputArtifact(
+      {
+        ...executionResult,
+        segments: [
+          { startMs: 1000, endMs: 2200, text: "hello" },
+          { startMs: 2300, endMs: 3200, text: "world" },
+        ],
+      },
+      {
+        generatedAt: "2026-03-02T23:30:00.000Z",
+      },
+    );
+    const markdown = renderMarkdown(artifact);
+
+    expect(markdown).toContain("### Timestamped Segments");
+    expect(markdown).toContain("- [00:00:01.000 - 00:00:02.200] hello");
+    expect(markdown).toContain("- [00:00:02.300 - 00:00:03.200] world");
+    expect(markdown).toContain("### Full Text");
   });
 });
