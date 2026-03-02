@@ -10,7 +10,7 @@ This roadmap delivers a full v1 cutover from Python to TypeScript + Bun while pr
 - Integer phases (1, 2, 3): Planned milestone work
 - Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
 
-- [ ] **Phase 1: Bun/TS Foundation** - Establish TypeScript + Bun CLI baseline and migrate core command surface.
+- [x] **Phase 1: Bun/TS Foundation** - Establish TypeScript + Bun CLI baseline and migrate core command surface.
 - [ ] **Phase 2: Core Source Intake** - Implement YouTube, direct URL, and local-file ingestion with strict input policy.
 - [ ] **Phase 3: Instagram Public Intake** - Add public-only Instagram ingestion with explicit auth-required behavior.
 - [ ] **Phase 4: Transcription Providers** - Implement Deepgram/Groq provider pipeline with stable provider abstraction.
@@ -126,7 +126,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Bun/TS Foundation | 4/4 | In Progress | - |
+| 1. Bun/TS Foundation | 4/4 | Complete | 2026-03-02 |
 | 2. Core Source Intake | 0/4 | Not started | - |
 | 3. Instagram Public Intake | 0/3 | Not started | - |
 | 4. Transcription Providers | 0/4 | Not started | - |
