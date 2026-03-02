@@ -16,13 +16,14 @@ describe("provider-status command", () => {
       GROQ_API_KEY: "",
     });
     const stdout = result.stdout.toString();
+    const lines = stdout.trim().split("\n");
 
     expect(result.exitCode).toBe(0);
     expect(stdout).toContain("[PROVIDER_STATUS]");
-    expect(stdout).toContain(
+    expect(lines[1]).toBe(
       "deepgram registered=true configured=false required_env=DEEPGRAM_API_KEY missing_env=DEEPGRAM_API_KEY",
     );
-    expect(stdout).toContain(
+    expect(lines[2]).toBe(
       "groq registered=true configured=false required_env=GROQ_API_KEY missing_env=GROQ_API_KEY",
     );
   });
@@ -46,6 +47,8 @@ describe("provider-status command", () => {
     };
 
     expect(payload.command).toBe("provider-status");
+    expect(payload.providers[0]?.id).toBe("deepgram");
+    expect(payload.providers[1]?.id).toBe("groq");
     expect(payload.providers).toEqual([
       {
         id: "deepgram",

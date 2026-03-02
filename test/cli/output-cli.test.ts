@@ -121,4 +121,25 @@ describe("CLI output contract", () => {
     expect(markdown).toContain(jsonPayload.transcript.full_text);
     expect(markdown).toContain(jsonPayload.transcript.segments[0]?.text ?? "");
   });
+
+  test("supports documented provider + language JSON workflow deterministically", () => {
+    const result = runCli(["--provider", "groq", "--language", "pt", "--json", mediaUrl], {
+      PI_TUBE_TEST_GROQ_RESPONSE: JSON.stringify({
+        text: "ola groq",
+        language: "pt",
+      }),
+    });
+
+    expect(result.exitCode).toBe(0);
+    const payload = JSON.parse(result.stdout.toString()) as {
+      schema_version: string;
+      transcription: { provider: string; requested_language: string | null; detected_language: string | null };
+      transcript: { full_text: string };
+    };
+    expect(payload.schema_version).toBe("1.0.0");
+    expect(payload.transcription.provider).toBe("groq");
+    expect(payload.transcription.requested_language).toBe("pt");
+    expect(payload.transcription.detected_language).toBe("pt");
+    expect(payload.transcript.full_text).toBe("ola groq");
+  });
 });
