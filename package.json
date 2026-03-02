@@ -13,7 +13,8 @@
   "scripts": {
     "pi-tube": "bun run --bun bin/pi-tube.ts",
     "start": "bun run --bun bin/pi-tube.ts",
-    "test": "bun test"
+    "test": "bun test",
+    "verify:fixtures": "bun run --bun scripts/verify-fixtures.ts"
   },
   "devDependencies": {
     "@types/bun": "latest",

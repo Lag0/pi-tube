@@ -99,6 +99,16 @@ Resolution precedence:
 - `--json` emits a deterministic schema-versioned contract from the same canonical artifact model.
 - `provider-status` reports registered providers and missing required env vars in deterministic text or JSON.
 
+## Fixture Verification
+
+Run fixture drift checks before pushing contract-related changes:
+
+```bash
+bun run verify:fixtures
+```
+
+This command fails when renderer output diverges from committed golden fixtures.
+
 ## Instagram Public-Only Policy
 
 - Supported URL classes: Instagram public post/reel/video URLs (for example `/p/...`, `/reel/...`, `/tv/...`).
