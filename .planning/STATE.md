@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-03-02T23:03:39.910Z"
+last_updated: "2026-03-02T23:07:39.714Z"
 progress:
   total_phases: 6
   completed_phases: 5
   total_plans: 23
-  completed_plans: 20
+  completed_plans: 21
 ---
 
 # Project State
@@ -105,6 +105,7 @@ Recent decisions affecting current work:
 - [Phase 05]: `--json` is now an active output mode selected only at the final renderer step. — Preserves one execution/intake/transcription flow while supporting both human and agent output needs.
 - [Phase 05]: `provider-status` readiness output is deterministic and offline, derived from provider registry + env presence only. — Avoids network nondeterminism and improves agent usability.
 - [Phase 06]: Enabled deterministic config command flow with explicit precedence — CLI flags now override config defaults, which override env defaults, to keep runtime behavior predictable and testable.
+- [Phase 06]: Centralized all public CLI error codes in one catalog — Error constructors and tests now derive from ERROR_CATALOG to prevent code/exit/guidance drift.
 
 ### Pending Todos
 
