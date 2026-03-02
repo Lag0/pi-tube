@@ -37,12 +37,37 @@ describe("CLI intake integration", () => {
     expect(stdout).toContain("extension=wav");
   });
 
+  test("resolves Instagram public URL through baseline intake path", () => {
+    const result = runCli(["https://www.instagram.com/reel/abc123"], {
+      PI_TUBE_TEST_INSTAGRAM_YTDLP_JSON: JSON.stringify({
+        url: "https://cdn.example.com/instagram/reel.mp4",
+        title: "Instagram Mock",
+      }),
+    });
+    const stdout = result.stdout.toString();
+
+    expect(result.exitCode).toBe(0);
+    expect(stdout).toContain("[INTAKE_RESOLVED] kind=instagram");
+    expect(stdout).toContain("media_url=https://cdn.example.com/instagram/reel.mp4");
+  });
+
   test("fails unsupported non-direct URL with deterministic code", () => {
     const result = runCli(["https://example.com/blog-post"]);
     const stderr = result.stderr.toString();
 
     expect(result.exitCode).toBe(2);
     expect(stderr).toContain("[UNSUPPORTED_URL_NOT_DIRECT_MEDIA]");
+  });
+
+  test("fails auth-required Instagram URL with deterministic code and guidance", () => {
+    const result = runCli(["https://www.instagram.com/reel/private123"], {
+      PI_TUBE_TEST_INSTAGRAM_YTDLP_ERROR: "auth_required",
+    });
+    const stderr = result.stderr.toString();
+
+    expect(result.exitCode).toBe(2);
+    expect(stderr).toContain("[INSTAGRAM_AUTH_REQUIRED]");
+    expect(stderr).toContain("supports Instagram public URLs only");
   });
 
   test("resolves local file path through baseline intake path", () => {

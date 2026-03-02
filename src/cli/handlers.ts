@@ -77,6 +77,12 @@ export function formatBaselineIntakeResult(result: BaselineIntakeResult): string
         lines.push(`title=${result.source.title}`);
       }
       break;
+    case "instagram":
+      lines.push(`media_url=${result.source.mediaUrl}`);
+      if (result.source.title) {
+        lines.push(`title=${result.source.title}`);
+      }
+      break;
     case "direct_url":
       lines.push(`media_url=${result.source.mediaUrl}`);
       lines.push(`extension=${result.source.extension}`);
