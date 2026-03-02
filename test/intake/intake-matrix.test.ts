@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { resolveSource } from "../../src/intake/resolver.ts";
 import { resolveYouTubeSource } from "../../src/intake/adapters/youtube.ts";
+import { createInstagramAuthRequiredError } from "../../src/errors/cli-errors.ts";
 
 describe("intake source matrix", () => {
   test("resolves valid YouTube URL through resolver boundary", async () => {
@@ -23,6 +24,33 @@ describe("intake source matrix", () => {
 
     expect(source.kind).toBe("direct_url");
     expect(source.extension).toBe("m4a");
+  });
+
+  test("resolves supported Instagram public URL", async () => {
+    const source = await resolveSource("https://www.instagram.com/reel/abc123", {
+      resolveInstagram: async (input) => ({
+        kind: "instagram",
+        originalInput: input,
+        normalizedUrl: input,
+        mediaUrl: "https://cdn.example.com/instagram/reel.mp4",
+        title: "Instagram Public Reel",
+      }),
+    });
+
+    expect(source.kind).toBe("instagram");
+    expect(source.mediaUrl).toBe("https://cdn.example.com/instagram/reel.mp4");
+  });
+
+  test("maps Instagram auth-required failures deterministically", async () => {
+    await expect(
+      resolveSource("https://www.instagram.com/reel/private123", {
+        resolveInstagram: async () => {
+          throw createInstagramAuthRequiredError();
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "INSTAGRAM_AUTH_REQUIRED",
+    });
   });
 
   test("fails unsupported non-direct URL with deterministic error code", async () => {
