@@ -9,7 +9,7 @@ function runCli(args: string[]) {
 }
 
 describe("CLI help contract", () => {
-  test("uses the locked section order and labels deferred capabilities", () => {
+  test("uses the locked section order and labels active/deferred capabilities", () => {
     const result = runCli(["--help"]);
     const stdout = result.stdout.toString();
 
@@ -28,7 +28,8 @@ describe("CLI help contract", () => {
     expect(examples).toBeGreaterThan(options);
     expect(notes).toBeGreaterThan(examples);
 
-    expect(stdout).toContain("coming soon (Phase 2)");
+    expect(stdout).toContain("Phase 2 intake active");
+    expect(stdout).toContain("deferred command (use `pi-tube <input>`)");
     expect(stdout).toContain("coming soon (Phase 3)");
     expect(stdout).toContain("coming soon (Phase 4)");
 
