@@ -1,13 +1,24 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { resolveSource } from "../../src/intake/resolver.ts";
 import { CliError } from "../../src/errors/cli-errors.ts";
 
 describe("source resolver", () => {
   test("classifies a YouTube URL through the youtube adapter", async () => {
-    const source = await resolveSource("https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+    const source = await resolveSource("https://www.youtube.com/watch?v=dQw4w9WgXcQ", {
+      resolveYouTube: async (input) => ({
+        kind: "youtube",
+        originalInput: input,
+        normalizedUrl: input,
+        mediaUrl: "https://cdn.example.com/video.mp4",
+        title: "Video",
+      }),
+    });
 
     expect(source.kind).toBe("youtube");
-    expect(source.normalizedUrl).toContain("youtube.com/watch");
+    expect(source.mediaUrl).toBe("https://cdn.example.com/video.mp4");
   });
 
   test("classifies direct media URL by extension", async () => {
@@ -25,11 +36,19 @@ describe("source resolver", () => {
   });
 
   test("falls back to local-file classification for non-URL input", async () => {
-    const source = await resolveSource("./fixtures/audio.wav");
+    const tempDir = mkdtempSync(path.join(os.tmpdir(), "pi-tube-resolver-"));
+    const filePath = path.join(tempDir, "audio.wav");
 
-    expect(source.kind).toBe("local_file");
-    expect(source.absolutePath).toContain("fixtures/audio.wav");
-    expect(source.extension).toBe("wav");
+    try {
+      writeFileSync(filePath, "audio-data");
+      const source = await resolveSource(filePath);
+
+      expect(source.kind).toBe("local_file");
+      expect(source.absolutePath).toBe(filePath);
+      expect(source.extension).toBe("wav");
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
   });
 
   test("surfaces CLI contract error for empty input", async () => {

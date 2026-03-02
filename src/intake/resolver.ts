@@ -5,11 +5,17 @@ import { resolveLocalFileSource } from "./adapters/local-file.ts";
 import { CliError, createUnsupportedUrlNotDirectMediaError } from "../errors/cli-errors.ts";
 import type { ResolvedSource, SourceClassification } from "./types.ts";
 
+interface ResolverDeps {
+  resolveYouTube?: typeof resolveYouTubeSource;
+  resolveDirectUrl?: typeof resolveDirectUrlSource;
+  resolveLocalFile?: typeof resolveLocalFileSource;
+}
+
 export function classifySourceInput(input: string): SourceClassification {
   return classifyInput(input.trim());
 }
 
-export async function resolveSource(input: string): Promise<ResolvedSource> {
+export async function resolveSource(input: string, deps: ResolverDeps = {}): Promise<ResolvedSource> {
   const normalizedInput = input.trim();
   if (normalizedInput.length === 0) {
     throw new CliError("Input cannot be empty.", {
@@ -20,14 +26,17 @@ export async function resolveSource(input: string): Promise<ResolvedSource> {
   }
 
   const classification = classifySourceInput(normalizedInput);
+  const resolveYouTube = deps.resolveYouTube ?? resolveYouTubeSource;
+  const resolveDirectUrl = deps.resolveDirectUrl ?? resolveDirectUrlSource;
+  const resolveLocalFile = deps.resolveLocalFile ?? resolveLocalFileSource;
 
   switch (classification) {
     case "youtube":
-      return resolveYouTubeSource(normalizedInput);
+      return resolveYouTube(normalizedInput);
     case "direct_url":
-      return resolveDirectUrlSource(normalizedInput);
+      return resolveDirectUrl(normalizedInput);
     case "local_file":
-      return resolveLocalFileSource(normalizedInput);
+      return resolveLocalFile(normalizedInput);
     case "unsupported_url":
       throw createUnsupportedUrlNotDirectMediaError(normalizedInput);
     default:
