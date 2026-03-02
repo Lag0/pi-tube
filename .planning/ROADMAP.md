@@ -64,7 +64,7 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 03-01: Implement Instagram public URL adapter via extractor boundary
+- [x] 03-01: Implement Instagram public URL adapter via extractor boundary
 - [ ] 03-02: Add auth-required detection and explicit failure mapping
 - [ ] 03-03: Add smoke tests for public success and auth-required failure paths
 
@@ -128,7 +128,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 |-------|----------------|--------|-----------|
 | 1. Bun/TS Foundation | 4/4 | Complete | 2026-03-02 |
 | 2. Core Source Intake | 4/4 | Complete    | 2026-03-02 |
-| 3. Instagram Public Intake | 0/3 | Not started | - |
+| 3. Instagram Public Intake | 1/3 | In Progress | - |
 | 4. Transcription Providers | 0/4 | Not started | - |
 | 5. Output Contracts | 0/4 | Not started | - |
 | 6. Reliability & Release Gates | 0/4 | Not started | - |

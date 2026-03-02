@@ -14,7 +14,7 @@
 ### Source Ingestion
 
 - [x] **SRC-01**: User can transcribe from a YouTube URL.
-- [ ] **SRC-02**: User can transcribe from an Instagram public post/reel/video URL.
+- [x] **SRC-02**: User can transcribe from an Instagram public post/reel/video URL.
 - [ ] **SRC-03**: User receives `INSTAGRAM_AUTH_REQUIRED` when an Instagram URL requires authentication.
 - [x] **SRC-04**: User can transcribe from a direct media URL (`.mp4`, `.mov`, `.m4a`, `.mp3`, `.wav`, and supported equivalents).
 - [x] **SRC-05**: User receives `UNSUPPORTED_URL_NOT_DIRECT_MEDIA` when a URL is not a direct downloadable media URL.
@@ -87,7 +87,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | MIGR-02 | Phase 1 | Complete |
 | MIGR-03 | Phase 1 | Complete |
 | SRC-01 | Phase 2 | Complete |
-| SRC-02 | Phase 3 | Pending |
+| SRC-02 | Phase 3 | Complete |
 | SRC-03 | Phase 3 | Pending |
 | SRC-04 | Phase 2 | Complete |
 | SRC-05 | Phase 2 | Complete |

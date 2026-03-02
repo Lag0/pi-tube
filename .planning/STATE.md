@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: phase_02_complete
-last_updated: "2026-03-02T20:34:40Z"
+status: phase_03_in_progress
+last_updated: "2026-03-02T21:27:20.405Z"
 progress:
   total_phases: 6
   completed_phases: 2
   total_plans: 23
-  completed_plans: 8
+  completed_plans: 9
 ---
 
 # Project State
@@ -18,23 +18,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-02)
 
 **Core value:** Turn public media inputs into trustworthy, structured, ready-to-use knowledge artifacts fast.
-**Current focus:** Phase 3: Instagram Public Intake (next)
+**Current focus:** Phase 3: Instagram Public Intake (in progress)
 
 ## Current Position
 
 Phase: 3 of 6 (Instagram Public Intake)
-Plan: 0 of 3 executed
-Status: Phase 2 complete — ready for Phase 3 planning/execution
-Last activity: 2026-03-02 — Phase 2 verified and marked complete
+Plan: 1 of 3 executed
+Status: Phase 3 in progress — Plan 01 complete
+Last activity: 2026-03-02 — Completed 03-01 execution
 
-Progress: [████░░░░░░] 35%
+Progress: [████░░░░░░] 39%
 
 ## Performance Metrics
 
 **Velocity:**
 - Total plans completed: 8
-- Average duration: 1.4 min
-- Total execution time: 0.18 hours
+- Average duration: 2.1 min
+- Total execution time: 0.31 hours
 
 **By Phase:**
 
@@ -42,12 +42,14 @@ Progress: [████░░░░░░] 35%
 |-------|-------|-------|----------|
 | 1 | 4 | 5 min | 1.3 min |
 | 2 | 4 | 6 min | 1.5 min |
+| 3 | 1 | 8 min | 8.0 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-04 (1 min), 02-01 (1 min), 02-02 (1 min), 02-03 (2 min), 02-04 (2 min)
-- Trend: Stable
+- Last 5 plans: 02-01 (1 min), 02-02 (1 min), 02-03 (2 min), 02-04 (2 min), 03-01 (8 min)
+- Trend: Slightly up (new domain complexity)
 
 *Updated after each plan completion*
+| Phase 03 P01 | 8 min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -72,6 +74,8 @@ Recent decisions affecting current work:
 - [02-03 Execution]: Local-file intake requires existence and supported extension checks before contract handoff.
 - [02-04 Execution]: Baseline CLI success output uses `[INTAKE_RESOLVED] kind=...` markers for deterministic integration checks.
 - [02-04 Execution]: Provider execution remains deferred to Phase 4 even after Phase 2 intake success.
+- [Phase 03]: Instagram public URL support constrained to /p/, /reel/, and /tv/ for deterministic scope — Keeps SRC-02 behavior explicit and avoids unsupported Instagram surfaces.
+- [Phase 03]: Instagram extraction reuses yt-dlp boundary with dedicated adapter entrypoint — Preserves adapter architecture and avoids introducing a second extraction stack.
 
 ### Pending Todos
 
@@ -83,6 +87,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-02 20:34
-Stopped at: Completed Phase 2 verification and closure
-Resume file: .planning/ROADMAP.md
+Last session: 2026-03-02 21:27
+Stopped at: Completed 03-01-PLAN.md
+Resume file: .planning/phases/03-instagram-public-intake/03-02-PLAN.md
