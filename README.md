@@ -1,53 +1,70 @@
 # pi-tube
 
-Bun + TypeScript CLI foundation for `pi-tube`.
+`pi-tube` is a Bun + TypeScript CLI for turning media inputs into structured artifacts.
 
-## Current Phase (Phase 1)
+Phase 1 ships the runtime/contract foundation and command discoverability. Source/provider execution remains intentionally deferred.
 
-This release locks command identity and CLI discoverability while source/provider execution is still coming soon.
+## Install (macOS/Linux)
 
-### Available now
-
-- Canonical command identity remains `pi-tube`
-- Deterministic top-level help (`Usage -> Commands -> Global options -> Examples -> Notes`)
-- Deterministic non-zero placeholder behavior for deferred features
-- Legacy command compatibility guidance (`deepgram`, `groq`, `dl`, `providers`, `config`)
-
-### Coming soon
-
-- Core source intake (`youtube`, direct URLs, local files) in Phase 2
-- Instagram public intake in Phase 3
-- Provider command routing (`deepgram`, `groq`) in Phase 4
-
-## Quick Start (Bun/TS default path)
+### Quick install
 
 ```bash
-bun install
-bun run --bun bin/pi-tube.ts --help
-bun run --bun bin/pi-tube.ts --version
+curl -fsSL https://raw.githubusercontent.com/Lag0/pi-tube/master/install.sh | bash
 ```
 
-## Canonical Usage
+### Local dev install
 
 ```bash
-pi-tube <input>
+git clone https://github.com/Lag0/pi-tube.git
+cd pi-tube
+bun install
+```
+
+## Run
+
+```bash
 pi-tube --help
 pi-tube --version
-pi-tube --json <input>   # coming soon (Phase 5)
+pi-tube <input>
 ```
 
-### Example placeholders
+## Help Contract (Phase 1)
+
+The top-level help is intentionally fixed in this order:
+
+1. Usage
+2. Commands
+3. Global options
+4. Examples
+5. Notes
+
+## Command Surface
+
+Implemented now:
+
+- `pi-tube <input>`
+- `pi-tube --help`
+- `pi-tube --version`
+
+Coming soon (deterministic placeholders with non-zero exits):
+
+- `pi-tube youtube <url>` (Phase 2)
+- `pi-tube instagram <url>` (Phase 3)
+- `pi-tube deepgram <input>` (Phase 4)
+- `pi-tube groq <input>` (Phase 4)
+- `pi-tube --json <input>` (Phase 5)
+
+## Examples
 
 ```bash
 pi-tube "https://youtube.com/watch?v=dQw4w9WgXcQ"   # coming soon (Phase 2)
 pi-tube "https://instagram.com/reel/abc123"         # coming soon (Phase 3)
 pi-tube "./recording.mp3"                           # coming soon (Phase 2)
+pi-tube --json "https://youtube.com/watch?v=dQw4w9WgXcQ"  # coming soon (Phase 5)
 ```
-
-## Legacy Migration Notes
-
-If you run old command patterns such as `pi-tube deepgram <input>`, the Bun CLI returns deterministic migration guidance and exits non-zero. This is expected during migration.
 
 ## Runtime Policy
 
-Primary execution path is Bun + TypeScript. Python runtime is not required for the v1 default CLI path.
+The primary runtime path is Bun + TypeScript. Python runtime is not required for the v1 default path.
+
+Legacy command patterns are still recognized for compatibility messaging only and do not route back to Python behavior.
