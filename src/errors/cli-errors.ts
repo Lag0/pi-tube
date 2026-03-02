@@ -177,7 +177,7 @@ export function formatCliError(error: unknown): { message: string; exitCode: num
   if (error instanceof CliError) {
     const lines = [`[${error.code}] ${error.message}`];
     for (const tip of error.guidance) {
-      lines.push(`- ${tip}`);
+      lines.push(`guidance: ${tip}`);
     }
     return { message: lines.join("\n"), exitCode: error.exitCode };
   }
