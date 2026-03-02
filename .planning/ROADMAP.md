@@ -11,7 +11,7 @@ This roadmap delivers a full v1 cutover from Python to TypeScript + Bun while pr
 - Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
 
 - [x] **Phase 1: Bun/TS Foundation** - Establish TypeScript + Bun CLI baseline and migrate core command surface.
-- [ ] **Phase 2: Core Source Intake** - Implement YouTube, direct URL, and local-file ingestion with strict input policy.
+- [x] **Phase 2: Core Source Intake** - Implement YouTube, direct URL, and local-file ingestion with strict input policy. (completed 2026-03-02)
 - [ ] **Phase 3: Instagram Public Intake** - Add public-only Instagram ingestion with explicit auth-required behavior.
 - [ ] **Phase 4: Transcription Providers** - Implement Deepgram/Groq provider pipeline with stable provider abstraction.
 - [ ] **Phase 5: Output Contracts** - Deliver deterministic Markdown+JSON artifact contract for agent/human workflows.
@@ -51,7 +51,7 @@ Plans:
 - [x] 02-01: Build source resolver and URL/local-file classifier with policy checks
 - [x] 02-02: Implement yt-dlp extraction adapter for YouTube ingestion
 - [x] 02-03: Implement direct-media URL validation and local-file normalization path
-- [ ] 02-04: Add integration tests for supported/unsupported core source matrix
+- [x] 02-04: Add integration tests for supported/unsupported core source matrix
 
 ### Phase 3: Instagram Public Intake
 **Goal**: Add Instagram public post/reel/video support with explicit public-only policy enforcement.
@@ -127,7 +127,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Bun/TS Foundation | 4/4 | Complete | 2026-03-02 |
-| 2. Core Source Intake | 3/4 | In Progress|  |
+| 2. Core Source Intake | 4/4 | Complete   | 2026-03-02 |
 | 3. Instagram Public Intake | 0/3 | Not started | - |
 | 4. Transcription Providers | 0/4 | Not started | - |
 | 5. Output Contracts | 0/4 | Not started | - |
