@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in_progress
-last_updated: "2026-03-02T19:59:08Z"
+last_updated: "2026-03-02T20:00:56Z"
 progress:
   total_phases: 1
   completed_phases: 0
   total_plans: 4
-  completed_plans: 3
+  completed_plans: 4
 ---
 
 # Project State
@@ -23,27 +23,27 @@ See: .planning/PROJECT.md (updated 2026-03-02)
 ## Current Position
 
 Phase: 1 of 6 (Bun/TS Foundation)
-Plan: 3 of 4 executed (4 plans created)
-Status: In progress
-Last activity: 2026-03-02 — Completed 01-03 (legacy compatibility boundary + no-Python runtime guard)
+Plan: 4 of 4 executed (4 plans created)
+Status: Ready for verification
+Last activity: 2026-03-02 — Completed 01-04 (install-flow contract tests + Bun-first docs/installer)
 
-Progress: [████████░░] 75%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 3
+- Total plans completed: 4
 - Average duration: 1.3 min
-- Total execution time: 0.07 hours
+- Total execution time: 0.08 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 1 | 3 | 4 min | 1.3 min |
+| 1 | 4 | 5 min | 1.3 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (2 min), 01-02 (1 min), 01-03 (1 min)
+- Last 5 plans: 01-01 (2 min), 01-02 (1 min), 01-03 (1 min), 01-04 (1 min)
 - Trend: Stable
 
 *Updated after each plan completion*
@@ -62,6 +62,7 @@ Recent decisions affecting current work:
 - [01-01 Execution]: Keep placeholder paths deterministic and non-zero to protect automation correctness.
 - [01-02 Execution]: Deferred command verbs stay visible in help but must hard-fail with phase-aware guidance.
 - [01-03 Execution]: Legacy command compatibility is guidance-only and never proxies back to Python runtime behavior.
+- [01-04 Execution]: Installer and README are treated as contract artifacts and validated by regression tests.
 
 ### Pending Todos
 
@@ -73,6 +74,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-02 19:59
-Stopped at: Completed 01-03-PLAN.md
-Resume file: .planning/phases/01-bun-ts-foundation/01-04-PLAN.md
+Last session: 2026-03-02 20:01
+Stopped at: Completed 01-04-PLAN.md
+Resume file: .planning/phases/01-bun-ts-foundation/01-VERIFICATION.md
