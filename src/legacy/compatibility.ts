@@ -21,11 +21,6 @@ const LEGACY_COMMAND_GUIDANCE: Record<string, string[]> = {
     "Provider status command is planned for Phase 5.",
     "Use `pi-tube --help` for current contract and roadmap labeling.",
   ],
-  config: [
-    "Legacy command detected: `pi-tube config ...`.",
-    "Configuration workflow is planned for Phase 6.",
-    "Use environment management outside the CLI until config command ships.",
-  ],
 };
 
 export function isLegacyCommand(command: string): boolean {

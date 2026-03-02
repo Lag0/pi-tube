@@ -2,6 +2,8 @@ import {
   CliError,
   createTranscriptionProviderNotConfiguredError,
 } from "../errors/cli-errors.ts";
+import { readConfig } from "../config/store.ts";
+import type { PiTubeConfig } from "../config/types.ts";
 import type { ResolvedSource } from "../intake/types.ts";
 import {
   getDefaultProviderRegistry,
@@ -22,6 +24,7 @@ export interface TranscriptionServiceOptions {
   language?: string;
   env?: Record<string, string | undefined>;
   providers?: ProviderRegistry;
+  config?: PiTubeConfig;
 }
 
 function parseProviderId(value: string): TranscriptionProviderId {
@@ -41,11 +44,17 @@ function parseProviderId(value: string): TranscriptionProviderId {
 
 export function selectTranscriptionProvider(options: {
   provider?: string;
+  config?: PiTubeConfig;
   env?: Record<string, string | undefined>;
 } = {}): TranscriptionProviderId {
   const fromCli = options.provider?.trim().toLowerCase();
   if (fromCli) {
     return parseProviderId(fromCli);
+  }
+
+  const fromConfig = options.config?.defaults.provider?.trim().toLowerCase();
+  if (fromConfig) {
+    return parseProviderId(fromConfig);
   }
 
   const fromEnv = options.env?.[TRANSCRIPTION_PROVIDER_ENV]?.trim().toLowerCase();
@@ -61,14 +70,48 @@ function normalizeLanguage(language?: string): string | undefined {
   return normalized && normalized.length > 0 ? normalized : undefined;
 }
 
+function resolveProviderApiKey(
+  providerId: TranscriptionProviderId,
+  config: PiTubeConfig,
+  env: Record<string, string | undefined>,
+): string | undefined {
+  const providerConfig = config.providers[providerId];
+  const fromConfig = providerConfig.api_key?.trim();
+  if (fromConfig) {
+    return fromConfig;
+  }
+
+  const fromReferencedEnvName = providerConfig.api_key_env?.trim();
+  if (fromReferencedEnvName) {
+    const referencedValue = env[fromReferencedEnvName]?.trim();
+    if (referencedValue) {
+      return referencedValue;
+    }
+  }
+
+  const defaultEnvKey = providerId === "deepgram" ? "DEEPGRAM_API_KEY" : "GROQ_API_KEY";
+  const fromDefaultEnv = env[defaultEnvKey]?.trim();
+  return fromDefaultEnv && fromDefaultEnv.length > 0 ? fromDefaultEnv : undefined;
+}
+
 export async function transcribeFromResolvedSource(
   source: ResolvedSource,
   options: TranscriptionServiceOptions = {},
 ): Promise<TranscriptionExecutionResult> {
   const env = options.env ?? process.env;
-  const providerId = selectTranscriptionProvider({ provider: options.provider, env });
-  const requestedLanguage = normalizeLanguage(options.language ?? env[TRANSCRIPTION_LANGUAGE_ENV]);
-  const registry = options.providers ?? getDefaultProviderRegistry();
+  const config = options.config ?? readConfig({ env });
+  const providerId = selectTranscriptionProvider({ provider: options.provider, config, env });
+  const requestedLanguage = normalizeLanguage(
+    options.language ?? config.defaults.language ?? env[TRANSCRIPTION_LANGUAGE_ENV],
+  );
+  const registry =
+    options.providers ??
+    getDefaultProviderRegistry({
+      credentials: {
+        deepgram: { apiKey: resolveProviderApiKey("deepgram", config, env) },
+        groq: { apiKey: resolveProviderApiKey("groq", config, env) },
+      },
+    });
   const provider = resolveProvider(providerId, registry);
 
   if (!provider) {

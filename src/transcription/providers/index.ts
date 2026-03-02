@@ -10,15 +10,25 @@ export interface ProviderDefinition {
   requiredEnv: string[];
 }
 
+interface ProviderCredentialOverride {
+  apiKey?: string;
+}
+
+export interface DefaultProviderRegistryOptions {
+  credentials?: Partial<Record<TranscriptionProviderId, ProviderCredentialOverride>>;
+}
+
 export const TRANSCRIPTION_PROVIDER_DEFINITIONS: ProviderDefinition[] = [
   { id: "deepgram", requiredEnv: ["DEEPGRAM_API_KEY"] },
   { id: "groq", requiredEnv: ["GROQ_API_KEY"] },
 ];
 
-export function getDefaultProviderRegistry(): ProviderRegistry {
+export function getDefaultProviderRegistry(
+  options: DefaultProviderRegistryOptions = {},
+): ProviderRegistry {
   return {
-    deepgram: createDeepgramProvider(),
-    groq: createGroqProvider(),
+    deepgram: createDeepgramProvider({ apiKey: options.credentials?.deepgram?.apiKey }),
+    groq: createGroqProvider({ apiKey: options.credentials?.groq?.apiKey }),
   };
 }
 

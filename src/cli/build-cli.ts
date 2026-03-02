@@ -10,6 +10,7 @@ import {
 import {
   formatBaselineIntakeResult,
   handleBaselineInput,
+  handleConfigCommand,
   handleDeferredCommand,
   handleProviderStatus,
   isDeferredCommand,
@@ -157,6 +158,19 @@ export async function runCli(argv: string[]): Promise<number> {
 
     if (isDeferredCommand(first)) {
       handleDeferredCommand(first, parsed.json);
+    }
+
+    if (first === "config") {
+      if (parsed.provider || parsed.language) {
+        throw new CliError("`config` does not support `--provider` or `--language`.", {
+          code: "CLI_CONTRACT_VIOLATION",
+          exitCode: 2,
+          guidance: ["Use `pi-tube config <set|get|list> ...` without provider/language flags."],
+        });
+      }
+
+      console.log(handleConfigCommand({ args: rest, json: parsed.json }));
+      return 0;
     }
 
     if (first === "provider-status") {

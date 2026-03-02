@@ -4,6 +4,14 @@ import { buildOutputArtifact } from "../output/build-artifact.ts";
 import { renderJson } from "../output/json.ts";
 import { renderMarkdown } from "../output/markdown.ts";
 import {
+  getConfigValue,
+  listConfigValues,
+  resolveConfigPath,
+  setConfigValue,
+  type ConfigStoreOptions,
+} from "../config/store.ts";
+import type { ConfigKey } from "../config/types.ts";
+import {
   getDefaultProviderRegistry,
   TRANSCRIPTION_PROVIDER_DEFINITIONS,
   type ProviderRegistry,
@@ -45,6 +53,12 @@ interface ProviderStatusEntry {
   configured: boolean;
   required_env: string[];
   missing_env: string[];
+}
+
+interface ConfigCommandInput {
+  args: string[];
+  json: boolean;
+  options?: ConfigStoreOptions;
 }
 
 export function isDeferredCommand(command: string): boolean {
@@ -147,4 +161,149 @@ export function handleProviderStatus(input: ProviderStatusInput): string {
   }
 
   return formatProviderStatusText(entries);
+}
+
+function requireConfigKey(key: string): ConfigKey {
+  const supportedKeys = new Set([
+    "defaults.provider",
+    "defaults.language",
+    "providers.deepgram.api_key",
+    "providers.deepgram.api_key_env",
+    "providers.groq.api_key",
+    "providers.groq.api_key_env",
+  ] as const);
+
+  if (!supportedKeys.has(key as ConfigKey)) {
+    throw new CliError(`Unsupported config key: \`${key}\`.`, {
+      code: "CLI_CONTRACT_VIOLATION",
+      exitCode: 2,
+      guidance: [`Use one of: ${Array.from(supportedKeys).join(", ")}.`],
+    });
+  }
+
+  return key as ConfigKey;
+}
+
+function asPrintableValue(value: unknown): string {
+  if (value === undefined || value === null || value === "") {
+    return "(unset)";
+  }
+
+  return String(value);
+}
+
+function formatConfigListText(configPath: string, values: Record<string, unknown>): string {
+  const lines = ["[CONFIG_LIST]", `config_path=${configPath}`];
+  for (const [key, value] of Object.entries(values)) {
+    lines.push(`${key}=${asPrintableValue(value)}`);
+  }
+  return lines.join("\n");
+}
+
+export function handleConfigCommand({
+  args,
+  json,
+  options,
+}: ConfigCommandInput): string {
+  const [action, ...rest] = args;
+  const configPath = resolveConfigPath(options);
+
+  if (!action) {
+    throw new CliError("Missing `config` action. Use `set`, `get`, or `list`.", {
+      code: "CLI_CONTRACT_VIOLATION",
+      exitCode: 2,
+      guidance: [
+        "Use `pi-tube config list`.",
+        "Use `pi-tube config get <key>`.",
+        "Use `pi-tube config set <key> <value>`.",
+      ],
+    });
+  }
+
+  if (action === "list") {
+    if (rest.length !== 0) {
+      throw new CliError("`config list` does not accept extra arguments.", {
+        code: "CLI_CONTRACT_VIOLATION",
+        exitCode: 2,
+      });
+    }
+    const values = listConfigValues(options);
+    if (json) {
+      return JSON.stringify(
+        {
+          command: "config",
+          action: "list",
+          config_path: configPath,
+          values,
+        },
+        null,
+        2,
+      );
+    }
+    return formatConfigListText(configPath, values);
+  }
+
+  if (action === "get") {
+    const [rawKey, ...extra] = rest;
+    if (!rawKey || extra.length > 0) {
+      throw new CliError("`config get` expects exactly one key.", {
+        code: "CLI_CONTRACT_VIOLATION",
+        exitCode: 2,
+      });
+    }
+
+    const key = requireConfigKey(rawKey);
+    const value = getConfigValue(key, options);
+    if (json) {
+      return JSON.stringify(
+        {
+          command: "config",
+          action: "get",
+          key,
+          value: value ?? null,
+          config_path: configPath,
+        },
+        null,
+        2,
+      );
+    }
+
+    return `[CONFIG_GET] key=${key} value=${asPrintableValue(value)} config_path=${configPath}`;
+  }
+
+  if (action === "set") {
+    const [rawKey, rawValue, ...extra] = rest;
+    if (!rawKey || !rawValue || extra.length > 0) {
+      throw new CliError("`config set` expects exactly `<key> <value>`.", {
+        code: "CLI_CONTRACT_VIOLATION",
+        exitCode: 2,
+      });
+    }
+
+    const key = requireConfigKey(rawKey);
+    setConfigValue(key, rawValue, options);
+    const value = getConfigValue(key, { ...options, env: options?.env ?? process.env });
+
+    if (json) {
+      return JSON.stringify(
+        {
+          command: "config",
+          action: "set",
+          key,
+          value,
+          config_path: configPath,
+        },
+        null,
+        2,
+      );
+    }
+
+    return `[CONFIG_SET] key=${key} value=${asPrintableValue(value)} config_path=${configPath}`;
+  }
+
+  throw new CliError(`Unsupported config action: \`${action}\`.`, {
+    code: "CLI_CONTRACT_VIOLATION",
+    exitCode: 2,
+    guidance: ["Use one of: set, get, list."],
+  });
 }

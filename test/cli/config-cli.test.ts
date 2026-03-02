@@ -9,6 +9,15 @@ import {
   setConfigValue,
 } from "../../src/config/store.ts";
 
+function runCli(args: string[], env: Record<string, string> = {}) {
+  return Bun.spawnSync({
+    cmd: ["bun", "run", "--bun", "bin/pi-tube.ts", ...args],
+    stdout: "pipe",
+    stderr: "pipe",
+    env: { ...process.env, ...env },
+  });
+}
+
 describe("config store", () => {
   test("resolves explicit config path for test isolation", () => {
     const cwd = process.cwd();
@@ -44,6 +53,67 @@ describe("config store", () => {
       setConfigValue("defaults.language", "pt-br", options);
       const secondWrite = readFileSync(configPath, "utf8");
       expect(secondWrite).toBe(firstWrite);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("config command integration", () => {
+  test("supports deterministic set/get/list output in text and json modes", () => {
+    const tempDir = mkdtempSync(path.join(os.tmpdir(), "pi-tube-config-cli-"));
+    const configPath = path.join(tempDir, "config.json");
+
+    try {
+      const env = { PI_TUBE_CONFIG_PATH: configPath };
+      const setResult = runCli(["config", "set", "defaults.provider", "groq"], env);
+      expect(setResult.exitCode).toBe(0);
+      expect(setResult.stdout.toString()).toContain("[CONFIG_SET] key=defaults.provider value=groq");
+
+      const getResult = runCli(["config", "get", "defaults.provider"], env);
+      expect(getResult.exitCode).toBe(0);
+      expect(getResult.stdout.toString()).toContain("[CONFIG_GET] key=defaults.provider value=groq");
+
+      const listResult = runCli(["--json", "config", "list"], env);
+      expect(listResult.exitCode).toBe(0);
+      const payload = JSON.parse(listResult.stdout.toString()) as {
+        command: string;
+        action: string;
+        values: Record<string, string | null>;
+      };
+      expect(payload.command).toBe("config");
+      expect(payload.action).toBe("list");
+      expect(payload.values["defaults.provider"]).toBe("groq");
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  test("uses config defaults for provider and language when CLI flags are omitted", () => {
+    const tempDir = mkdtempSync(path.join(os.tmpdir(), "pi-tube-config-precedence-"));
+    const configPath = path.join(tempDir, "config.json");
+    const mediaUrl = "https://cdn.example.com/audio/demo.wav";
+
+    try {
+      const env = { PI_TUBE_CONFIG_PATH: configPath };
+      expect(runCli(["config", "set", "defaults.provider", "groq"], env).exitCode).toBe(0);
+      expect(runCli(["config", "set", "defaults.language", "pt-BR"], env).exitCode).toBe(0);
+
+      const runResult = runCli([mediaUrl], {
+        ...env,
+        PI_TUBE_TRANSCRIPTION_PROVIDER: "deepgram",
+        PI_TUBE_TRANSCRIPTION_LANGUAGE: "en",
+        PI_TUBE_TEST_GROQ_RESPONSE: JSON.stringify({ text: "config provider", language: "pt" }),
+        PI_TUBE_TEST_DEEPGRAM_RESPONSE: JSON.stringify({
+          results: { channels: [{ alternatives: [{ transcript: "env provider" }] }] },
+        }),
+      });
+
+      const output = runResult.stdout.toString();
+      expect(runResult.exitCode).toBe(0);
+      expect(output).toContain('provider: "groq"');
+      expect(output).toContain('requested_language: "pt-br"');
+      expect(output).toContain("config provider");
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
     }
