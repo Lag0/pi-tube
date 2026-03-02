@@ -13,12 +13,12 @@
 
 ### Source Ingestion
 
-- [ ] **SRC-01**: User can transcribe from a YouTube URL.
+- [x] **SRC-01**: User can transcribe from a YouTube URL.
 - [ ] **SRC-02**: User can transcribe from an Instagram public post/reel/video URL.
 - [ ] **SRC-03**: User receives `INSTAGRAM_AUTH_REQUIRED` when an Instagram URL requires authentication.
-- [ ] **SRC-04**: User can transcribe from a direct media URL (`.mp4`, `.mov`, `.m4a`, `.mp3`, `.wav`, and supported equivalents).
-- [ ] **SRC-05**: User receives `UNSUPPORTED_URL_NOT_DIRECT_MEDIA` when a URL is not a direct downloadable media URL.
-- [ ] **SRC-06**: User can transcribe from a local file path for supported audio/video formats.
+- [x] **SRC-04**: User can transcribe from a direct media URL (`.mp4`, `.mov`, `.m4a`, `.mp3`, `.wav`, and supported equivalents).
+- [x] **SRC-05**: User receives `UNSUPPORTED_URL_NOT_DIRECT_MEDIA` when a URL is not a direct downloadable media URL.
+- [x] **SRC-06**: User can transcribe from a local file path for supported audio/video formats.
 
 ### Transcription Providers
 
@@ -86,12 +86,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | MIGR-01 | Phase 1 | Complete |
 | MIGR-02 | Phase 1 | Complete |
 | MIGR-03 | Phase 1 | Complete |
-| SRC-01 | Phase 2 | Pending |
+| SRC-01 | Phase 2 | Complete |
 | SRC-02 | Phase 3 | Pending |
 | SRC-03 | Phase 3 | Pending |
-| SRC-04 | Phase 2 | Pending |
-| SRC-05 | Phase 2 | Pending |
-| SRC-06 | Phase 2 | Pending |
+| SRC-04 | Phase 2 | Complete |
+| SRC-05 | Phase 2 | Complete |
+| SRC-06 | Phase 2 | Complete |
 | TRNS-01 | Phase 4 | Pending |
 | TRNS-02 | Phase 4 | Pending |
 | TRNS-03 | Phase 4 | Pending |

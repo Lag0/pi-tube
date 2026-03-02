@@ -48,7 +48,7 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
-- [ ] 02-01: Build source resolver and URL/local-file classifier with policy checks
+- [x] 02-01: Build source resolver and URL/local-file classifier with policy checks
 - [ ] 02-02: Implement yt-dlp extraction adapter for YouTube ingestion
 - [ ] 02-03: Implement direct-media URL validation and local-file normalization path
 - [ ] 02-04: Add integration tests for supported/unsupported core source matrix
@@ -127,7 +127,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Bun/TS Foundation | 4/4 | Complete | 2026-03-02 |
-| 2. Core Source Intake | 0/4 | Not started | - |
+| 2. Core Source Intake | 1/4 | In Progress|  |
 | 3. Instagram Public Intake | 0/3 | Not started | - |
 | 4. Transcription Providers | 0/4 | Not started | - |
 | 5. Output Contracts | 0/4 | Not started | - |
