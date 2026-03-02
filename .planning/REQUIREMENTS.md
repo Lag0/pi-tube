@@ -38,7 +38,7 @@
 
 ### CLI & Agent UX
 
-- [ ] **CLI-01**: User can discover commands/options via `--help` with examples for all supported input sources.
+- [x] **CLI-01**: User can discover commands/options via `--help` with examples for all supported input sources.
 - [ ] **CLI-02**: User can configure provider API keys via env variables and CLI configuration flow.
 - [ ] **CLI-03**: User can run agent-friendly workflows using documented `--json` command patterns.
 - [ ] **CLI-04**: User can inspect provider readiness with a dedicated provider status command.
@@ -102,7 +102,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | OUT-04 | Phase 5 | Pending |
 | OUT-05 | Phase 5 | Pending |
 | OUT-06 | Phase 5 | Pending |
-| CLI-01 | Phase 1 | Pending |
+| CLI-01 | Phase 1 | Complete |
 | CLI-02 | Phase 6 | Pending |
 | CLI-03 | Phase 5 | Pending |
 | CLI-04 | Phase 5 | Pending |
