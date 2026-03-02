@@ -82,4 +82,43 @@ describe("CLI output contract", () => {
     expect(payload.transcription.provider).toBe("deepgram");
     expect(payload.transcript.full_text).toBe("json response");
   });
+
+  test("keeps markdown and JSON CLI modes semantically aligned for the same input", () => {
+    const env = {
+      PI_TUBE_TEST_DEEPGRAM_RESPONSE: JSON.stringify({
+        results: {
+          channels: [
+            {
+              detected_language: "en",
+              alternatives: [
+                {
+                  transcript: "aligned output",
+                  words: [{ word: "aligned", start: 0.1, end: 0.8 }],
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    };
+
+    const markdownResult = runCli([mediaUrl], env);
+    const jsonResult = runCli(["--json", mediaUrl], env);
+
+    expect(markdownResult.exitCode).toBe(0);
+    expect(jsonResult.exitCode).toBe(0);
+
+    const markdown = markdownResult.stdout.toString();
+    const jsonPayload = JSON.parse(jsonResult.stdout.toString()) as {
+      source: { kind: string };
+      transcription: { provider: string; detected_language: string | null };
+      transcript: { full_text: string; segments: Array<{ text: string }> };
+    };
+
+    expect(markdown).toContain(`source_kind: "${jsonPayload.source.kind}"`);
+    expect(markdown).toContain(`provider: "${jsonPayload.transcription.provider}"`);
+    expect(markdown).toContain(`detected_language: "${jsonPayload.transcription.detected_language}"`);
+    expect(markdown).toContain(jsonPayload.transcript.full_text);
+    expect(markdown).toContain(jsonPayload.transcript.segments[0]?.text ?? "");
+  });
 });
