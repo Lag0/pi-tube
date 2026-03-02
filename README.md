@@ -2,7 +2,7 @@
 
 `pi-tube` is a Bun + TypeScript CLI for turning media inputs into structured artifacts.
 
-Phase 1 ships the runtime/contract foundation and command discoverability. Source/provider execution remains intentionally deferred.
+Current delivery status: Phase 3 source intake is active (YouTube, Instagram public URLs, direct media URLs, and local files). Provider execution remains deferred to Phase 4.
 
 ## Install (macOS/Linux)
 
@@ -28,7 +28,7 @@ pi-tube --version
 pi-tube <input>
 ```
 
-## Help Contract (Phase 1)
+## Help Contract (Phase 3)
 
 The top-level help is intentionally fixed in this order:
 
@@ -46,10 +46,13 @@ Implemented now:
 - `pi-tube --help`
 - `pi-tube --version`
 
-Coming soon (deterministic placeholders with non-zero exits):
+Deferred command aliases (non-zero guidance, use baseline input path):
 
-- `pi-tube youtube <url>` (Phase 2)
-- `pi-tube instagram <url>` (Phase 3)
+- `pi-tube youtube <url>` (use `pi-tube <input>`)
+- `pi-tube instagram <url>` (use `pi-tube <input>`)
+
+Coming soon:
+
 - `pi-tube deepgram <input>` (Phase 4)
 - `pi-tube groq <input>` (Phase 4)
 - `pi-tube --json <input>` (Phase 5)
@@ -57,11 +60,18 @@ Coming soon (deterministic placeholders with non-zero exits):
 ## Examples
 
 ```bash
-pi-tube "https://youtube.com/watch?v=dQw4w9WgXcQ"   # coming soon (Phase 2)
-pi-tube "https://instagram.com/reel/abc123"         # coming soon (Phase 3)
-pi-tube "./recording.mp3"                           # coming soon (Phase 2)
+pi-tube "https://youtube.com/watch?v=dQw4w9WgXcQ"   # active
+pi-tube "https://instagram.com/reel/abc123"         # active (public URLs only)
+pi-tube "https://cdn.example.com/audio/demo.wav"    # active
+pi-tube "./recording.mp3"                           # active
 pi-tube --json "https://youtube.com/watch?v=dQw4w9WgXcQ"  # coming soon (Phase 5)
 ```
+
+## Instagram Public-Only Policy
+
+- Supported URL classes: Instagram public post/reel/video URLs (for example `/p/...`, `/reel/...`, `/tv/...`).
+- Auth-gated Instagram inputs fail with `INSTAGRAM_AUTH_REQUIRED`.
+- CLI exits non-zero on auth-required failures and prints remediation guidance to use publicly accessible URLs.
 
 ## Runtime Policy
 
