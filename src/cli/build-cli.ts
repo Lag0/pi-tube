@@ -30,6 +30,7 @@ function renderHelp(): string {
   const lines = [
     HELP_SECTIONS.usage,
     `  ${COMMAND_IDENTITY} <input> [--provider <deepgram|groq>] [--language <code>] [--json]`,
+    `  ${COMMAND_IDENTITY} provider-status [--json]`,
     "",
     HELP_SECTIONS.commands,
     ...HELP_COMMAND_ROWS.map((row) => `  ${row}`),

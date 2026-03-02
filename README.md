@@ -2,7 +2,7 @@
 
 `pi-tube` is a Bun + TypeScript CLI for turning media inputs into structured artifacts.
 
-Current delivery status: Phase 4 provider execution is active (Deepgram and Groq behind a canonical provider contract).
+Current delivery status: Phase 5 output contracts are active (deterministic Markdown default, optional `--json`, and provider readiness reporting).
 
 ## Install (macOS/Linux)
 
@@ -28,7 +28,7 @@ pi-tube --version
 pi-tube <input>
 ```
 
-## Help Contract (Phase 4)
+## Help Contract (Phase 5)
 
 The top-level help is intentionally fixed in this order:
 
@@ -43,8 +43,11 @@ The top-level help is intentionally fixed in this order:
 Implemented now:
 
 - `pi-tube <input>`
+- `pi-tube --json <input>`
 - `pi-tube --provider <deepgram|groq> <input>`
 - `pi-tube --language <code> <input>`
+- `pi-tube provider-status`
+- `pi-tube --json provider-status`
 - `pi-tube --help`
 - `pi-tube --version`
 
@@ -52,10 +55,6 @@ Deferred command aliases (non-zero guidance, use baseline input path):
 
 - `pi-tube youtube <url>` (use `pi-tube <input>`)
 - `pi-tube instagram <url>` (use `pi-tube <input>`)
-
-Coming soon:
-
-- `pi-tube --json <input>` (Phase 5)
 
 ## Examples
 
@@ -66,8 +65,16 @@ pi-tube --provider groq --language pt "./recording.mp3"                # active
 pi-tube "https://instagram.com/reel/abc123"         # active (public URLs only)
 pi-tube "https://cdn.example.com/audio/demo.wav"    # active
 pi-tube "./recording.mp3"                           # active
-pi-tube --json "https://youtube.com/watch?v=dQw4w9WgXcQ"  # coming soon (Phase 5)
+pi-tube --json "https://youtube.com/watch?v=dQw4w9WgXcQ"  # active JSON output
+pi-tube provider-status                                   # active provider readiness
+pi-tube --json provider-status                            # active readiness JSON
 ```
+
+## Agent Workflows
+
+- Default output is deterministic Markdown with YAML frontmatter, fixed summary, and transcript sections.
+- `--json` emits a deterministic schema-versioned contract from the same canonical artifact model.
+- `provider-status` reports registered providers and missing required env vars in deterministic text or JSON.
 
 ## Instagram Public-Only Policy
 

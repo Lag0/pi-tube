@@ -15,6 +15,7 @@ describe("CLI help contract", () => {
 
     expect(result.exitCode).toBe(0);
     expect(stdout).toContain("pi-tube <input> [--provider <deepgram|groq>] [--language <code>] [--json]");
+    expect(stdout).toContain("pi-tube provider-status [--json]");
 
     const usage = stdout.indexOf("Usage");
     const commands = stdout.indexOf("Commands");
@@ -28,7 +29,8 @@ describe("CLI help contract", () => {
     expect(examples).toBeGreaterThan(options);
     expect(notes).toBeGreaterThan(examples);
 
-    expect(stdout).toContain("Phase 4 provider execution active");
+    expect(stdout).toContain("Markdown default, JSON optional");
+    expect(stdout).toContain("provider-status");
     expect(stdout).toContain("deferred command (use `pi-tube <input>`)");
     expect(stdout).toContain("INSTAGRAM_AUTH_REQUIRED");
     expect(stdout).toContain("--provider deepgram|groq");
