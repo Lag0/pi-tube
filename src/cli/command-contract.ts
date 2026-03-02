@@ -12,9 +12,9 @@ export const HELP_SECTIONS = {
 } as const;
 
 export const HELP_COMMAND_ROWS = [
-  `${COMMAND_IDENTITY} <input>              Baseline v1 contract (Phase 2 intake active)`,
+  `${COMMAND_IDENTITY} <input>              Baseline v1 contract (Phase 3 intake active)`,
   `${COMMAND_IDENTITY} youtube <url>        deferred command (use \`pi-tube <input>\`)`,
-  `${COMMAND_IDENTITY} instagram <url>      coming soon (Phase 3)`,
+  `${COMMAND_IDENTITY} instagram <url>      deferred command (use \`pi-tube <input>\`)`,
   `${COMMAND_IDENTITY} deepgram <input>     coming soon (Phase 4)`,
   `${COMMAND_IDENTITY} groq <input>         coming soon (Phase 4)`,
 ] as const;
@@ -27,7 +27,8 @@ export const HELP_EXAMPLES = [
 ] as const;
 
 export const HELP_NOTES = [
-  "Core source intake (YouTube/direct URL/local file) is active via `pi-tube <input>`.",
+  "Core source intake (YouTube/Instagram public/direct URL/local file) is active via `pi-tube <input>`.",
+  "Instagram URLs requiring authentication fail with `INSTAGRAM_AUTH_REQUIRED`.",
   "Provider execution is deferred to Phase 4 after source intake resolution.",
   "Use `pi-tube --help` to track the stable command contract between phases.",
 ] as const;

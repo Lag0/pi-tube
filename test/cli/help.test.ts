@@ -28,9 +28,9 @@ describe("CLI help contract", () => {
     expect(examples).toBeGreaterThan(options);
     expect(notes).toBeGreaterThan(examples);
 
-    expect(stdout).toContain("Phase 2 intake active");
+    expect(stdout).toContain("Phase 3 intake active");
     expect(stdout).toContain("deferred command (use `pi-tube <input>`)");
-    expect(stdout).toContain("coming soon (Phase 3)");
+    expect(stdout).toContain("INSTAGRAM_AUTH_REQUIRED");
     expect(stdout).toContain("coming soon (Phase 4)");
 
     const exampleLines = stdout
