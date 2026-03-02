@@ -2,7 +2,7 @@
 
 `pi-tube` is a Bun + TypeScript CLI for turning media inputs into structured artifacts.
 
-Current delivery status: Phase 3 source intake is active (YouTube, Instagram public URLs, direct media URLs, and local files). Provider execution remains deferred to Phase 4.
+Current delivery status: Phase 4 provider execution is active (Deepgram and Groq behind a canonical provider contract).
 
 ## Install (macOS/Linux)
 
@@ -28,7 +28,7 @@ pi-tube --version
 pi-tube <input>
 ```
 
-## Help Contract (Phase 3)
+## Help Contract (Phase 4)
 
 The top-level help is intentionally fixed in this order:
 
@@ -43,6 +43,8 @@ The top-level help is intentionally fixed in this order:
 Implemented now:
 
 - `pi-tube <input>`
+- `pi-tube --provider <deepgram|groq> <input>`
+- `pi-tube --language <code> <input>`
 - `pi-tube --help`
 - `pi-tube --version`
 
@@ -53,14 +55,14 @@ Deferred command aliases (non-zero guidance, use baseline input path):
 
 Coming soon:
 
-- `pi-tube deepgram <input>` (Phase 4)
-- `pi-tube groq <input>` (Phase 4)
 - `pi-tube --json <input>` (Phase 5)
 
 ## Examples
 
 ```bash
 pi-tube "https://youtube.com/watch?v=dQw4w9WgXcQ"   # active
+pi-tube --provider deepgram "https://youtube.com/watch?v=dQw4w9WgXcQ"  # active
+pi-tube --provider groq --language pt "./recording.mp3"                # active
 pi-tube "https://instagram.com/reel/abc123"         # active (public URLs only)
 pi-tube "https://cdn.example.com/audio/demo.wav"    # active
 pi-tube "./recording.mp3"                           # active
@@ -78,3 +80,13 @@ pi-tube --json "https://youtube.com/watch?v=dQw4w9WgXcQ"  # coming soon (Phase 5
 The primary runtime path is Bun + TypeScript. Python runtime is not required for the v1 default path.
 
 Legacy command patterns are still recognized for compatibility messaging only and do not route back to Python behavior.
+
+## Provider Error Contract
+
+Provider-layer failures are normalized to deterministic public codes:
+
+- `TRANSCRIPTION_PROVIDER_AUTH`
+- `TRANSCRIPTION_PROVIDER_RATE_LIMIT`
+- `TRANSCRIPTION_PROVIDER_UNAVAILABLE`
+- `TRANSCRIPTION_PROVIDER_FAILED`
+- `TRANSCRIPTION_PROVIDER_INVALID_RESPONSE`

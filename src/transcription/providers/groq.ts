@@ -73,6 +73,35 @@ export function createGroqProvider(options: GroqProviderOptions = {}): Transcrip
   return {
     id: "groq",
     async transcribe(request: TranscriptionRequest): Promise<TranscriptionResult> {
+      const mockResponse = process.env.PI_TUBE_TEST_GROQ_RESPONSE;
+      if (mockResponse) {
+        const payload = JSON.parse(mockResponse) as unknown;
+        const normalized = parseGroqResponse(payload);
+        return {
+          provider: "groq",
+          transcript: normalized.transcript,
+          requestedLanguage: request.requestedLanguage,
+          detectedLanguage: normalized.detectedLanguage,
+        };
+      }
+
+      const mockError = process.env.PI_TUBE_TEST_GROQ_ERROR;
+      if (mockError === "auth") {
+        throw createTranscriptionProviderAuthError("groq", "mocked auth failure");
+      }
+      if (mockError === "rate_limit") {
+        throw createTranscriptionProviderRateLimitError("groq", "mocked rate limit");
+      }
+      if (mockError === "unavailable") {
+        throw createTranscriptionProviderUnavailableError("groq", "mocked unavailable");
+      }
+      if (mockError === "invalid_response") {
+        throw createTranscriptionProviderInvalidResponseError("groq");
+      }
+      if (mockError === "failed") {
+        throw createTranscriptionProviderFailedError("groq", "mocked provider failure");
+      }
+
       const apiKey = options.apiKey ?? process.env.GROQ_API_KEY;
       if (!apiKey) {
         throw createTranscriptionProviderAuthError("groq", "missing GROQ_API_KEY");

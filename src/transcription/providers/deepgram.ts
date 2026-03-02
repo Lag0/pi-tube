@@ -76,6 +76,35 @@ export function createDeepgramProvider(options: DeepgramProviderOptions = {}): T
   return {
     id: "deepgram",
     async transcribe(request: TranscriptionRequest): Promise<TranscriptionResult> {
+      const mockResponse = process.env.PI_TUBE_TEST_DEEPGRAM_RESPONSE;
+      if (mockResponse) {
+        const payload = JSON.parse(mockResponse) as unknown;
+        const normalized = parseDeepgramResponse(payload);
+        return {
+          provider: "deepgram",
+          transcript: normalized.transcript,
+          requestedLanguage: request.requestedLanguage,
+          detectedLanguage: normalized.detectedLanguage,
+        };
+      }
+
+      const mockError = process.env.PI_TUBE_TEST_DEEPGRAM_ERROR;
+      if (mockError === "auth") {
+        throw createTranscriptionProviderAuthError("deepgram", "mocked auth failure");
+      }
+      if (mockError === "rate_limit") {
+        throw createTranscriptionProviderRateLimitError("deepgram", "mocked rate limit");
+      }
+      if (mockError === "unavailable") {
+        throw createTranscriptionProviderUnavailableError("deepgram", "mocked unavailable");
+      }
+      if (mockError === "invalid_response") {
+        throw createTranscriptionProviderInvalidResponseError("deepgram");
+      }
+      if (mockError === "failed") {
+        throw createTranscriptionProviderFailedError("deepgram", "mocked provider failure");
+      }
+
       const apiKey = options.apiKey ?? process.env.DEEPGRAM_API_KEY;
       if (!apiKey) {
         throw createTranscriptionProviderAuthError("deepgram", "missing DEEPGRAM_API_KEY");

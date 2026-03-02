@@ -14,7 +14,7 @@ describe("CLI help contract", () => {
     const stdout = result.stdout.toString();
 
     expect(result.exitCode).toBe(0);
-    expect(stdout).toContain("pi-tube <input> [--json]");
+    expect(stdout).toContain("pi-tube <input> [--provider <deepgram|groq>] [--language <code>] [--json]");
 
     const usage = stdout.indexOf("Usage");
     const commands = stdout.indexOf("Commands");
@@ -28,10 +28,11 @@ describe("CLI help contract", () => {
     expect(examples).toBeGreaterThan(options);
     expect(notes).toBeGreaterThan(examples);
 
-    expect(stdout).toContain("Phase 3 intake active");
+    expect(stdout).toContain("Phase 4 provider execution active");
     expect(stdout).toContain("deferred command (use `pi-tube <input>`)");
     expect(stdout).toContain("INSTAGRAM_AUTH_REQUIRED");
-    expect(stdout).toContain("coming soon (Phase 4)");
+    expect(stdout).toContain("--provider deepgram|groq");
+    expect(stdout).toContain("TRANSCRIPTION_PROVIDER_*");
 
     const exampleLines = stdout
       .split("\n")

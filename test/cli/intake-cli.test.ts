@@ -4,11 +4,19 @@ import os from "node:os";
 import path from "node:path";
 
 function runCli(args: string[], env: Record<string, string> = {}) {
+  const defaultEnv = {
+    PI_TUBE_TEST_DEEPGRAM_RESPONSE: JSON.stringify({
+      results: {
+        channels: [{ detected_language: "en", alternatives: [{ transcript: "test transcript" }] }],
+      },
+    }),
+  };
+
   return Bun.spawnSync({
     cmd: ["bun", "run", "--bun", "bin/pi-tube.ts", ...args],
     stdout: "pipe",
     stderr: "pipe",
-    env: { ...process.env, ...env },
+    env: { ...process.env, ...defaultEnv, ...env },
   });
 }
 
