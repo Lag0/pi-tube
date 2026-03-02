@@ -75,6 +75,19 @@ export async function resolveYouTubeWithYtDlp(
   input: string,
   executor: YtDlpExecutor = defaultYtDlpExecutor,
 ): Promise<YtDlpResult> {
+  const mockJson = process.env.PI_TUBE_TEST_YTDLP_JSON;
+  if (mockJson) {
+    return parseYtDlpOutput(mockJson);
+  }
+
+  const mockFailure = process.env.PI_TUBE_TEST_YTDLP_ERROR;
+  if (mockFailure === "not_found") {
+    throw createYtDlpNotFoundError();
+  }
+  if (mockFailure === "extract_failed") {
+    throw createYouTubeExtractFailedError("mocked extraction failure");
+  }
+
   let result: YtDlpExecutionResult;
 
   try {
