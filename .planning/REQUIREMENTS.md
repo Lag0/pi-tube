@@ -39,16 +39,16 @@
 ### CLI & Agent UX
 
 - [x] **CLI-01**: User can discover commands/options via `--help` with examples for all supported input sources.
-- [ ] **CLI-02**: User can configure provider API keys via env variables and CLI configuration flow.
+- [x] **CLI-02**: User can configure provider API keys via env variables and CLI configuration flow.
 - [x] **CLI-03**: User can run agent-friendly workflows using documented `--json` command patterns.
 - [x] **CLI-04**: User can inspect provider readiness with a dedicated provider status command.
 
 ### Reliability & Errors
 
-- [ ] **ERR-01**: User receives stable machine-readable error codes for unsupported source, auth required, download failure, and transcription failure.
-- [ ] **ERR-02**: CLI exits with non-zero status on failures and zero on success.
-- [ ] **ERR-03**: User receives concise remediation guidance for common failure classes.
-- [ ] **ERR-04**: Project includes at least one golden output fixture used to detect schema/format regressions.
+- [x] **ERR-01**: User receives stable machine-readable error codes for unsupported source, auth required, download failure, and transcription failure.
+- [x] **ERR-02**: CLI exits with non-zero status on failures and zero on success.
+- [x] **ERR-03**: User receives concise remediation guidance for common failure classes.
+- [x] **ERR-04**: Project includes at least one golden output fixture used to detect schema/format regressions.
 
 ## v2 Requirements
 
@@ -103,13 +103,13 @@ Which phases cover which requirements. Updated during roadmap creation.
 | OUT-05 | Phase 5 | Complete |
 | OUT-06 | Phase 5 | Complete |
 | CLI-01 | Phase 1 | Complete |
-| CLI-02 | Phase 6 | Pending |
+| CLI-02 | Phase 6 | Complete |
 | CLI-03 | Phase 5 | Complete |
 | CLI-04 | Phase 5 | Complete |
-| ERR-01 | Phase 6 | Pending |
-| ERR-02 | Phase 6 | Pending |
-| ERR-03 | Phase 6 | Pending |
-| ERR-04 | Phase 6 | Pending |
+| ERR-01 | Phase 6 | Complete |
+| ERR-02 | Phase 6 | Complete |
+| ERR-03 | Phase 6 | Complete |
+| ERR-04 | Phase 6 | Complete |
 
 **Coverage:**
 - v1 requirements: 27 total
@@ -118,4 +118,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-03-02*
-*Last updated: 2026-03-02 after Phase 5 execution completion*
+*Last updated: 2026-03-02 after Phase 6 execution completion*

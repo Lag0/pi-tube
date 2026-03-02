@@ -15,7 +15,7 @@ This roadmap delivers a full v1 cutover from Python to TypeScript + Bun while pr
 - [x] **Phase 3: Instagram Public Intake** - Add public-only Instagram ingestion with explicit auth-required behavior. (completed 2026-03-02)
 - [x] **Phase 4: Transcription Providers** - Implement Deepgram/Groq provider pipeline with stable provider abstraction. (completed 2026-03-02)
 - [x] **Phase 5: Output Contracts** - Deliver deterministic Markdown+JSON artifact contract for agent/human workflows. (completed 2026-03-02)
-- [ ] **Phase 6: Reliability & Release Gates** - Finalize config UX, error taxonomy, fixtures, and release-hardening.
+- [x] **Phase 6: Reliability & Release Gates** - Finalize config UX, error taxonomy, fixtures, and release-hardening. (completed 2026-03-02)
 
 ## Phase Details
 
@@ -114,10 +114,10 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
-- [ ] 06-01: Implement config command flow and env precedence rules
-- [ ] 06-02: Implement centralized error taxonomy and exit code policy
-- [ ] 06-03: Add golden transcript fixtures and parity/contract tests
-- [ ] 06-04: Add CI quality gates (lint/test/fixture verification) and release checklist
+- [x] 06-01: Implement config command flow and env precedence rules
+- [x] 06-02: Implement centralized error taxonomy and exit code policy
+- [x] 06-03: Add golden transcript fixtures and parity/contract tests
+- [x] 06-04: Add CI quality gates (lint/test/fixture verification) and release checklist
 
 ## Progress
 
@@ -131,4 +131,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 3. Instagram Public Intake | 3/3 | Complete | 2026-03-02 |
 | 4. Transcription Providers | 4/4 | Complete   | 2026-03-02 |
 | 5. Output Contracts | 4/4 | Complete | 2026-03-02 |
-| 6. Reliability & Release Gates | 0/4 | Not started | - |
+| 6. Reliability & Release Gates | 4/4 | Complete | 2026-03-02 |
