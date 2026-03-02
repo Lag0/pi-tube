@@ -1,6 +1,7 @@
 import { CliError, CliPlannedFeatureError } from "../errors/cli-errors.ts";
 import { resolveSource } from "../intake/resolver.ts";
-import type { ResolvedSource } from "../intake/types.ts";
+import { buildOutputArtifact } from "../output/build-artifact.ts";
+import { renderMarkdown } from "../output/markdown.ts";
 import {
   transcribeFromResolvedSource,
   type TranscriptionServiceOptions,
@@ -22,9 +23,7 @@ export interface BaselineInput {
 }
 
 export interface BaselineIntakeResult {
-  source: ResolvedSource;
   transcription: TranscriptionExecutionResult;
-  notes: string[];
 }
 
 export function isDeferredCommand(command: string): boolean {
@@ -67,7 +66,7 @@ export async function handleBaselineInput({
 
   if (json) {
     throw new CliPlannedFeatureError("`--json` output mode", "Phase 5", [
-      "Run without `--json` for active Phase 4 transcription behavior.",
+      "Run without `--json` for active deterministic Markdown output.",
       "Use `--provider` / `--language` options with baseline input mode.",
     ]);
   }
@@ -80,53 +79,11 @@ export async function handleBaselineInput({
   });
 
   return {
-    source,
     transcription,
-    notes: [
-      "Source intake complete.",
-      "Transcription provider execution complete.",
-    ],
   };
 }
 
 export function formatBaselineIntakeResult(result: BaselineIntakeResult): string {
-  const lines = [`[INTAKE_RESOLVED] kind=${result.source.kind}`];
-
-  switch (result.source.kind) {
-    case "youtube":
-      lines.push(`media_url=${result.source.mediaUrl}`);
-      if (result.source.title) {
-        lines.push(`title=${result.source.title}`);
-      }
-      break;
-    case "instagram":
-      lines.push(`media_url=${result.source.mediaUrl}`);
-      if (result.source.title) {
-        lines.push(`title=${result.source.title}`);
-      }
-      break;
-    case "direct_url":
-      lines.push(`media_url=${result.source.mediaUrl}`);
-      lines.push(`extension=${result.source.extension}`);
-      break;
-    case "local_file":
-      lines.push(`absolute_path=${result.source.absolutePath}`);
-      lines.push(`extension=${result.source.extension}`);
-      break;
-  }
-
-  lines.push(`[TRANSCRIPTION_RESOLVED] provider=${result.transcription.provider}`);
-  if (result.transcription.requestedLanguage) {
-    lines.push(`requested_language=${result.transcription.requestedLanguage}`);
-  }
-  if (result.transcription.detectedLanguage) {
-    lines.push(`detected_language=${result.transcription.detectedLanguage}`);
-  }
-  lines.push(`transcript=${result.transcription.transcript}`);
-
-  for (const note of result.notes) {
-    lines.push(`- ${note}`);
-  }
-
-  return lines.join("\n");
+  const artifact = buildOutputArtifact(result.transcription);
+  return renderMarkdown(artifact);
 }

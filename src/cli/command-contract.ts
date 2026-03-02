@@ -12,7 +12,7 @@ export const HELP_SECTIONS = {
 } as const;
 
 export const HELP_COMMAND_ROWS = [
-  `${COMMAND_IDENTITY} <input>              Baseline v1 contract (Phase 4 provider execution active)`,
+  `${COMMAND_IDENTITY} <input>              Baseline v1 contract (Phase 5 markdown output active)`,
   `${COMMAND_IDENTITY} youtube <url>        deferred command (use \`pi-tube <input>\`)`,
   `${COMMAND_IDENTITY} instagram <url>      deferred command (use \`pi-tube <input>\`)`,
 ] as const;
@@ -30,6 +30,7 @@ export const HELP_NOTES = [
   "Core source intake (YouTube/Instagram public/direct URL/local file) is active via `pi-tube <input>`.",
   "Provider execution is active with `--provider deepgram|groq` (default: deepgram).",
   "Language preference is optional via `--language <code>`.",
+  "Successful runs now return deterministic Markdown with YAML frontmatter + fixed summary format.",
   "Instagram URLs requiring authentication fail with `INSTAGRAM_AUTH_REQUIRED`.",
   "Provider failures map to stable `TRANSCRIPTION_PROVIDER_*` error codes.",
   "Use `pi-tube --help` to track the stable command contract between phases.",

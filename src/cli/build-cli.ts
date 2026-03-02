@@ -36,7 +36,7 @@ function renderHelp(): string {
     HELP_SECTIONS.options,
     `  -h, ${GLOBAL_FLAGS[0]}      Show help`,
     `  -v, ${GLOBAL_FLAGS[1]}   Show version`,
-    `      ${GLOBAL_FLAGS[2]}      Output JSON format (coming soon in Phase 5)`,
+    `      ${GLOBAL_FLAGS[2]}      Output deterministic JSON format (coming soon)`,
     `      ${GLOBAL_FLAGS[3]} <deepgram|groq>  Select transcription provider (default: deepgram)`,
     `      ${GLOBAL_FLAGS[4]} <code>            Optional language preference`,
     "",
