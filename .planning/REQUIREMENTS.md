@@ -29,19 +29,19 @@
 
 ### Output Contract
 
-- [ ] **OUT-01**: User receives Markdown output with YAML frontmatter metadata.
-- [ ] **OUT-02**: User receives summary at top in fixed format (1 paragraph with 2-4 sentences + 5 key-point bullets).
-- [ ] **OUT-03**: User receives transcript section structured with timestamps when provider data is available.
-- [ ] **OUT-04**: User can request JSON output via `--json`.
-- [ ] **OUT-05**: JSON output includes `schema_version` and deterministic field names.
-- [ ] **OUT-06**: Markdown and JSON outputs represent equivalent transcription data.
+- [x] **OUT-01**: User receives Markdown output with YAML frontmatter metadata.
+- [x] **OUT-02**: User receives summary at top in fixed format (1 paragraph with 2-4 sentences + 5 key-point bullets).
+- [x] **OUT-03**: User receives transcript section structured with timestamps when provider data is available.
+- [x] **OUT-04**: User can request JSON output via `--json`.
+- [x] **OUT-05**: JSON output includes `schema_version` and deterministic field names.
+- [x] **OUT-06**: Markdown and JSON outputs represent equivalent transcription data.
 
 ### CLI & Agent UX
 
 - [x] **CLI-01**: User can discover commands/options via `--help` with examples for all supported input sources.
 - [ ] **CLI-02**: User can configure provider API keys via env variables and CLI configuration flow.
-- [ ] **CLI-03**: User can run agent-friendly workflows using documented `--json` command patterns.
-- [ ] **CLI-04**: User can inspect provider readiness with a dedicated provider status command.
+- [x] **CLI-03**: User can run agent-friendly workflows using documented `--json` command patterns.
+- [x] **CLI-04**: User can inspect provider readiness with a dedicated provider status command.
 
 ### Reliability & Errors
 
@@ -96,16 +96,16 @@ Which phases cover which requirements. Updated during roadmap creation.
 | TRNS-02 | Phase 4 | Complete |
 | TRNS-03 | Phase 4 | Complete |
 | TRNS-04 | Phase 4 | Complete |
-| OUT-01 | Phase 5 | Pending |
-| OUT-02 | Phase 5 | Pending |
-| OUT-03 | Phase 5 | Pending |
-| OUT-04 | Phase 5 | Pending |
-| OUT-05 | Phase 5 | Pending |
-| OUT-06 | Phase 5 | Pending |
+| OUT-01 | Phase 5 | Complete |
+| OUT-02 | Phase 5 | Complete |
+| OUT-03 | Phase 5 | Complete |
+| OUT-04 | Phase 5 | Complete |
+| OUT-05 | Phase 5 | Complete |
+| OUT-06 | Phase 5 | Complete |
 | CLI-01 | Phase 1 | Complete |
 | CLI-02 | Phase 6 | Pending |
-| CLI-03 | Phase 5 | Pending |
-| CLI-04 | Phase 5 | Pending |
+| CLI-03 | Phase 5 | Complete |
+| CLI-04 | Phase 5 | Complete |
 | ERR-01 | Phase 6 | Pending |
 | ERR-02 | Phase 6 | Pending |
 | ERR-03 | Phase 6 | Pending |
@@ -118,4 +118,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-03-02*
-*Last updated: 2026-03-02 after initial definition*
+*Last updated: 2026-03-02 after Phase 5 execution completion*

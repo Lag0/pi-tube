@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: phase_04_complete
-last_updated: "2026-03-02T22:20:30Z"
+status: phase_05_complete
+last_updated: "2026-03-02T22:39:00Z"
 progress:
   total_phases: 6
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 23
-  completed_plans: 15
+  completed_plans: 19
 ---
 
 # Project State
@@ -18,23 +18,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-02)
 
 **Core value:** Turn public media inputs into trustworthy, structured, ready-to-use knowledge artifacts fast.
-**Current focus:** Phase 5: Output Contracts (next)
+**Current focus:** Phase 6: Reliability & Release Gates (next)
 
 ## Current Position
 
-Phase: 4 of 6 (Transcription Providers)
+Phase: 5 of 6 (Output Contracts)
 Plan: 4 of 4 executed
-Status: Phase 4 complete — ready for Phase 5 planning/execution
-Last activity: 2026-03-02 — Completed 04-04 CLI provider integration and regressions
+Status: Phase 5 complete — ready for Phase 6 planning/execution
+Last activity: 2026-03-02 — Completed 05-04 provider status command, output parity tests, and docs updates
 
-Progress: [██████░░░░] 65%
+Progress: [████████░░] 83%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 15
-- Average duration: 4.3 min
-- Total execution time: 1.06 hours
+- Total plans completed: 19
+- Average duration: 3.9 min
+- Total execution time: 1.23 hours
 
 **By Phase:**
 
@@ -44,10 +44,11 @@ Progress: [██████░░░░] 65%
 | 2 | 4 | 6 min | 1.5 min |
 | 3 | 3 | 15 min | 5.0 min |
 | 4 | 4 | 38 min | 9.5 min |
+| 5 | 4 | 11 min | 2.8 min |
 
 **Recent Trend:**
-- Last 5 plans: 03-03 (3 min), 04-01 (9 min), 04-02 (8 min), 04-03 (5 min), 04-04 (16 min)
-- Trend: Elevated due end-to-end integration and regression hardening
+- Last 5 plans: 04-04 (16 min), 05-01 (2 min), 05-02 (1 min), 05-03 (1 min), 05-04 (3 min)
+- Trend: Faster delivery from established output/rendering architecture and focused regression updates
 
 *Updated after each plan completion*
 | Phase 03 P01 | 8 min | 3 tasks | 7 files |
@@ -57,6 +58,10 @@ Progress: [██████░░░░] 65%
 | Phase 04 P02 | 8 min | 3 tasks | 6 files |
 | Phase 04 P03 | 5 min | 3 tasks | 3 files |
 | Phase 04 P04 | 16 min | 3 tasks | 11 files |
+| Phase 05 P01 | 2 min | 3 tasks | 10 files |
+| Phase 05 P02 | 1 min | 3 tasks | 6 files |
+| Phase 05 P03 | 1 min | 3 tasks | 7 files |
+| Phase 05 P04 | 3 min | 3 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -95,6 +100,10 @@ Recent decisions affecting current work:
 - [Phase 04]: Groq response parser accepts canonical text/language fields and rejects malformed payloads deterministically. — Protects CLI contract from provider response drift.
 - [Phase 04]: Provider choice remains an option (--provider) on baseline pi-tube <input> instead of introducing new command verbs. — Preserves contract stability while enabling provider switching.
 - [Phase 04]: Language preference uses CLI override with PI_TUBE_TRANSCRIPTION_LANGUAGE env fallback. — Provides deterministic precedence for automation and manual usage.
+- [Phase 05]: Output rendering is contract-first through one schema-versioned `OutputArtifact` model shared by Markdown and JSON. — Prevents renderer drift and centralizes output semantics.
+- [Phase 05]: Segment/timestamp normalization occurs in provider adapters and is passed through service boundary as optional canonical segments. — Keeps renderer logic provider-agnostic and deterministic.
+- [Phase 05]: `--json` is now an active output mode selected only at the final renderer step. — Preserves one execution/intake/transcription flow while supporting both human and agent output needs.
+- [Phase 05]: `provider-status` readiness output is deterministic and offline, derived from provider registry + env presence only. — Avoids network nondeterminism and improves agent usability.
 
 ### Pending Todos
 
@@ -106,6 +115,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-02 22:20
-Stopped at: Completed 04-04-PLAN.md and phase verification
-Resume file: .planning/ROADMAP.md
+Last session: 2026-03-02 22:39
+Stopped at: Completed 05-04-PLAN.md, phase verification, and phase completion updates
+Resume file: .planning/phases/06-reliability-release-gates/

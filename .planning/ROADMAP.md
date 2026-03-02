@@ -14,7 +14,7 @@ This roadmap delivers a full v1 cutover from Python to TypeScript + Bun while pr
 - [x] **Phase 2: Core Source Intake** - Implement YouTube, direct URL, and local-file ingestion with strict input policy. (completed 2026-03-02)
 - [x] **Phase 3: Instagram Public Intake** - Add public-only Instagram ingestion with explicit auth-required behavior. (completed 2026-03-02)
 - [x] **Phase 4: Transcription Providers** - Implement Deepgram/Groq provider pipeline with stable provider abstraction. (completed 2026-03-02)
-- [ ] **Phase 5: Output Contracts** - Deliver deterministic Markdown+JSON artifact contract for agent/human workflows.
+- [x] **Phase 5: Output Contracts** - Deliver deterministic Markdown+JSON artifact contract for agent/human workflows. (completed 2026-03-02)
 - [ ] **Phase 6: Reliability & Release Gates** - Finalize config UX, error taxonomy, fixtures, and release-hardening.
 
 ## Phase Details
@@ -97,10 +97,10 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
-- [ ] 05-01: Define canonical transcript schema and versioning strategy
-- [ ] 05-02: Implement Markdown renderer (frontmatter + fixed summary + transcript sections)
-- [ ] 05-03: Implement JSON renderer and `--json` command output path
-- [ ] 05-04: Implement provider status command and agent-usage documentation examples
+- [x] 05-01: Define canonical transcript schema and versioning strategy
+- [x] 05-02: Implement Markdown renderer (frontmatter + fixed summary + transcript sections)
+- [x] 05-03: Implement JSON renderer and `--json` command output path
+- [x] 05-04: Implement provider status command and agent-usage documentation examples
 
 ### Phase 6: Reliability & Release Gates
 **Goal**: Finalize configuration UX, stable public error taxonomy, and regression-safety gates for release.
@@ -130,5 +130,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 2. Core Source Intake | 4/4 | Complete    | 2026-03-02 |
 | 3. Instagram Public Intake | 3/3 | Complete | 2026-03-02 |
 | 4. Transcription Providers | 4/4 | Complete   | 2026-03-02 |
-| 5. Output Contracts | 0/4 | Not started | - |
+| 5. Output Contracts | 4/4 | Complete | 2026-03-02 |
 | 6. Reliability & Release Gates | 0/4 | Not started | - |
