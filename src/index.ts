@@ -1,5 +1,7 @@
 import { runCli } from "./cli/build-cli.ts";
 
+export const AUTHORITATIVE_RUNTIME = "bun-ts";
+
 export async function main(argv: string[] = process.argv.slice(2)): Promise<number> {
   return runCli(argv);
 }

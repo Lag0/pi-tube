@@ -1,133 +1,53 @@
-# Pi-Tube
+# pi-tube
 
-CLI para download e transcrição de vídeos do YouTube usando modelos cloud de AI.
+Bun + TypeScript CLI foundation for `pi-tube`.
 
-## Features
+## Current Phase (Phase 1)
 
-- 🎬 **Download de YouTube**: Baixa áudio/vídeo de URLs do YouTube
-- 🎙️ **Transcrição Cloud**: Deepgram Nova 3 e Groq Whisper
-- 🗣️ **Diarização**: Identifica quem está falando (Speaker Ident.)
-- 📝 **Sumarização**: Gera um resumo automático do conteúdo
-- 📁 **Arquivos Locais**: Transcreve vídeos e áudios locais
-- 🔧 **Conversão Automática**: Converte áudio para formato otimizado (16kHz mono)
+This release locks command identity and CLI discoverability while source/provider execution is still coming soon.
 
-## Instalação
+### Available now
 
-### Instalação Rápida (Recomendada)
+- Canonical command identity remains `pi-tube`
+- Deterministic top-level help (`Usage -> Commands -> Global options -> Examples -> Notes`)
+- Deterministic non-zero placeholder behavior for deferred features
+- Legacy command compatibility guidance (`deepgram`, `groq`, `dl`, `providers`, `config`)
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/Lag0/pi-tube/master/install.sh | bash
-```
+### Coming soon
 
-### Instalação Manual com pipx
+- Core source intake (`youtube`, direct URLs, local files) in Phase 2
+- Instagram public intake in Phase 3
+- Provider command routing (`deepgram`, `groq`) in Phase 4
 
-```bash
-pip install --user pipx
-pipx ensurepath
-pipx install git+https://github.com/Lag0/pi-tube.git
-```
-
-### Instalação para Desenvolvimento
+## Quick Start (Bun/TS default path)
 
 ```bash
-git clone https://github.com/Lag0/pi-tube.git
-cd pi-tube
-uv sync
+bun install
+bun run --bun bin/pi-tube.ts --help
+bun run --bun bin/pi-tube.ts --version
 ```
 
-## Configuração
-
-Configure as API keys usando o comando `config`:
+## Canonical Usage
 
 ```bash
-# Configurar Deepgram
-pi-tube config set deepgram YOUR_DEEPGRAM_KEY
-
-# Configurar Groq
-pi-tube config set groq YOUR_GROQ_KEY
-
-# Ver status da configuração
-pi-tube config show
+pi-tube <input>
+pi-tube --help
+pi-tube --version
+pi-tube --json <input>   # coming soon (Phase 5)
 ```
 
-Ou via variáveis de ambiente:
+### Example placeholders
 
 ```bash
-export DEEPGRAM_API_KEY=your_deepgram_key
-export GROQ_API_KEY=your_groq_key
+pi-tube "https://youtube.com/watch?v=dQw4w9WgXcQ"   # coming soon (Phase 2)
+pi-tube "https://instagram.com/reel/abc123"         # coming soon (Phase 3)
+pi-tube "./recording.mp3"                           # coming soon (Phase 2)
 ```
 
-## Uso
+## Legacy Migration Notes
 
-### Transcrever vídeo do YouTube
+If you run old command patterns such as `pi-tube deepgram <input>`, the Bun CLI returns deterministic migration guidance and exits non-zero. This is expected during migration.
 
-```bash
-# Usando Groq Whisper
-pi-tube groq "https://youtube.com/watch?v=..."
+## Runtime Policy
 
-# Usando Deepgram Nova 3
-pi-tube deepgram "https://youtube.com/watch?v=..."
-
-# Com output customizado
-pi-tube groq "https://youtube.com/watch?v=..." -o ./transcripts/video.txt
-```
-
-### Transcrever arquivo local
-
-```bash
-# Vídeo local
-pi-tube groq /path/to/video.mp4
-
-# Áudio local
-pi-tube deepgram /path/to/audio.mp3 -o transcricao.txt
-```
-
-### Download
-
-```bash
-# Download de áudio (padrão)
-pi-tube dl "https://youtube.com/watch?v=..."
-
-# Download de áudio explícito
-pi-tube dl "https://youtube.com/watch?v=..." --audio
-
-# Download de vídeo
-pi-tube dl "https://youtube.com/watch?v=..." --video
-```
-
-### Verificar providers configurados
-
-```bash
-pi-tube providers
-```
-
-## Atualização
-
-Para atualizar o pi-tube para a versão mais recente:
-
-```bash
-pipx upgrade pi-tube
-```
-
-Ou reinstale forçadamente:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/Lag0/pi-tube/master/install.sh | bash
-```
-
-## Output
-
-As transcrições são salvas em `~/pi-tube/YYYY-MM-DD-<nome_do_video>.md` por padrão.
-Use `-o` para especificar um caminho customizado.
-
-> **Smart Skip**: Se a transcrição já existir, o pi-tube pulará automaticamente o download e o processamento.
-
-
-## Requisitos
-
-- Python 3.11+
-- ffmpeg instalado no sistema
-
-## Licença
-
-MIT
+Primary execution path is Bun + TypeScript. Python runtime is not required for the v1 default CLI path.
