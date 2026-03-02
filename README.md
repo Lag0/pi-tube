@@ -2,7 +2,7 @@
 
 `pi-tube` is a Bun + TypeScript CLI for turning media inputs into structured artifacts.
 
-Current delivery status: Phase 5 output contracts are active (deterministic Markdown default, optional `--json`, and provider readiness reporting).
+Current delivery status: Phase 6 reliability hardening is active (deterministic config flow, stable error contracts, golden fixtures, and release gates).
 
 ## Install (macOS/Linux)
 
@@ -46,6 +46,9 @@ Implemented now:
 - `pi-tube --json <input>`
 - `pi-tube --provider <deepgram|groq> <input>`
 - `pi-tube --language <code> <input>`
+- `pi-tube config set <key> <value>`
+- `pi-tube config get <key>`
+- `pi-tube config list`
 - `pi-tube provider-status`
 - `pi-tube --json provider-status`
 - `pi-tube --help`
@@ -66,9 +69,29 @@ pi-tube "https://instagram.com/reel/abc123"         # active (public URLs only)
 pi-tube "https://cdn.example.com/audio/demo.wav"    # active
 pi-tube "./recording.mp3"                           # active
 pi-tube --json "https://youtube.com/watch?v=dQw4w9WgXcQ"  # active JSON output
+pi-tube config set defaults.provider groq                 # active config flow
+pi-tube config set providers.groq.api_key_env GROQ_API_KEY
+pi-tube config list
 pi-tube provider-status                                   # active provider readiness
 pi-tube --json provider-status                            # active readiness JSON
 ```
+
+## Config Keys and Precedence
+
+Supported configuration keys:
+
+- `defaults.provider` (`deepgram` or `groq`)
+- `defaults.language` (language code)
+- `providers.deepgram.api_key`
+- `providers.deepgram.api_key_env`
+- `providers.groq.api_key`
+- `providers.groq.api_key_env`
+
+Resolution precedence:
+
+- Provider: CLI `--provider` > config `defaults.provider` > `PI_TUBE_TRANSCRIPTION_PROVIDER` > `deepgram`
+- Language: CLI `--language` > config `defaults.language` > `PI_TUBE_TRANSCRIPTION_LANGUAGE`
+- API key: config `providers.<id>.api_key` > env referenced by `providers.<id>.api_key_env` > default provider env (`DEEPGRAM_API_KEY`/`GROQ_API_KEY`)
 
 ## Agent Workflows
 

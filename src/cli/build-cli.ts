@@ -31,6 +31,7 @@ function renderHelp(): string {
   const lines = [
     HELP_SECTIONS.usage,
     `  ${COMMAND_IDENTITY} <input> [--provider <deepgram|groq>] [--language <code>] [--json]`,
+    `  ${COMMAND_IDENTITY} config <set|get|list> [args] [--json]`,
     `  ${COMMAND_IDENTITY} provider-status [--json]`,
     "",
     HELP_SECTIONS.commands,
