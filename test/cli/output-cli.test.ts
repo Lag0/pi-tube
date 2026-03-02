@@ -61,16 +61,25 @@ describe("CLI output contract", () => {
     expect(stdout).toContain("- [00:00:00.710 - 00:00:01.200] world");
   });
 
-  test("keeps --json mode in planned-feature state until json renderer activation", () => {
+  test("returns deterministic schema-versioned JSON when --json is used", () => {
     const result = runCli(["--json", mediaUrl], {
       PI_TUBE_TEST_DEEPGRAM_RESPONSE: JSON.stringify({
         results: {
-          channels: [{ alternatives: [{ transcript: "unused" }] }],
+          channels: [{ alternatives: [{ transcript: "json response" }] }],
         },
       }),
     });
 
-    expect(result.exitCode).toBe(2);
-    expect(result.stderr.toString()).toContain("[CLI_NOT_IMPLEMENTED]");
+    expect(result.exitCode).toBe(0);
+    const payload = JSON.parse(result.stdout.toString()) as {
+      schema_version: string;
+      source: { kind: string };
+      transcription: { provider: string };
+      transcript: { full_text: string };
+    };
+    expect(payload.schema_version).toBe("1.0.0");
+    expect(payload.source.kind).toBe("direct_url");
+    expect(payload.transcription.provider).toBe("deepgram");
+    expect(payload.transcript.full_text).toBe("json response");
   });
 });

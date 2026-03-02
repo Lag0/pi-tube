@@ -1,6 +1,7 @@
 import { CliError, CliPlannedFeatureError } from "../errors/cli-errors.ts";
 import { resolveSource } from "../intake/resolver.ts";
 import { buildOutputArtifact } from "../output/build-artifact.ts";
+import { renderJson } from "../output/json.ts";
 import { renderMarkdown } from "../output/markdown.ts";
 import {
   transcribeFromResolvedSource,
@@ -24,6 +25,7 @@ export interface BaselineInput {
 
 export interface BaselineIntakeResult {
   transcription: TranscriptionExecutionResult;
+  json: boolean;
 }
 
 export function isDeferredCommand(command: string): boolean {
@@ -39,7 +41,7 @@ export function handleDeferredCommand(command: string, json: boolean): never {
   ];
 
   if (json) {
-    guidance.push("`--json` output mode is planned for Phase 5.");
+    guidance.push("Use `pi-tube --json <input>` with baseline input mode for deterministic JSON output.");
   }
 
   throw new CliPlannedFeatureError(`\`${command}\` command`, phase, guidance);
@@ -64,13 +66,6 @@ export async function handleBaselineInput({
     });
   }
 
-  if (json) {
-    throw new CliPlannedFeatureError("`--json` output mode", "Phase 5", [
-      "Run without `--json` for active deterministic Markdown output.",
-      "Use `--provider` / `--language` options with baseline input mode.",
-    ]);
-  }
-
   const source = await resolveSource(input);
   const transcription = await transcribeFromResolvedSource(source, {
     ...transcriptionOptions,
@@ -80,10 +75,11 @@ export async function handleBaselineInput({
 
   return {
     transcription,
+    json,
   };
 }
 
 export function formatBaselineIntakeResult(result: BaselineIntakeResult): string {
   const artifact = buildOutputArtifact(result.transcription);
-  return renderMarkdown(artifact);
+  return result.json ? renderJson(artifact) : renderMarkdown(artifact);
 }
