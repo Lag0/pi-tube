@@ -33,7 +33,7 @@ This roadmap delivers a full v1 cutover from Python to TypeScript + Bun while pr
 Plans:
 - [x] 01-01: Bootstrap Bun + TypeScript project structure and command entrypoint
 - [x] 01-02: Port base CLI command routing and shared flags/help UX
-- [ ] 01-03: Wire legacy compatibility shim and remove Python runtime dependency from main path
+- [x] 01-03: Wire legacy compatibility shim and remove Python runtime dependency from main path
 - [ ] 01-04: Validate install/run flow and update top-level CLI usage docs
 
 ### Phase 2: Core Source Intake
@@ -126,7 +126,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Bun/TS Foundation | 2/4 | In Progress | - |
+| 1. Bun/TS Foundation | 3/4 | In Progress | - |
 | 2. Core Source Intake | 0/4 | Not started | - |
 | 3. Instagram Public Intake | 0/3 | Not started | - |
 | 4. Transcription Providers | 0/4 | Not started | - |
