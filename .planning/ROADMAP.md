@@ -127,7 +127,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Bun/TS Foundation | 4/4 | Complete | 2026-03-02 |
-| 2. Core Source Intake | 4/4 | Complete   | 2026-03-02 |
+| 2. Core Source Intake | 4/4 | Complete    | 2026-03-02 |
 | 3. Instagram Public Intake | 0/3 | Not started | - |
 | 4. Transcription Providers | 0/4 | Not started | - |
 | 5. Output Contracts | 0/4 | Not started | - |
