@@ -99,4 +99,22 @@ describe("CLI transcription integration", () => {
     expect(result.exitCode).toBe(2);
     expect(result.stderr.toString()).toContain("[TRANSCRIPTION_PROVIDER_FAILED]");
   });
+
+  test("maps provider unavailable failure to stable code with non-zero exit", () => {
+    const result = runCli(["--provider", "groq", mediaUrl], {
+      PI_TUBE_TEST_GROQ_ERROR: "unavailable",
+    });
+
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr.toString()).toContain("[TRANSCRIPTION_PROVIDER_UNAVAILABLE]");
+  });
+
+  test("maps provider invalid response to stable code with non-zero exit", () => {
+    const result = runCli(["--provider", "groq", mediaUrl], {
+      PI_TUBE_TEST_GROQ_RESPONSE: JSON.stringify({ text: "" }),
+    });
+
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr.toString()).toContain("[TRANSCRIPTION_PROVIDER_INVALID_RESPONSE]");
+  });
 });

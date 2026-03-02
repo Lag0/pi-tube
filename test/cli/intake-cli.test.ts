@@ -36,6 +36,26 @@ describe("CLI intake integration", () => {
     expect(stdout).toContain('source_reference: "https://cdn.example.com/youtube/video.mp4"');
   });
 
+  test("maps missing yt-dlp dependency to deterministic code", () => {
+    const result = runCli(["https://www.youtube.com/watch?v=abc123"], {
+      PI_TUBE_TEST_YTDLP_ERROR: "not_found",
+    });
+    const stderr = result.stderr.toString();
+
+    expect(result.exitCode).toBe(2);
+    expect(stderr).toContain("[YTDLP_NOT_FOUND]");
+  });
+
+  test("maps YouTube extraction failures to deterministic code", () => {
+    const result = runCli(["https://www.youtube.com/watch?v=abc123"], {
+      PI_TUBE_TEST_YTDLP_ERROR: "extract_failed",
+    });
+    const stderr = result.stderr.toString();
+
+    expect(result.exitCode).toBe(2);
+    expect(stderr).toContain("[YOUTUBE_EXTRACT_FAILED]");
+  });
+
   test("resolves direct media URL through baseline intake path", () => {
     const result = runCli(["https://cdn.example.com/audio/demo.wav"]);
     const stdout = result.stdout.toString();
@@ -76,6 +96,16 @@ describe("CLI intake integration", () => {
     expect(result.exitCode).toBe(2);
     expect(stderr).toContain("[INSTAGRAM_AUTH_REQUIRED]");
     expect(stderr).toContain("supports Instagram public URLs only");
+  });
+
+  test("maps Instagram extraction failures to deterministic code", () => {
+    const result = runCli(["https://www.instagram.com/reel/abc123"], {
+      PI_TUBE_TEST_INSTAGRAM_YTDLP_ERROR: "extract_failed",
+    });
+    const stderr = result.stderr.toString();
+
+    expect(result.exitCode).toBe(2);
+    expect(stderr).toContain("[INSTAGRAM_EXTRACT_FAILED]");
   });
 
   test("resolves local file path through baseline intake path", () => {
