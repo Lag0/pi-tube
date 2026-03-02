@@ -1,15 +1,35 @@
-import { tryParseHttpUrl } from "../policy.ts";
+import { CliError } from "../../errors/cli-errors.ts";
+import { isYouTubeUrl, tryParseHttpUrl } from "../policy.ts";
+import { resolveYouTubeWithYtDlp } from "../tools/yt-dlp.ts";
 import type { ResolvedSource } from "../types.ts";
 
-export async function resolveYouTubeSource(input: string): Promise<ResolvedSource> {
-  const parsed = tryParseHttpUrl(input);
-  const normalizedUrl = parsed ? parsed.toString() : input;
+interface YouTubeAdapterDeps {
+  resolveMedia?: typeof resolveYouTubeWithYtDlp;
+}
 
-  // Phase 01 boundary: deterministic placeholder until yt-dlp integration is added.
+export async function resolveYouTubeSource(
+  input: string,
+  deps: YouTubeAdapterDeps = {},
+): Promise<ResolvedSource> {
+  const parsed = tryParseHttpUrl(input);
+  const normalizedUrl = parsed?.toString() ?? input;
+
+  if (!isYouTubeUrl(normalizedUrl)) {
+    throw new CliError(`Input is not a supported YouTube URL: \`${input}\`.`, {
+      code: "YOUTUBE_URL_INVALID",
+      exitCode: 2,
+      guidance: ["Use a valid public YouTube watch, short, or share URL."],
+    });
+  }
+
+  const resolveMedia = deps.resolveMedia ?? resolveYouTubeWithYtDlp;
+  const media = await resolveMedia(normalizedUrl);
+
   return {
     kind: "youtube",
     originalInput: input,
     normalizedUrl,
-    mediaUrl: normalizedUrl,
+    mediaUrl: media.mediaUrl,
+    title: media.title,
   };
 }
