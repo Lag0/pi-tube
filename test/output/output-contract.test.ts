@@ -59,4 +59,16 @@ describe("output contract", () => {
       { start_ms: 3000, end_ms: 3800, text: "segment b" },
     ]);
   });
+
+  test("keeps deterministic fallback shape when segments are absent", () => {
+    const artifact = buildOutputArtifact(baseResult, {
+      generatedAt: "2026-03-02T23:00:00.000Z",
+    });
+
+    expect(artifact.transcript).toEqual({
+      full_text: "hello world",
+      segments: undefined,
+    });
+    expect(artifact.summary.key_points[4]).toBe("Segment count: 0");
+  });
 });
