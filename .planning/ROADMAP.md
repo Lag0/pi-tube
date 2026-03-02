@@ -80,7 +80,7 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
-- [ ] 04-01: Define provider interface and canonical transcription response contract
+- [x] 04-01: Define provider interface and canonical transcription response contract
 - [ ] 04-02: Implement Deepgram adapter with options + metadata mapping
 - [ ] 04-03: Implement Groq adapter with options + metadata mapping
 - [ ] 04-04: Add provider integration tests and failure mapping tests
@@ -129,6 +129,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 1. Bun/TS Foundation | 4/4 | Complete | 2026-03-02 |
 | 2. Core Source Intake | 4/4 | Complete    | 2026-03-02 |
 | 3. Instagram Public Intake | 3/3 | Complete | 2026-03-02 |
-| 4. Transcription Providers | 0/4 | Not started | - |
+| 4. Transcription Providers | 1/4 | In Progress|  |
 | 5. Output Contracts | 0/4 | Not started | - |
 | 6. Reliability & Release Gates | 0/4 | Not started | - |

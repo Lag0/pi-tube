@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: phase_03_complete
-last_updated: "2026-03-02T21:34:06Z"
+status: phase_04_in_progress
+last_updated: "2026-03-02T21:47:33Z"
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 23
-  completed_plans: 11
+  completed_plans: 12
 ---
 
 # Project State
@@ -23,18 +23,18 @@ See: .planning/PROJECT.md (updated 2026-03-02)
 ## Current Position
 
 Phase: 4 of 6 (Transcription Providers)
-Plan: 0 of 4 executed
-Status: Phase 3 complete — ready for Phase 4 planning/execution
-Last activity: 2026-03-02 — Phase 3 verified and marked complete
+Plan: 1 of 4 executed
+Status: Phase 4 in progress — provider adapters pending
+Last activity: 2026-03-02 — Completed 04-01 provider contract/service boundary
 
-Progress: [█████░░░░░] 48%
+Progress: [█████░░░░░] 52%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 11
-- Average duration: 2.4 min
-- Total execution time: 0.43 hours
+- Total plans completed: 12
+- Average duration: 2.9 min
+- Total execution time: 0.58 hours
 
 **By Phase:**
 
@@ -45,13 +45,14 @@ Progress: [█████░░░░░] 48%
 | 3 | 3 | 15 min | 5.0 min |
 
 **Recent Trend:**
-- Last 5 plans: 02-03 (2 min), 02-04 (2 min), 03-01 (8 min), 03-02 (4 min), 03-03 (3 min)
-- Trend: Elevated but stabilizing
+- Last 5 plans: 02-04 (2 min), 03-01 (8 min), 03-02 (4 min), 03-03 (3 min), 04-01 (9 min)
+- Trend: Elevated while phase 4 contract foundation lands
 
 *Updated after each plan completion*
 | Phase 03 P01 | 8 min | 3 tasks | 7 files |
 | Phase 03 P02 | 4 min | 3 tasks | 6 files |
 | Phase 03 P03 | 3 min | 3 tasks | 4 files |
+| Phase 04 P01 | 9 min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -82,6 +83,8 @@ Recent decisions affecting current work:
 - [Phase 03]: Instagram non-auth extraction failures remain INSTAGRAM_EXTRACT_FAILED — Prevents confusing remediation when failures are unrelated to authentication
 - [Phase 03]: CLI help keeps instagram alias deferred while baseline input path remains authoritative — Maintains stable command contract while Instagram intake runs through pi-tube <input>.
 - [Phase 03]: Help and README explicitly mention INSTAGRAM_AUTH_REQUIRED and public-only policy — Improves deterministic troubleshooting for agent and human users.
+- [Phase 04]: Provider selection precedence is CLI option first, then PI_TUBE_TRANSCRIPTION_PROVIDER, then default deepgram. — Guarantees deterministic provider behavior across CLI and automation contexts.
+- [Phase 04]: Language preference is normalized once in service boundary and forwarded through canonical request fields. — Keeps provider adapters simple and preserves a single response contract.
 
 ### Pending Todos
 
@@ -93,6 +96,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-02 21:34
-Stopped at: Completed Phase 3 verification and closure
-Resume file: .planning/ROADMAP.md
+Last session: 2026-03-02 21:47
+Stopped at: Completed 04-01-PLAN.md
+Resume file: .planning/phases/04-transcription-providers/04-02-PLAN.md
