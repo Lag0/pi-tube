@@ -83,38 +83,38 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| MIGR-01 | Phase TBD | Pending |
-| MIGR-02 | Phase TBD | Pending |
-| MIGR-03 | Phase TBD | Pending |
-| SRC-01 | Phase TBD | Pending |
-| SRC-02 | Phase TBD | Pending |
-| SRC-03 | Phase TBD | Pending |
-| SRC-04 | Phase TBD | Pending |
-| SRC-05 | Phase TBD | Pending |
-| SRC-06 | Phase TBD | Pending |
-| TRNS-01 | Phase TBD | Pending |
-| TRNS-02 | Phase TBD | Pending |
-| TRNS-03 | Phase TBD | Pending |
-| TRNS-04 | Phase TBD | Pending |
-| OUT-01 | Phase TBD | Pending |
-| OUT-02 | Phase TBD | Pending |
-| OUT-03 | Phase TBD | Pending |
-| OUT-04 | Phase TBD | Pending |
-| OUT-05 | Phase TBD | Pending |
-| OUT-06 | Phase TBD | Pending |
-| CLI-01 | Phase TBD | Pending |
-| CLI-02 | Phase TBD | Pending |
-| CLI-03 | Phase TBD | Pending |
-| CLI-04 | Phase TBD | Pending |
-| ERR-01 | Phase TBD | Pending |
-| ERR-02 | Phase TBD | Pending |
-| ERR-03 | Phase TBD | Pending |
-| ERR-04 | Phase TBD | Pending |
+| MIGR-01 | Phase 1 | Pending |
+| MIGR-02 | Phase 1 | Pending |
+| MIGR-03 | Phase 1 | Pending |
+| SRC-01 | Phase 2 | Pending |
+| SRC-02 | Phase 3 | Pending |
+| SRC-03 | Phase 3 | Pending |
+| SRC-04 | Phase 2 | Pending |
+| SRC-05 | Phase 2 | Pending |
+| SRC-06 | Phase 2 | Pending |
+| TRNS-01 | Phase 4 | Pending |
+| TRNS-02 | Phase 4 | Pending |
+| TRNS-03 | Phase 4 | Pending |
+| TRNS-04 | Phase 4 | Pending |
+| OUT-01 | Phase 5 | Pending |
+| OUT-02 | Phase 5 | Pending |
+| OUT-03 | Phase 5 | Pending |
+| OUT-04 | Phase 5 | Pending |
+| OUT-05 | Phase 5 | Pending |
+| OUT-06 | Phase 5 | Pending |
+| CLI-01 | Phase 1 | Pending |
+| CLI-02 | Phase 6 | Pending |
+| CLI-03 | Phase 5 | Pending |
+| CLI-04 | Phase 5 | Pending |
+| ERR-01 | Phase 6 | Pending |
+| ERR-02 | Phase 6 | Pending |
+| ERR-03 | Phase 6 | Pending |
+| ERR-04 | Phase 6 | Pending |
 
 **Coverage:**
 - v1 requirements: 27 total
-- Mapped to phases: 0
-- Unmapped: 27 ⚠️
+- Mapped to phases: 27
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-03-02*
