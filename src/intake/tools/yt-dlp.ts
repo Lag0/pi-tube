@@ -1,5 +1,7 @@
 import {
   CliError,
+  createInstagramAuthRequiredError,
+  createInstagramExtractFailedError,
   createYtDlpMalformedOutputError,
   createYtDlpNotFoundError,
   createYouTubeExtractFailedError,
@@ -17,15 +19,6 @@ export interface YtDlpExecutionResult {
 }
 
 export type YtDlpExecutor = (args: string[]) => Promise<YtDlpExecutionResult>;
-
-function createInstagramExtractFailedError(detail?: string): CliError {
-  const suffix = detail ? ` (${detail})` : "";
-  return new CliError(`Failed to resolve Instagram media via yt-dlp${suffix}.`, {
-    code: "INSTAGRAM_EXTRACT_FAILED",
-    exitCode: 2,
-    guidance: ["Try again with a valid public Instagram URL."],
-  });
-}
 
 async function defaultYtDlpExecutor(args: string[]): Promise<YtDlpExecutionResult> {
   let process: Bun.Subprocess<"pipe", "pipe", "inherit">;
@@ -78,6 +71,12 @@ function parseYtDlpOutput(stdout: string): YtDlpResult {
 
   const title = typeof parsed.title === "string" ? parsed.title : undefined;
   return { mediaUrl, title };
+}
+
+function isInstagramAuthRequiredFailure(detail: string): boolean {
+  return /(login required|requires login|you need to log in|challenge_required|checkpoint_required|private content|not available due to login)/i.test(
+    detail,
+  );
 }
 
 export async function resolveYouTubeWithYtDlp(
@@ -134,6 +133,9 @@ export async function resolveInstagramWithYtDlp(
   if (mockFailure === "not_found") {
     throw createYtDlpNotFoundError();
   }
+  if (mockFailure === "auth_required") {
+    throw createInstagramAuthRequiredError(input);
+  }
   if (mockFailure === "extract_failed") {
     throw createInstagramExtractFailedError("mocked extraction failure");
   }
@@ -155,7 +157,10 @@ export async function resolveInstagramWithYtDlp(
       throw createYtDlpNotFoundError();
     }
 
-    const detail = result.stderr.trim() || `exit code ${result.exitCode}`;
+    const detail = [result.stderr.trim(), result.stdout.trim()].filter(Boolean).join(" ").trim() || `exit code ${result.exitCode}`;
+    if (isInstagramAuthRequiredFailure(detail)) {
+      throw createInstagramAuthRequiredError(input);
+    }
     throw createInstagramExtractFailedError(detail);
   }
 

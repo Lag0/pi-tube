@@ -1,4 +1,4 @@
-import { CliError } from "../../errors/cli-errors.ts";
+import { createInstagramUrlInvalidError } from "../../errors/cli-errors.ts";
 import { isInstagramPublicUrl, tryParseHttpUrl } from "../policy.ts";
 import { resolveInstagramWithYtDlp } from "../tools/yt-dlp.ts";
 import type { ResolvedSource } from "../types.ts";
@@ -15,11 +15,7 @@ export async function resolveInstagramSource(
   const normalizedUrl = parsed?.toString() ?? input;
 
   if (!isInstagramPublicUrl(normalizedUrl)) {
-    throw new CliError(`Input is not a supported Instagram public URL: \`${input}\`.`, {
-      code: "INSTAGRAM_URL_INVALID",
-      exitCode: 2,
-      guidance: ["Use a public Instagram post/reel/video URL."],
-    });
+    throw createInstagramUrlInvalidError(input);
   }
 
   const resolveMedia = deps.resolveMedia ?? resolveInstagramWithYtDlp;
