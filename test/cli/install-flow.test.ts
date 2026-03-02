@@ -15,7 +15,8 @@ describe("Install and run contract", () => {
 
     expect(readme).toContain("pi-tube --help");
     expect(readme).toContain("Bun");
-    expect(readme).toContain("coming soon");
+    expect(readme).toContain("pi-tube --json");
+    expect(readme).toContain("provider-status");
   });
 
   test("canonical help command returns required sections", () => {

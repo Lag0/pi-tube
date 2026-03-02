@@ -32,8 +32,8 @@ describe("CLI intake integration", () => {
     const stdout = result.stdout.toString();
 
     expect(result.exitCode).toBe(0);
-    expect(stdout).toContain("[INTAKE_RESOLVED] kind=youtube");
-    expect(stdout).toContain("media_url=https://cdn.example.com/youtube/video.mp4");
+    expect(stdout).toContain('source_kind: "youtube"');
+    expect(stdout).toContain('source_reference: "https://cdn.example.com/youtube/video.mp4"');
   });
 
   test("resolves direct media URL through baseline intake path", () => {
@@ -41,8 +41,8 @@ describe("CLI intake integration", () => {
     const stdout = result.stdout.toString();
 
     expect(result.exitCode).toBe(0);
-    expect(stdout).toContain("[INTAKE_RESOLVED] kind=direct_url");
-    expect(stdout).toContain("extension=wav");
+    expect(stdout).toContain('source_kind: "direct_url"');
+    expect(stdout).toContain('source_reference: "https://cdn.example.com/audio/demo.wav"');
   });
 
   test("resolves Instagram public URL through baseline intake path", () => {
@@ -55,8 +55,8 @@ describe("CLI intake integration", () => {
     const stdout = result.stdout.toString();
 
     expect(result.exitCode).toBe(0);
-    expect(stdout).toContain("[INTAKE_RESOLVED] kind=instagram");
-    expect(stdout).toContain("media_url=https://cdn.example.com/instagram/reel.mp4");
+    expect(stdout).toContain('source_kind: "instagram"');
+    expect(stdout).toContain('source_reference: "https://cdn.example.com/instagram/reel.mp4"');
   });
 
   test("fails unsupported non-direct URL with deterministic code", () => {
@@ -88,9 +88,8 @@ describe("CLI intake integration", () => {
       const stdout = result.stdout.toString();
 
       expect(result.exitCode).toBe(0);
-      expect(stdout).toContain("[INTAKE_RESOLVED] kind=local_file");
-      expect(stdout).toContain(`absolute_path=${filePath}`);
-      expect(stdout).toContain("extension=m4a");
+      expect(stdout).toContain('source_kind: "local_file"');
+      expect(stdout).toContain(`source_reference: "${filePath}"`);
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
     }
