@@ -21,6 +21,7 @@ function providers(): ProviderRegistry {
           transcript: `deepgram:${request.requestedLanguage ?? "auto"}`,
           requestedLanguage: request.requestedLanguage,
           detectedLanguage: "en",
+          segments: [{ startMs: 0, endMs: 400, text: "hello" }],
         };
       },
     },
@@ -32,6 +33,7 @@ function providers(): ProviderRegistry {
           transcript: `groq:${request.requestedLanguage ?? "auto"}`,
           requestedLanguage: request.requestedLanguage,
           detectedLanguage: "pt",
+          segments: [{ startMs: 0, endMs: 400, text: "ola" }],
         };
       },
     },
@@ -90,5 +92,14 @@ describe("transcription service", () => {
     expect(Object.keys(deepgram).sort()).toEqual(Object.keys(groq).sort());
     expect(deepgram.source.kind).toBe("direct_url");
     expect(groq.source.kind).toBe("direct_url");
+  });
+
+  test("preserves optional timestamp segments from provider results", async () => {
+    const result = await transcribeFromResolvedSource(source, {
+      provider: "deepgram",
+      providers: providers(),
+    });
+
+    expect(result.segments).toEqual([{ startMs: 0, endMs: 400, text: "hello" }]);
   });
 });

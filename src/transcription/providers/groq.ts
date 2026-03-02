@@ -7,7 +7,11 @@ import {
   createTranscriptionProviderUnavailableError,
 } from "../../errors/cli-errors.ts";
 import type { ResolvedSource } from "../../intake/types.ts";
-import type { TranscriptionRequest, TranscriptionResult } from "../types.ts";
+import type {
+  TranscriptionRequest,
+  TranscriptionResult,
+  TranscriptionSegment,
+} from "../types.ts";
 import type { TranscriptionProvider } from "./provider.ts";
 
 type ProviderFetch = (input: string | URL, init?: RequestInit) => Promise<Response>;
@@ -27,7 +31,59 @@ function sourceToGroqInput(source: ResolvedSource): { key: "url" | "file"; value
   return { key: "url", value: source.mediaUrl };
 }
 
-function parseGroqResponse(payload: unknown): { transcript: string; detectedLanguage?: string } {
+function normalizeGroqSegments(rawSegments: unknown[]): TranscriptionSegment[] | undefined {
+  const segments: TranscriptionSegment[] = [];
+
+  for (const rawSegment of rawSegments) {
+    if (!rawSegment || typeof rawSegment !== "object") {
+      continue;
+    }
+
+    const segment = rawSegment as {
+      start?: unknown;
+      end?: unknown;
+      start_ms?: unknown;
+      end_ms?: unknown;
+      text?: unknown;
+    };
+    const text = typeof segment.text === "string" ? segment.text.trim() : "";
+    if (!text) {
+      continue;
+    }
+
+    const fromMilliseconds =
+      typeof segment.start_ms === "number" && Number.isFinite(segment.start_ms) &&
+      typeof segment.end_ms === "number" && Number.isFinite(segment.end_ms);
+    const fromSeconds =
+      typeof segment.start === "number" && Number.isFinite(segment.start) &&
+      typeof segment.end === "number" && Number.isFinite(segment.end);
+
+    if (!fromMilliseconds && !fromSeconds) {
+      continue;
+    }
+
+    const startMs = fromMilliseconds
+      ? Math.round(segment.start_ms as number)
+      : Math.round((segment.start as number) * 1000);
+    const endMs = fromMilliseconds
+      ? Math.round(segment.end_ms as number)
+      : Math.round((segment.end as number) * 1000);
+
+    if (endMs < startMs) {
+      continue;
+    }
+
+    segments.push({ startMs, endMs, text });
+  }
+
+  return segments.length > 0 ? segments : undefined;
+}
+
+function parseGroqResponse(payload: unknown): {
+  transcript: string;
+  detectedLanguage?: string;
+  segments?: TranscriptionSegment[];
+} {
   if (!payload || typeof payload !== "object") {
     throw createTranscriptionProviderInvalidResponseError("groq");
   }
@@ -41,8 +97,12 @@ function parseGroqResponse(payload: unknown): { transcript: string; detectedLang
     typeof (payload as { language?: unknown }).language === "string"
       ? ((payload as { language: string }).language || undefined)
       : undefined;
+  const rawSegments = Array.isArray((payload as { segments?: unknown[] }).segments)
+    ? ((payload as { segments?: unknown[] }).segments ?? [])
+    : [];
+  const segments = normalizeGroqSegments(rawSegments);
 
-  return { transcript: text, detectedLanguage };
+  return { transcript: text, detectedLanguage, segments };
 }
 
 function mapGroqHttpError(status: number, detail: string): CliError {
@@ -82,6 +142,7 @@ export function createGroqProvider(options: GroqProviderOptions = {}): Transcrip
           transcript: normalized.transcript,
           requestedLanguage: request.requestedLanguage,
           detectedLanguage: normalized.detectedLanguage,
+          segments: normalized.segments,
         };
       }
 
@@ -144,6 +205,7 @@ export function createGroqProvider(options: GroqProviderOptions = {}): Transcrip
         transcript: normalized.transcript,
         requestedLanguage: request.requestedLanguage,
         detectedLanguage: normalized.detectedLanguage,
+        segments: normalized.segments,
       };
     },
   };

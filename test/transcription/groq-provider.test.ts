@@ -37,6 +37,31 @@ describe("groq provider", () => {
     expect(result.detectedLanguage).toBe("es");
   });
 
+  test("normalizes optional segment timestamps when provider returns them", async () => {
+    const provider = createGroqProvider({
+      apiKey: "groq-test",
+      fetchImpl: async () =>
+        new Response(
+          JSON.stringify({
+            text: "hello from groq",
+            language: "es",
+            segments: [
+              { start: 0.2, end: 0.8, text: "hello" },
+              { start: 0.81, end: 1.1, text: "from" },
+            ],
+          }),
+          { status: 200 },
+        ),
+    });
+
+    const result = await provider.transcribe(request);
+
+    expect(result.segments).toEqual([
+      { startMs: 200, endMs: 800, text: "hello" },
+      { startMs: 810, endMs: 1100, text: "from" },
+    ]);
+  });
+
   test("maps auth failures to TRANSCRIPTION_PROVIDER_AUTH", async () => {
     const provider = createGroqProvider({
       apiKey: "groq-test",

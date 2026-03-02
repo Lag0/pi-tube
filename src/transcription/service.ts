@@ -83,5 +83,6 @@ export async function transcribeFromResolvedSource(
     transcript: result.transcript,
     requestedLanguage: result.requestedLanguage ?? requestedLanguage,
     detectedLanguage: result.detectedLanguage,
+    segments: result.segments,
   };
 }

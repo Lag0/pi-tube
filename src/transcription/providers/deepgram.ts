@@ -7,7 +7,11 @@ import {
   createTranscriptionProviderUnavailableError,
 } from "../../errors/cli-errors.ts";
 import type { ResolvedSource } from "../../intake/types.ts";
-import type { TranscriptionRequest, TranscriptionResult } from "../types.ts";
+import type {
+  TranscriptionRequest,
+  TranscriptionResult,
+  TranscriptionSegment,
+} from "../types.ts";
 import type { TranscriptionProvider } from "./provider.ts";
 
 type ProviderFetch = (input: string | URL, init?: RequestInit) => Promise<Response>;
@@ -27,7 +31,56 @@ function sourceToDeepgramInput(source: ResolvedSource): { key: "url" | "file"; v
   return { key: "url", value: source.mediaUrl };
 }
 
-function parseDeepgramResponse(payload: unknown): { transcript: string; detectedLanguage?: string } {
+function normalizeDeepgramSegments(words: unknown[]): TranscriptionSegment[] | undefined {
+  const segments: TranscriptionSegment[] = [];
+
+  for (const rawWord of words) {
+    if (!rawWord || typeof rawWord !== "object") {
+      continue;
+    }
+
+    const word = rawWord as {
+      word?: unknown;
+      text?: unknown;
+      start?: unknown;
+      end?: unknown;
+      start_ms?: unknown;
+      end_ms?: unknown;
+    };
+    const text = typeof word.word === "string" ? word.word.trim() : typeof word.text === "string" ? word.text.trim() : "";
+    if (!text) {
+      continue;
+    }
+
+    const fromMilliseconds =
+      typeof word.start_ms === "number" && Number.isFinite(word.start_ms) &&
+      typeof word.end_ms === "number" && Number.isFinite(word.end_ms);
+    const fromSeconds =
+      typeof word.start === "number" && Number.isFinite(word.start) &&
+      typeof word.end === "number" && Number.isFinite(word.end);
+
+    if (!fromMilliseconds && !fromSeconds) {
+      continue;
+    }
+
+    const startMs = fromMilliseconds ? Math.round(word.start_ms as number) : Math.round((word.start as number) * 1000);
+    const endMs = fromMilliseconds ? Math.round(word.end_ms as number) : Math.round((word.end as number) * 1000);
+
+    if (endMs < startMs) {
+      continue;
+    }
+
+    segments.push({ startMs, endMs, text });
+  }
+
+  return segments.length > 0 ? segments : undefined;
+}
+
+function parseDeepgramResponse(payload: unknown): {
+  transcript: string;
+  detectedLanguage?: string;
+  segments?: TranscriptionSegment[];
+} {
   if (!payload || typeof payload !== "object") {
     throw createTranscriptionProviderInvalidResponseError("deepgram");
   }
@@ -48,8 +101,12 @@ function parseDeepgramResponse(payload: unknown): { transcript: string; detected
       : typeof channel?.language === "string"
         ? channel.language
         : undefined;
+  const words = Array.isArray((alternative as { words?: unknown[] } | undefined)?.words)
+    ? ((alternative as { words?: unknown[] }).words ?? [])
+    : [];
+  const segments = normalizeDeepgramSegments(words);
 
-  return { transcript, detectedLanguage };
+  return { transcript, detectedLanguage, segments };
 }
 
 function mapDeepgramHttpError(status: number, detail: string): CliError {
@@ -85,6 +142,7 @@ export function createDeepgramProvider(options: DeepgramProviderOptions = {}): T
           transcript: normalized.transcript,
           requestedLanguage: request.requestedLanguage,
           detectedLanguage: normalized.detectedLanguage,
+          segments: normalized.segments,
         };
       }
 
@@ -147,6 +205,7 @@ export function createDeepgramProvider(options: DeepgramProviderOptions = {}): T
         transcript: normalized.transcript,
         requestedLanguage: request.requestedLanguage,
         detectedLanguage: normalized.detectedLanguage,
+        segments: normalized.segments,
       };
     },
   };

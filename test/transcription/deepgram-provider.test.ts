@@ -47,6 +47,40 @@ describe("deepgram provider", () => {
     expect(result.detectedLanguage).toBe("en");
   });
 
+  test("normalizes optional word timestamps into segment list", async () => {
+    const provider = createDeepgramProvider({
+      apiKey: "dg-test",
+      fetchImpl: async () =>
+        new Response(
+          JSON.stringify({
+            results: {
+              channels: [
+                {
+                  alternatives: [
+                    {
+                      transcript: "hello from deepgram",
+                      words: [
+                        { word: "hello", start: 0.1, end: 0.6 },
+                        { word: "from", start: 0.61, end: 0.9 },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          }),
+          { status: 200 },
+        ),
+    });
+
+    const result = await provider.transcribe(request);
+
+    expect(result.segments).toEqual([
+      { startMs: 100, endMs: 600, text: "hello" },
+      { startMs: 610, endMs: 900, text: "from" },
+    ]);
+  });
+
   test("maps auth failures to TRANSCRIPTION_PROVIDER_AUTH", async () => {
     const provider = createDeepgramProvider({
       apiKey: "dg-test",
