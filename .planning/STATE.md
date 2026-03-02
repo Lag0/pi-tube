@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: phase_04_in_progress
-last_updated: "2026-03-02T22:02:00Z"
+status: phase_04_complete
+last_updated: "2026-03-02T22:20:30Z"
 progress:
   total_phases: 6
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 23
-  completed_plans: 14
+  completed_plans: 15
 ---
 
 # Project State
@@ -18,23 +18,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-02)
 
 **Core value:** Turn public media inputs into trustworthy, structured, ready-to-use knowledge artifacts fast.
-**Current focus:** Phase 4: Transcription Providers (next)
+**Current focus:** Phase 5: Output Contracts (next)
 
 ## Current Position
 
 Phase: 4 of 6 (Transcription Providers)
-Plan: 3 of 4 executed
-Status: Phase 4 in progress — final CLI integration plan pending
-Last activity: 2026-03-02 — Completed 04-03 Groq adapter and tests
+Plan: 4 of 4 executed
+Status: Phase 4 complete — ready for Phase 5 planning/execution
+Last activity: 2026-03-02 — Completed 04-04 CLI provider integration and regressions
 
-Progress: [██████░░░░] 61%
+Progress: [██████░░░░] 65%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 14
-- Average duration: 3.4 min
-- Total execution time: 0.80 hours
+- Total plans completed: 15
+- Average duration: 4.3 min
+- Total execution time: 1.06 hours
 
 **By Phase:**
 
@@ -43,11 +43,11 @@ Progress: [██████░░░░] 61%
 | 1 | 4 | 5 min | 1.3 min |
 | 2 | 4 | 6 min | 1.5 min |
 | 3 | 3 | 15 min | 5.0 min |
-| 4 | 3 | 22 min | 7.3 min |
+| 4 | 4 | 38 min | 9.5 min |
 
 **Recent Trend:**
-- Last 5 plans: 03-02 (4 min), 03-03 (3 min), 04-01 (9 min), 04-02 (8 min), 04-03 (5 min)
-- Trend: Elevated as provider integration complexity increases
+- Last 5 plans: 03-03 (3 min), 04-01 (9 min), 04-02 (8 min), 04-03 (5 min), 04-04 (16 min)
+- Trend: Elevated due end-to-end integration and regression hardening
 
 *Updated after each plan completion*
 | Phase 03 P01 | 8 min | 3 tasks | 7 files |
@@ -56,6 +56,7 @@ Progress: [██████░░░░] 61%
 | Phase 04 P01 | 9 min | 3 tasks | 6 files |
 | Phase 04 P02 | 8 min | 3 tasks | 6 files |
 | Phase 04 P03 | 5 min | 3 tasks | 3 files |
+| Phase 04 P04 | 16 min | 3 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -92,6 +93,8 @@ Recent decisions affecting current work:
 - [Phase 04]: Missing DEEPGRAM_API_KEY is treated as provider auth failure at adapter boundary. — Yields deterministic remediation path before any network call.
 - [Phase 04]: Groq adapter maps into the same stable public provider error taxonomy used by Deepgram. — Provider switching must not change error-code contract.
 - [Phase 04]: Groq response parser accepts canonical text/language fields and rejects malformed payloads deterministically. — Protects CLI contract from provider response drift.
+- [Phase 04]: Provider choice remains an option (--provider) on baseline pi-tube <input> instead of introducing new command verbs. — Preserves contract stability while enabling provider switching.
+- [Phase 04]: Language preference uses CLI override with PI_TUBE_TRANSCRIPTION_LANGUAGE env fallback. — Provides deterministic precedence for automation and manual usage.
 
 ### Pending Todos
 
@@ -103,6 +106,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-02 22:02
-Stopped at: Completed 04-03-PLAN.md
-Resume file: .planning/phases/04-transcription-providers/04-04-PLAN.md
+Last session: 2026-03-02 22:20
+Stopped at: Completed 04-04-PLAN.md and phase verification
+Resume file: .planning/ROADMAP.md

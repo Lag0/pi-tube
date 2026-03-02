@@ -13,7 +13,7 @@ This roadmap delivers a full v1 cutover from Python to TypeScript + Bun while pr
 - [x] **Phase 1: Bun/TS Foundation** - Establish TypeScript + Bun CLI baseline and migrate core command surface.
 - [x] **Phase 2: Core Source Intake** - Implement YouTube, direct URL, and local-file ingestion with strict input policy. (completed 2026-03-02)
 - [x] **Phase 3: Instagram Public Intake** - Add public-only Instagram ingestion with explicit auth-required behavior. (completed 2026-03-02)
-- [ ] **Phase 4: Transcription Providers** - Implement Deepgram/Groq provider pipeline with stable provider abstraction.
+- [x] **Phase 4: Transcription Providers** - Implement Deepgram/Groq provider pipeline with stable provider abstraction. (completed 2026-03-02)
 - [ ] **Phase 5: Output Contracts** - Deliver deterministic Markdown+JSON artifact contract for agent/human workflows.
 - [ ] **Phase 6: Reliability & Release Gates** - Finalize config UX, error taxonomy, fixtures, and release-hardening.
 
@@ -83,7 +83,7 @@ Plans:
 - [x] 04-01: Define provider interface and canonical transcription response contract
 - [x] 04-02: Implement Deepgram adapter with options + metadata mapping
 - [x] 04-03: Implement Groq adapter with options + metadata mapping
-- [ ] 04-04: Add provider integration tests and failure mapping tests
+- [x] 04-04: Add provider integration tests and failure mapping tests
 
 ### Phase 5: Output Contracts
 **Goal**: Produce deterministic Markdown and JSON artifacts from one canonical model.
@@ -129,6 +129,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 1. Bun/TS Foundation | 4/4 | Complete | 2026-03-02 |
 | 2. Core Source Intake | 4/4 | Complete    | 2026-03-02 |
 | 3. Instagram Public Intake | 3/3 | Complete | 2026-03-02 |
-| 4. Transcription Providers | 3/4 | In Progress|  |
+| 4. Transcription Providers | 4/4 | Complete   | 2026-03-02 |
 | 5. Output Contracts | 0/4 | Not started | - |
 | 6. Reliability & Release Gates | 0/4 | Not started | - |
