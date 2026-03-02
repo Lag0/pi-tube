@@ -1,6 +1,11 @@
 import { CliError, CliPlannedFeatureError } from "../errors/cli-errors.ts";
 import { resolveSource } from "../intake/resolver.ts";
 import type { ResolvedSource } from "../intake/types.ts";
+import {
+  transcribeFromResolvedSource,
+  type TranscriptionServiceOptions,
+} from "../transcription/service.ts";
+import type { TranscriptionExecutionResult } from "../transcription/types.ts";
 
 const DEFERRED_COMMAND_PHASE: Record<string, string> = {
   youtube: "Phase 2",
@@ -11,10 +16,14 @@ export interface BaselineInput {
   input: string;
   json: boolean;
   extraPositionals: string[];
+  provider?: string;
+  language?: string;
+  transcriptionOptions?: Omit<TranscriptionServiceOptions, "provider" | "language">;
 }
 
 export interface BaselineIntakeResult {
   source: ResolvedSource;
+  transcription: TranscriptionExecutionResult;
   notes: string[];
 }
 
@@ -37,7 +46,14 @@ export function handleDeferredCommand(command: string, json: boolean): never {
   throw new CliPlannedFeatureError(`\`${command}\` command`, phase, guidance);
 }
 
-export async function handleBaselineInput({ input, json, extraPositionals }: BaselineInput): Promise<BaselineIntakeResult> {
+export async function handleBaselineInput({
+  input,
+  json,
+  extraPositionals,
+  provider,
+  language,
+  transcriptionOptions,
+}: BaselineInput): Promise<BaselineIntakeResult> {
   if (extraPositionals.length > 0) {
     throw new CliError("Only one positional input is supported in Phase 2.", {
       code: "CLI_CONTRACT_VIOLATION",
@@ -57,12 +73,18 @@ export async function handleBaselineInput({ input, json, extraPositionals }: Bas
   }
 
   const source = await resolveSource(input);
+  const transcription = await transcribeFromResolvedSource(source, {
+    ...transcriptionOptions,
+    provider,
+    language,
+  });
 
   return {
     source,
+    transcription,
     notes: [
       "Source intake complete.",
-      "Transcription provider execution is planned for Phase 4.",
+      "Transcription provider execution complete.",
     ],
   };
 }
@@ -92,6 +114,15 @@ export function formatBaselineIntakeResult(result: BaselineIntakeResult): string
       lines.push(`extension=${result.source.extension}`);
       break;
   }
+
+  lines.push(`[TRANSCRIPTION_RESOLVED] provider=${result.transcription.provider}`);
+  if (result.transcription.requestedLanguage) {
+    lines.push(`requested_language=${result.transcription.requestedLanguage}`);
+  }
+  if (result.transcription.detectedLanguage) {
+    lines.push(`detected_language=${result.transcription.detectedLanguage}`);
+  }
+  lines.push(`transcript=${result.transcription.transcript}`);
 
   for (const note of result.notes) {
     lines.push(`- ${note}`);
