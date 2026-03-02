@@ -62,6 +62,35 @@ export function createYtDlpMalformedOutputError(): CliError {
   });
 }
 
+export function createInstagramUrlInvalidError(input: string): CliError {
+  return new CliError(`Input is not a supported Instagram public URL: \`${input}\`.`, {
+    code: "INSTAGRAM_URL_INVALID",
+    exitCode: 2,
+    guidance: ["Use a public Instagram post/reel/video URL."],
+  });
+}
+
+export function createInstagramAuthRequiredError(input?: string): CliError {
+  const detail = input ? ` for \`${input}\`` : "";
+  return new CliError(`Instagram URL requires authentication${detail}.`, {
+    code: "INSTAGRAM_AUTH_REQUIRED",
+    exitCode: 2,
+    guidance: [
+      "This CLI supports Instagram public URLs only.",
+      "Use a publicly accessible Instagram post/reel/video URL and retry.",
+    ],
+  });
+}
+
+export function createInstagramExtractFailedError(detail?: string): CliError {
+  const suffix = detail ? ` (${detail})` : "";
+  return new CliError(`Failed to resolve Instagram media via yt-dlp${suffix}.`, {
+    code: "INSTAGRAM_EXTRACT_FAILED",
+    exitCode: 2,
+    guidance: ["Try again with a valid public Instagram URL."],
+  });
+}
+
 export function createLocalFileNotFoundError(filePath: string): CliError {
   return new CliError(`Local file not found: \`${filePath}\`.`, {
     code: "LOCAL_FILE_NOT_FOUND",
