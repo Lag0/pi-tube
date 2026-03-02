@@ -13,6 +13,7 @@ import {
   isDeferredCommand,
 } from "./handlers.ts";
 import { formatCliError } from "../errors/cli-errors.ts";
+import { isLegacyCommand, throwLegacyCommandGuidance } from "../legacy/compatibility.ts";
 
 interface ParsedArgs {
   showHelp: boolean;
@@ -77,6 +78,10 @@ export async function runCli(argv: string[]): Promise<number> {
   }
 
   try {
+    if (isLegacyCommand(first)) {
+      throwLegacyCommandGuidance(first, parsed.json);
+    }
+
     if (isDeferredCommand(first)) {
       handleDeferredCommand(first, parsed.json);
     }

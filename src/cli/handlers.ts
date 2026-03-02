@@ -3,11 +3,6 @@ import { CliError, CliPlannedFeatureError } from "../errors/cli-errors.ts";
 const DEFERRED_COMMAND_PHASE: Record<string, string> = {
   youtube: "Phase 2",
   instagram: "Phase 3",
-  deepgram: "Phase 4",
-  groq: "Phase 4",
-  providers: "Phase 5",
-  config: "Phase 6",
-  dl: "Phase 2",
 };
 
 export interface BaselineInput {
