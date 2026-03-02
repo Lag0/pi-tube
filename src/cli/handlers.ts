@@ -1,4 +1,6 @@
 import { CliError, CliPlannedFeatureError } from "../errors/cli-errors.ts";
+import { resolveSource } from "../intake/resolver.ts";
+import type { ResolvedSource } from "../intake/types.ts";
 
 const DEFERRED_COMMAND_PHASE: Record<string, string> = {
   youtube: "Phase 2",
@@ -11,6 +13,11 @@ export interface BaselineInput {
   extraPositionals: string[];
 }
 
+export interface BaselineIntakeResult {
+  source: ResolvedSource;
+  notes: string[];
+}
+
 export function isDeferredCommand(command: string): boolean {
   return command in DEFERRED_COMMAND_PHASE;
 }
@@ -19,6 +26,7 @@ export function handleDeferredCommand(command: string, json: boolean): never {
   const phase = DEFERRED_COMMAND_PHASE[command] ?? "a future phase";
   const guidance = [
     "Current implemented contract: `pi-tube <input>`.",
+    "Core source intake runs through this baseline input path in Phase 2.",
     "Use `pi-tube --help` for the latest command roadmap.",
   ];
 
@@ -29,9 +37,9 @@ export function handleDeferredCommand(command: string, json: boolean): never {
   throw new CliPlannedFeatureError(`\`${command}\` command`, phase, guidance);
 }
 
-export function handleBaselineInput({ input, json, extraPositionals }: BaselineInput): never {
+export async function handleBaselineInput({ input, json, extraPositionals }: BaselineInput): Promise<BaselineIntakeResult> {
   if (extraPositionals.length > 0) {
-    throw new CliError("Only one positional input is supported in Phase 1.", {
+    throw new CliError("Only one positional input is supported in Phase 2.", {
       code: "CLI_CONTRACT_VIOLATION",
       exitCode: 2,
       guidance: [
@@ -41,15 +49,47 @@ export function handleBaselineInput({ input, json, extraPositionals }: BaselineI
     });
   }
 
-  const guidance = [
-    "Core source intake is planned for Phase 2.",
-    "Provider execution is planned for Phase 4.",
-    "Use `pi-tube --help` for roadmap-aligned examples.",
-  ];
-
   if (json) {
-    guidance.push("`--json` output mode is planned for Phase 5.");
+    throw new CliPlannedFeatureError("`--json` output mode", "Phase 5", [
+      "Run without `--json` for Phase 2 source-intake behavior.",
+      "Provider execution remains planned for Phase 4.",
+    ]);
   }
 
-  throw new CliPlannedFeatureError(`Input execution for \`${input}\``, "Phase 2", guidance);
+  const source = await resolveSource(input);
+
+  return {
+    source,
+    notes: [
+      "Source intake complete.",
+      "Transcription provider execution is planned for Phase 4.",
+    ],
+  };
+}
+
+export function formatBaselineIntakeResult(result: BaselineIntakeResult): string {
+  const lines = [`[INTAKE_RESOLVED] kind=${result.source.kind}`];
+
+  switch (result.source.kind) {
+    case "youtube":
+      lines.push(`media_url=${result.source.mediaUrl}`);
+      if (result.source.title) {
+        lines.push(`title=${result.source.title}`);
+      }
+      break;
+    case "direct_url":
+      lines.push(`media_url=${result.source.mediaUrl}`);
+      lines.push(`extension=${result.source.extension}`);
+      break;
+    case "local_file":
+      lines.push(`absolute_path=${result.source.absolutePath}`);
+      lines.push(`extension=${result.source.extension}`);
+      break;
+  }
+
+  for (const note of result.notes) {
+    lines.push(`- ${note}`);
+  }
+
+  return lines.join("\n");
 }

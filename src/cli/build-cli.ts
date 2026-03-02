@@ -8,6 +8,7 @@ import {
   HELP_SECTIONS,
 } from "./command-contract.ts";
 import {
+  formatBaselineIntakeResult,
   handleBaselineInput,
   handleDeferredCommand,
   isDeferredCommand,
@@ -86,7 +87,8 @@ export async function runCli(argv: string[]): Promise<number> {
       handleDeferredCommand(first, parsed.json);
     }
 
-    handleBaselineInput({ input: first, json: parsed.json, extraPositionals: rest });
+    const result = await handleBaselineInput({ input: first, json: parsed.json, extraPositionals: rest });
+    console.log(formatBaselineIntakeResult(result));
     return 0;
   } catch (error) {
     const formatted = formatCliError(error);
