@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-03-02T23:10:31.926Z"
+last_updated: "2026-03-02T23:12:05.591Z"
 progress:
   total_phases: 6
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 23
-  completed_plans: 22
+  completed_plans: 23
 ---
 
 # Project State
@@ -107,6 +107,7 @@ Recent decisions affecting current work:
 - [Phase 06]: Enabled deterministic config command flow with explicit precedence — CLI flags now override config defaults, which override env defaults, to keep runtime behavior predictable and testable.
 - [Phase 06]: Centralized all public CLI error codes in one catalog — Error constructors and tests now derive from ERROR_CATALOG to prevent code/exit/guidance drift.
 - [Phase 06]: Established golden fixture regression gate for output contracts — Committed markdown/json fixtures plus verify:fixtures command detect renderer drift before release.
+- [Phase 06]: CI now enforces bun test and fixture verification as release gates — Automation and checklist/test references are aligned to prevent drift between local and CI reliability checks.
 
 ### Pending Todos
 
