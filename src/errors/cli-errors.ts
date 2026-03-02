@@ -23,6 +23,61 @@ export class CliPlannedFeatureError extends CliError {
   }
 }
 
+export function createTranscriptionProviderNotConfiguredError(provider: string): CliError {
+  return new CliError(`Provider \`${provider}\` is not configured yet.`, {
+    code: "TRANSCRIPTION_PROVIDER_NOT_CONFIGURED",
+    exitCode: 2,
+    guidance: ["Choose a configured provider or register the provider adapter."],
+  });
+}
+
+export function createTranscriptionProviderAuthError(provider: string, detail?: string): CliError {
+  const suffix = detail ? ` (${detail})` : "";
+  return new CliError(`Transcription provider authentication failed for \`${provider}\`${suffix}.`, {
+    code: "TRANSCRIPTION_PROVIDER_AUTH",
+    exitCode: 2,
+    guidance: [
+      `Check ${provider.toUpperCase()} API credentials and retry.`,
+      "Verify API key environment configuration.",
+    ],
+  });
+}
+
+export function createTranscriptionProviderRateLimitError(provider: string, detail?: string): CliError {
+  const suffix = detail ? ` (${detail})` : "";
+  return new CliError(`Transcription provider rate limit reached for \`${provider}\`${suffix}.`, {
+    code: "TRANSCRIPTION_PROVIDER_RATE_LIMIT",
+    exitCode: 2,
+    guidance: ["Retry after backoff or switch to another provider."],
+  });
+}
+
+export function createTranscriptionProviderUnavailableError(provider: string, detail?: string): CliError {
+  const suffix = detail ? ` (${detail})` : "";
+  return new CliError(`Transcription provider \`${provider}\` is unavailable${suffix}.`, {
+    code: "TRANSCRIPTION_PROVIDER_UNAVAILABLE",
+    exitCode: 2,
+    guidance: ["Retry later or switch to another provider."],
+  });
+}
+
+export function createTranscriptionProviderFailedError(provider: string, detail?: string): CliError {
+  const suffix = detail ? ` (${detail})` : "";
+  return new CliError(`Transcription failed for provider \`${provider}\`${suffix}.`, {
+    code: "TRANSCRIPTION_PROVIDER_FAILED",
+    exitCode: 2,
+    guidance: ["Retry the command or inspect provider status and credentials."],
+  });
+}
+
+export function createTranscriptionProviderInvalidResponseError(provider: string): CliError {
+  return new CliError(`Provider \`${provider}\` returned an invalid transcription response.`, {
+    code: "TRANSCRIPTION_PROVIDER_INVALID_RESPONSE",
+    exitCode: 2,
+    guidance: ["Retry the command. If the issue persists, switch providers."],
+  });
+}
+
 export function createUnsupportedUrlNotDirectMediaError(input: string): CliError {
   return new CliError(`Input URL is not a direct media URL: \`${input}\`.`, {
     code: "UNSUPPORTED_URL_NOT_DIRECT_MEDIA",

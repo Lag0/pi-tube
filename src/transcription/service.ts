@@ -1,4 +1,7 @@
-import { CliError } from "../errors/cli-errors.ts";
+import {
+  CliError,
+  createTranscriptionProviderNotConfiguredError,
+} from "../errors/cli-errors.ts";
 import type { ResolvedSource } from "../intake/types.ts";
 import {
   getDefaultProviderRegistry,
@@ -67,14 +70,7 @@ export async function transcribeFromResolvedSource(
   const provider = resolveProvider(providerId, registry);
 
   if (!provider) {
-    throw new CliError(`Provider \`${providerId}\` is not configured yet.`, {
-      code: "TRANSCRIPTION_PROVIDER_UNAVAILABLE",
-      exitCode: 2,
-      guidance: [
-        "Phase 4 wiring is expected to register provider adapters.",
-        "Choose a configured provider or add adapter registration.",
-      ],
-    });
+    throw createTranscriptionProviderNotConfiguredError(providerId);
   }
 
   const result = await provider.transcribe({ source, requestedLanguage });
@@ -83,7 +79,7 @@ export async function transcribeFromResolvedSource(
     source,
     provider: result.provider,
     transcript: result.transcript,
-    requestedLanguage: result.requestedLanguage,
+    requestedLanguage: result.requestedLanguage ?? requestedLanguage,
     detectedLanguage: result.detectedLanguage,
   };
 }

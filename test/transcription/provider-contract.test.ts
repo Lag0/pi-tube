@@ -77,6 +77,6 @@ describe("transcription provider contract", () => {
         provider: "deepgram",
         providers: {},
       }),
-    ).rejects.toMatchObject({ code: "TRANSCRIPTION_PROVIDER_UNAVAILABLE" });
+    ).rejects.toMatchObject({ code: "TRANSCRIPTION_PROVIDER_NOT_CONFIGURED" });
   });
 });
