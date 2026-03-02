@@ -7,8 +7,8 @@
 
 ### Runtime & Migration
 
-- [ ] **MIGR-01**: User can run `pi-tube` CLI on Bun + TypeScript as the primary runtime path.
-- [ ] **MIGR-02**: User can use the same command identity (`pi-tube`) after migration without renaming.
+- [x] **MIGR-01**: User can run `pi-tube` CLI on Bun + TypeScript as the primary runtime path.
+- [x] **MIGR-02**: User can use the same command identity (`pi-tube`) after migration without renaming.
 - [ ] **MIGR-03**: User can install and execute v1 without requiring the legacy Python runtime.
 
 ### Source Ingestion
@@ -83,8 +83,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| MIGR-01 | Phase 1 | Pending |
-| MIGR-02 | Phase 1 | Pending |
+| MIGR-01 | Phase 1 | Complete |
+| MIGR-02 | Phase 1 | Complete |
 | MIGR-03 | Phase 1 | Pending |
 | SRC-01 | Phase 2 | Pending |
 | SRC-02 | Phase 3 | Pending |
