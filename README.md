@@ -109,6 +109,10 @@ bun run verify:fixtures
 
 This command fails when renderer output diverges from committed golden fixtures.
 
+## Release Hardening
+
+Before tagging a release, run the mandatory checks in [docs/release-checklist.md](docs/release-checklist.md).
+
 ## Instagram Public-Only Policy
 
 - Supported URL classes: Instagram public post/reel/video URLs (for example `/p/...`, `/reel/...`, `/tv/...`).
