@@ -93,6 +93,12 @@ export function assertDirectMediaUrl(input: string): URL {
   return url;
 }
 
+export function normalizeDirectMediaUrl(input: string | URL): string {
+  const url = typeof input === "string" ? assertDirectMediaUrl(input) : new URL(input.toString());
+  url.hash = "";
+  return url.toString();
+}
+
 export function getDirectMediaExtension(input: string | URL): string {
   const url = typeof input === "string" ? assertDirectMediaUrl(input) : input;
   const extension = getMediaExtensionFromPathname(url.pathname);
