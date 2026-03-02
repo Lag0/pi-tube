@@ -18,6 +18,15 @@ export interface YtDlpExecutionResult {
 
 export type YtDlpExecutor = (args: string[]) => Promise<YtDlpExecutionResult>;
 
+function createInstagramExtractFailedError(detail?: string): CliError {
+  const suffix = detail ? ` (${detail})` : "";
+  return new CliError(`Failed to resolve Instagram media via yt-dlp${suffix}.`, {
+    code: "INSTAGRAM_EXTRACT_FAILED",
+    exitCode: 2,
+    guidance: ["Try again with a valid public Instagram URL."],
+  });
+}
+
 async function defaultYtDlpExecutor(args: string[]): Promise<YtDlpExecutionResult> {
   let process: Bun.Subprocess<"pipe", "pipe", "inherit">;
 
@@ -107,6 +116,47 @@ export async function resolveYouTubeWithYtDlp(
 
     const detail = result.stderr.trim() || `exit code ${result.exitCode}`;
     throw createYouTubeExtractFailedError(detail);
+  }
+
+  return parseYtDlpOutput(result.stdout);
+}
+
+export async function resolveInstagramWithYtDlp(
+  input: string,
+  executor: YtDlpExecutor = defaultYtDlpExecutor,
+): Promise<YtDlpResult> {
+  const mockJson = process.env.PI_TUBE_TEST_INSTAGRAM_YTDLP_JSON;
+  if (mockJson) {
+    return parseYtDlpOutput(mockJson);
+  }
+
+  const mockFailure = process.env.PI_TUBE_TEST_INSTAGRAM_YTDLP_ERROR;
+  if (mockFailure === "not_found") {
+    throw createYtDlpNotFoundError();
+  }
+  if (mockFailure === "extract_failed") {
+    throw createInstagramExtractFailedError("mocked extraction failure");
+  }
+
+  let result: YtDlpExecutionResult;
+
+  try {
+    result = await executor(["--no-warnings", "--no-playlist", "--dump-single-json", input]);
+  } catch (error) {
+    if (error instanceof CliError) {
+      throw error;
+    }
+
+    throw createInstagramExtractFailedError(error instanceof Error ? error.message : String(error));
+  }
+
+  if (result.exitCode !== 0) {
+    if (/not found|command not found|enoent/i.test(result.stderr)) {
+      throw createYtDlpNotFoundError();
+    }
+
+    const detail = result.stderr.trim() || `exit code ${result.exitCode}`;
+    throw createInstagramExtractFailedError(detail);
   }
 
   return parseYtDlpOutput(result.stdout);
