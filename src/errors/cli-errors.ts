@@ -1,14 +1,23 @@
+import { getErrorCatalogEntry, type ErrorCode } from "./catalog.ts";
+
 export class CliError extends Error {
-  public readonly code: string;
+  public readonly code: ErrorCode;
   public readonly exitCode: number;
   public readonly guidance: string[];
 
-  constructor(message: string, options: { code: string; exitCode?: number; guidance?: string[] }) {
+  constructor(message: string, options: { code: ErrorCode; exitCode?: number; guidance?: string[] }) {
     super(message);
+    const catalog = getErrorCatalogEntry(options.code);
     this.name = "CliError";
     this.code = options.code;
-    this.exitCode = options.exitCode ?? 2;
-    this.guidance = options.guidance ?? [];
+    const resolvedExitCode = options.exitCode ?? catalog.exitCode;
+    this.exitCode = Number.isInteger(resolvedExitCode) && resolvedExitCode > 0
+      ? resolvedExitCode
+      : catalog.exitCode;
+    const guidance = options.guidance ?? [...catalog.guidance];
+    this.guidance = guidance
+      .map((line) => line.trim())
+      .filter((line, index, all) => line.length > 0 && all.indexOf(line) === index);
   }
 }
 
