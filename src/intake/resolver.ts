@@ -1,5 +1,6 @@
 import { classifyInput } from "./policy.ts";
 import { resolveYouTubeSource } from "./adapters/youtube.ts";
+import { resolveInstagramSource } from "./adapters/instagram.ts";
 import { resolveDirectUrlSource } from "./adapters/direct-url.ts";
 import { resolveLocalFileSource } from "./adapters/local-file.ts";
 import { CliError, createUnsupportedUrlNotDirectMediaError } from "../errors/cli-errors.ts";
@@ -7,6 +8,7 @@ import type { ResolvedSource, SourceClassification } from "./types.ts";
 
 interface ResolverDeps {
   resolveYouTube?: typeof resolveYouTubeSource;
+  resolveInstagram?: typeof resolveInstagramSource;
   resolveDirectUrl?: typeof resolveDirectUrlSource;
   resolveLocalFile?: typeof resolveLocalFileSource;
 }
@@ -27,12 +29,15 @@ export async function resolveSource(input: string, deps: ResolverDeps = {}): Pro
 
   const classification = classifySourceInput(normalizedInput);
   const resolveYouTube = deps.resolveYouTube ?? resolveYouTubeSource;
+  const resolveInstagram = deps.resolveInstagram ?? resolveInstagramSource;
   const resolveDirectUrl = deps.resolveDirectUrl ?? resolveDirectUrlSource;
   const resolveLocalFile = deps.resolveLocalFile ?? resolveLocalFileSource;
 
   switch (classification) {
     case "youtube":
       return resolveYouTube(normalizedInput);
+    case "instagram":
+      return resolveInstagram(normalizedInput);
     case "direct_url":
       return resolveDirectUrl(normalizedInput);
     case "local_file":

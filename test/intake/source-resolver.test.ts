@@ -29,6 +29,21 @@ describe("source resolver", () => {
     expect(source.mediaUrl).toBe("https://cdn.example.com/audio/sample.mp3");
   });
 
+  test("classifies Instagram public URLs through instagram adapter", async () => {
+    const source = await resolveSource("https://www.instagram.com/reel/C0de123", {
+      resolveInstagram: async (input) => ({
+        kind: "instagram",
+        originalInput: input,
+        normalizedUrl: input,
+        mediaUrl: "https://cdn.example.com/instagram/reel.mp4",
+        title: "Instagram Reel",
+      }),
+    });
+
+    expect(source.kind).toBe("instagram");
+    expect(source.mediaUrl).toBe("https://cdn.example.com/instagram/reel.mp4");
+  });
+
   test("rejects unsupported non-direct URL with deterministic policy error", async () => {
     await expect(resolveSource("https://example.com/article")).rejects.toMatchObject({
       code: "UNSUPPORTED_URL_NOT_DIRECT_MEDIA",

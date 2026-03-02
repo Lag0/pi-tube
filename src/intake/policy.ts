@@ -26,6 +26,12 @@ const YOUTUBE_HOSTS = new Set([
   "www.youtu.be",
 ]);
 
+const INSTAGRAM_HOSTS = new Set([
+  "instagram.com",
+  "www.instagram.com",
+  "m.instagram.com",
+]);
+
 export function tryParseHttpUrl(input: string): URL | null {
   try {
     const url = new URL(input);
@@ -53,6 +59,20 @@ export function isYouTubeUrl(input: string): boolean {
   }
 
   return url.pathname.length > 1 || url.searchParams.has("v");
+}
+
+export function isInstagramPublicUrl(input: string | URL): boolean {
+  const url = typeof input === "string" ? tryParseHttpUrl(input) : input;
+  if (!url) {
+    return false;
+  }
+
+  if (!INSTAGRAM_HOSTS.has(url.hostname.toLowerCase())) {
+    return false;
+  }
+
+  const path = url.pathname.endsWith("/") ? url.pathname : `${url.pathname}/`;
+  return path.startsWith("/p/") || path.startsWith("/reel/") || path.startsWith("/tv/");
 }
 
 export function getMediaExtensionFromPathname(pathname: string): string | null {
@@ -122,6 +142,10 @@ export function getLocalFileExtension(filePath: string): string | null {
 export function classifyInput(input: string): SourceClassification {
   if (isYouTubeUrl(input)) {
     return "youtube";
+  }
+
+  if (isInstagramPublicUrl(input)) {
+    return "instagram";
   }
 
   if (isHttpUrl(input)) {
