@@ -1,8 +1,8 @@
 import {
   APP_VERSION,
   COMMAND_IDENTITY,
-  COMMAND_SURFACE,
   GLOBAL_FLAGS,
+  HELP_COMMAND_ROWS,
   HELP_EXAMPLES,
   HELP_NOTES,
   HELP_SECTIONS,
@@ -12,15 +12,15 @@ import { handleBaselineInput, type HandlerResult } from "./handlers.ts";
 function renderHelp(): string {
   const lines = [
     HELP_SECTIONS.usage,
-    `  ${COMMAND_SURFACE.baseline}`,
+    `  ${COMMAND_IDENTITY} <input> [--json]`,
     "",
     HELP_SECTIONS.commands,
-    `  ${COMMAND_SURFACE.baseline}  Baseline input contract (execution coming soon)`,
+    ...HELP_COMMAND_ROWS.map((row) => `  ${row}`),
     "",
     HELP_SECTIONS.options,
     `  -h, ${GLOBAL_FLAGS[0]}      Show help`,
     `  -v, ${GLOBAL_FLAGS[1]}   Show version`,
-    `      ${GLOBAL_FLAGS[2]}      Output JSON format (coming soon)`,
+    `      ${GLOBAL_FLAGS[2]}      Output JSON format (coming soon in Phase 5)`,
     "",
     HELP_SECTIONS.examples,
     ...HELP_EXAMPLES.map((example) => `  ${example}`),
