@@ -1,0 +1,209 @@
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import path from "node:path";
+import type { TranscriptionProviderId } from "../transcription/types.ts";
+import { CONFIG_KEYS, CONFIG_VERSION, type ConfigKey, type PiTubeConfig } from "./types.ts";
+
+export const CONFIG_PATH_ENV = "PI_TUBE_CONFIG_PATH";
+
+export interface ConfigStoreOptions {
+  cwd?: string;
+  env?: Record<string, string | undefined>;
+}
+
+function baseConfig(): PiTubeConfig {
+  return {
+    version: CONFIG_VERSION,
+    defaults: {},
+    providers: {
+      deepgram: {},
+      groq: {},
+    },
+  };
+}
+
+function normalizeOptionalString(value: unknown): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function normalizeProvider(value: unknown): TranscriptionProviderId | undefined {
+  const normalized = normalizeOptionalString(value)?.toLowerCase();
+  if (normalized === "deepgram" || normalized === "groq") {
+    return normalized;
+  }
+  return undefined;
+}
+
+function normalizeConfig(raw: unknown): PiTubeConfig {
+  const config = baseConfig();
+  if (!raw || typeof raw !== "object") {
+    return config;
+  }
+
+  const input = raw as {
+    version?: unknown;
+    defaults?: { provider?: unknown; language?: unknown };
+    providers?: {
+      deepgram?: { api_key?: unknown; api_key_env?: unknown };
+      groq?: { api_key?: unknown; api_key_env?: unknown };
+    };
+  };
+
+  config.version =
+    typeof input.version === "number" && Number.isInteger(input.version)
+      ? input.version
+      : CONFIG_VERSION;
+  config.defaults.provider = normalizeProvider(input.defaults?.provider);
+  config.defaults.language = normalizeOptionalString(input.defaults?.language)?.toLowerCase();
+  config.providers.deepgram.api_key = normalizeOptionalString(input.providers?.deepgram?.api_key);
+  config.providers.deepgram.api_key_env = normalizeOptionalString(
+    input.providers?.deepgram?.api_key_env,
+  );
+  config.providers.groq.api_key = normalizeOptionalString(input.providers?.groq?.api_key);
+  config.providers.groq.api_key_env = normalizeOptionalString(input.providers?.groq?.api_key_env);
+
+  return config;
+}
+
+function toStableString(config: PiTubeConfig): string {
+  return `${JSON.stringify(normalizeConfig(config), null, 2)}\n`;
+}
+
+export function resolveConfigPath(options: ConfigStoreOptions = {}): string {
+  const cwd = options.cwd ?? process.cwd();
+  const env = options.env ?? process.env;
+  const explicit = normalizeOptionalString(env[CONFIG_PATH_ENV]);
+  if (explicit) {
+    return path.isAbsolute(explicit) ? explicit : path.resolve(cwd, explicit);
+  }
+
+  const xdgConfigHome = normalizeOptionalString(env.XDG_CONFIG_HOME);
+  if (xdgConfigHome) {
+    return path.join(xdgConfigHome, "pi-tube", "config.json");
+  }
+
+  const home = normalizeOptionalString(env.HOME);
+  if (home) {
+    return path.join(home, ".config", "pi-tube", "config.json");
+  }
+
+  return path.resolve(cwd, ".pi-tube", "config.json");
+}
+
+export function readConfig(options: ConfigStoreOptions = {}): PiTubeConfig {
+  const configPath = resolveConfigPath(options);
+  if (!existsSync(configPath)) {
+    return baseConfig();
+  }
+
+  const raw = readFileSync(configPath, "utf8").trim();
+  if (!raw) {
+    return baseConfig();
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return normalizeConfig(parsed);
+  } catch {
+    return baseConfig();
+  }
+}
+
+export function writeConfig(config: PiTubeConfig, options: ConfigStoreOptions = {}): string {
+  const configPath = resolveConfigPath(options);
+  mkdirSync(path.dirname(configPath), { recursive: true });
+  writeFileSync(configPath, toStableString(config), "utf8");
+  return configPath;
+}
+
+function assertConfigKey(key: string): asserts key is ConfigKey {
+  if (!CONFIG_KEYS.includes(key as ConfigKey)) {
+    throw new Error(
+      `Unsupported config key: \`${key}\`. Supported keys: ${CONFIG_KEYS.join(", ")}`,
+    );
+  }
+}
+
+function setProvider(value: string): TranscriptionProviderId {
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "deepgram" || normalized === "groq") {
+    return normalized;
+  }
+
+  throw new Error("`defaults.provider` must be `deepgram` or `groq`.");
+}
+
+export function setConfigValue(
+  key: string,
+  value: string,
+  options: ConfigStoreOptions = {},
+): { configPath: string; config: PiTubeConfig } {
+  assertConfigKey(key);
+  const trimmedValue = value.trim();
+  if (!trimmedValue) {
+    throw new Error(`Config value for \`${key}\` cannot be empty.`);
+  }
+
+  const config = readConfig(options);
+  switch (key) {
+    case "defaults.provider":
+      config.defaults.provider = setProvider(trimmedValue);
+      break;
+    case "defaults.language":
+      config.defaults.language = trimmedValue.toLowerCase();
+      break;
+    case "providers.deepgram.api_key":
+      config.providers.deepgram.api_key = trimmedValue;
+      break;
+    case "providers.deepgram.api_key_env":
+      config.providers.deepgram.api_key_env = trimmedValue;
+      break;
+    case "providers.groq.api_key":
+      config.providers.groq.api_key = trimmedValue;
+      break;
+    case "providers.groq.api_key_env":
+      config.providers.groq.api_key_env = trimmedValue;
+      break;
+  }
+
+  const configPath = writeConfig(config, options);
+  return { configPath, config };
+}
+
+export function getConfigValue(key: string, options: ConfigStoreOptions = {}): unknown {
+  assertConfigKey(key);
+  const config = readConfig(options);
+  switch (key) {
+    case "defaults.provider":
+      return config.defaults.provider;
+    case "defaults.language":
+      return config.defaults.language;
+    case "providers.deepgram.api_key":
+      return config.providers.deepgram.api_key;
+    case "providers.deepgram.api_key_env":
+      return config.providers.deepgram.api_key_env;
+    case "providers.groq.api_key":
+      return config.providers.groq.api_key;
+    case "providers.groq.api_key_env":
+      return config.providers.groq.api_key_env;
+  }
+}
+
+export function listConfigValues(
+  options: ConfigStoreOptions = {},
+): Record<ConfigKey, unknown> {
+  const config = readConfig(options);
+
+  return {
+    "defaults.provider": config.defaults.provider,
+    "defaults.language": config.defaults.language,
+    "providers.deepgram.api_key": config.providers.deepgram.api_key,
+    "providers.deepgram.api_key_env": config.providers.deepgram.api_key_env,
+    "providers.groq.api_key": config.providers.groq.api_key,
+    "providers.groq.api_key_env": config.providers.groq.api_key_env,
+  };
+}
