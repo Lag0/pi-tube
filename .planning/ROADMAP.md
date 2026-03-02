@@ -12,7 +12,7 @@ This roadmap delivers a full v1 cutover from Python to TypeScript + Bun while pr
 
 - [x] **Phase 1: Bun/TS Foundation** - Establish TypeScript + Bun CLI baseline and migrate core command surface.
 - [x] **Phase 2: Core Source Intake** - Implement YouTube, direct URL, and local-file ingestion with strict input policy. (completed 2026-03-02)
-- [ ] **Phase 3: Instagram Public Intake** - Add public-only Instagram ingestion with explicit auth-required behavior.
+- [x] **Phase 3: Instagram Public Intake** - Add public-only Instagram ingestion with explicit auth-required behavior. (completed 2026-03-02)
 - [ ] **Phase 4: Transcription Providers** - Implement Deepgram/Groq provider pipeline with stable provider abstraction.
 - [ ] **Phase 5: Output Contracts** - Deliver deterministic Markdown+JSON artifact contract for agent/human workflows.
 - [ ] **Phase 6: Reliability & Release Gates** - Finalize config UX, error taxonomy, fixtures, and release-hardening.
@@ -128,7 +128,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 |-------|----------------|--------|-----------|
 | 1. Bun/TS Foundation | 4/4 | Complete | 2026-03-02 |
 | 2. Core Source Intake | 4/4 | Complete    | 2026-03-02 |
-| 3. Instagram Public Intake | 3/3 | In Progress | - |
+| 3. Instagram Public Intake | 3/3 | Complete | 2026-03-02 |
 | 4. Transcription Providers | 0/4 | Not started | - |
 | 5. Output Contracts | 0/4 | Not started | - |
 | 6. Reliability & Release Gates | 0/4 | Not started | - |
