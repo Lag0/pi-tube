@@ -11,6 +11,7 @@ import {
   formatBaselineIntakeResult,
   handleBaselineInput,
   handleDeferredCommand,
+  handleProviderStatus,
   isDeferredCommand,
 } from "./handlers.ts";
 import { CliError, formatCliError } from "../errors/cli-errors.ts";
@@ -155,6 +156,26 @@ export async function runCli(argv: string[]): Promise<number> {
 
     if (isDeferredCommand(first)) {
       handleDeferredCommand(first, parsed.json);
+    }
+
+    if (first === "provider-status") {
+      if (rest.length > 0) {
+        throw new CliError("`provider-status` does not accept positional arguments.", {
+          code: "CLI_CONTRACT_VIOLATION",
+          exitCode: 2,
+          guidance: ["Run `pi-tube provider-status` or `pi-tube --json provider-status`."],
+        });
+      }
+      if (parsed.provider || parsed.language) {
+        throw new CliError("`provider-status` does not support `--provider` or `--language`.", {
+          code: "CLI_CONTRACT_VIOLATION",
+          exitCode: 2,
+          guidance: ["Use `pi-tube provider-status` for readiness inspection."],
+        });
+      }
+
+      console.log(handleProviderStatus({ json: parsed.json }));
+      return 0;
     }
 
     const result = await handleBaselineInput({

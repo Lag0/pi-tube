@@ -4,6 +4,11 @@ import { buildOutputArtifact } from "../output/build-artifact.ts";
 import { renderJson } from "../output/json.ts";
 import { renderMarkdown } from "../output/markdown.ts";
 import {
+  getDefaultProviderRegistry,
+  TRANSCRIPTION_PROVIDER_DEFINITIONS,
+  type ProviderRegistry,
+} from "../transcription/providers/index.ts";
+import {
   transcribeFromResolvedSource,
   type TranscriptionServiceOptions,
 } from "../transcription/service.ts";
@@ -26,6 +31,20 @@ export interface BaselineInput {
 export interface BaselineIntakeResult {
   transcription: TranscriptionExecutionResult;
   json: boolean;
+}
+
+export interface ProviderStatusInput {
+  json: boolean;
+  env?: Record<string, string | undefined>;
+  providers?: ProviderRegistry;
+}
+
+interface ProviderStatusEntry {
+  id: string;
+  registered: boolean;
+  configured: boolean;
+  required_env: string[];
+  missing_env: string[];
 }
 
 export function isDeferredCommand(command: string): boolean {
@@ -82,4 +101,50 @@ export async function handleBaselineInput({
 export function formatBaselineIntakeResult(result: BaselineIntakeResult): string {
   const artifact = buildOutputArtifact(result.transcription);
   return result.json ? renderJson(artifact) : renderMarkdown(artifact);
+}
+
+function buildProviderStatusEntries({
+  env = process.env,
+  providers = getDefaultProviderRegistry(),
+}: Omit<ProviderStatusInput, "json">): ProviderStatusEntry[] {
+  return TRANSCRIPTION_PROVIDER_DEFINITIONS.map((definition) => {
+    const missingEnv = definition.requiredEnv.filter((key) => {
+      const value = env[key];
+      return typeof value !== "string" || value.trim().length === 0;
+    });
+
+    return {
+      id: definition.id,
+      registered: Boolean(providers[definition.id]),
+      configured: missingEnv.length === 0,
+      required_env: [...definition.requiredEnv],
+      missing_env: missingEnv,
+    };
+  });
+}
+
+function formatProviderStatusText(entries: ProviderStatusEntry[]): string {
+  const lines = ["[PROVIDER_STATUS]"];
+  for (const entry of entries) {
+    lines.push(
+      `${entry.id} registered=${entry.registered} configured=${entry.configured} required_env=${entry.required_env.join(",")} missing_env=${entry.missing_env.join(",") || "-"}`,
+    );
+  }
+  return lines.join("\n");
+}
+
+export function handleProviderStatus(input: ProviderStatusInput): string {
+  const entries = buildProviderStatusEntries(input);
+  if (input.json) {
+    return JSON.stringify(
+      {
+        command: "provider-status",
+        providers: entries,
+      },
+      null,
+      2,
+    );
+  }
+
+  return formatProviderStatusText(entries);
 }
