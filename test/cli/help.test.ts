@@ -14,6 +14,7 @@ describe("CLI help contract", () => {
     const stdout = result.stdout.toString();
 
     expect(result.exitCode).toBe(0);
+    expect(stdout).toContain("pi-tube <input> [--json]");
 
     const usage = stdout.indexOf("Usage");
     const commands = stdout.indexOf("Commands");
