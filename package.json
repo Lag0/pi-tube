@@ -1,0 +1,17 @@
+{
+  "name": "pi-tube",
+  "version": "0.2.0",
+  "description": "TypeScript + Bun foundation for the pi-tube CLI",
+  "type": "module",
+  "bin": {
+    "pi-tube": "./bin/pi-tube.ts"
+  },
+  "scripts": {
+    "start": "bun run --bun bin/pi-tube.ts",
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.9.2"
+  }
+}
