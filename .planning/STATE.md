@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: phase_04_in_progress
-last_updated: "2026-03-02T21:47:33Z"
+last_updated: "2026-03-02T22:02:00Z"
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 23
-  completed_plans: 12
+  completed_plans: 14
 ---
 
 # Project State
@@ -23,18 +23,18 @@ See: .planning/PROJECT.md (updated 2026-03-02)
 ## Current Position
 
 Phase: 4 of 6 (Transcription Providers)
-Plan: 1 of 4 executed
-Status: Phase 4 in progress — provider adapters pending
-Last activity: 2026-03-02 — Completed 04-01 provider contract/service boundary
+Plan: 3 of 4 executed
+Status: Phase 4 in progress — final CLI integration plan pending
+Last activity: 2026-03-02 — Completed 04-03 Groq adapter and tests
 
-Progress: [█████░░░░░] 52%
+Progress: [██████░░░░] 61%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 12
-- Average duration: 2.9 min
-- Total execution time: 0.58 hours
+- Total plans completed: 14
+- Average duration: 3.4 min
+- Total execution time: 0.80 hours
 
 **By Phase:**
 
@@ -43,16 +43,19 @@ Progress: [█████░░░░░] 52%
 | 1 | 4 | 5 min | 1.3 min |
 | 2 | 4 | 6 min | 1.5 min |
 | 3 | 3 | 15 min | 5.0 min |
+| 4 | 3 | 22 min | 7.3 min |
 
 **Recent Trend:**
-- Last 5 plans: 02-04 (2 min), 03-01 (8 min), 03-02 (4 min), 03-03 (3 min), 04-01 (9 min)
-- Trend: Elevated while phase 4 contract foundation lands
+- Last 5 plans: 03-02 (4 min), 03-03 (3 min), 04-01 (9 min), 04-02 (8 min), 04-03 (5 min)
+- Trend: Elevated as provider integration complexity increases
 
 *Updated after each plan completion*
 | Phase 03 P01 | 8 min | 3 tasks | 7 files |
 | Phase 03 P02 | 4 min | 3 tasks | 6 files |
 | Phase 03 P03 | 3 min | 3 tasks | 4 files |
 | Phase 04 P01 | 9 min | 3 tasks | 6 files |
+| Phase 04 P02 | 8 min | 3 tasks | 6 files |
+| Phase 04 P03 | 5 min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -85,6 +88,10 @@ Recent decisions affecting current work:
 - [Phase 03]: Help and README explicitly mention INSTAGRAM_AUTH_REQUIRED and public-only policy — Improves deterministic troubleshooting for agent and human users.
 - [Phase 04]: Provider selection precedence is CLI option first, then PI_TUBE_TRANSCRIPTION_PROVIDER, then default deepgram. — Guarantees deterministic provider behavior across CLI and automation contexts.
 - [Phase 04]: Language preference is normalized once in service boundary and forwarded through canonical request fields. — Keeps provider adapters simple and preserves a single response contract.
+- [Phase 04]: Deepgram adapter maps provider HTTP status classes into stable shared provider error constructors. — Prevents provider-native message churn from leaking into public CLI contracts.
+- [Phase 04]: Missing DEEPGRAM_API_KEY is treated as provider auth failure at adapter boundary. — Yields deterministic remediation path before any network call.
+- [Phase 04]: Groq adapter maps into the same stable public provider error taxonomy used by Deepgram. — Provider switching must not change error-code contract.
+- [Phase 04]: Groq response parser accepts canonical text/language fields and rejects malformed payloads deterministically. — Protects CLI contract from provider response drift.
 
 ### Pending Todos
 
@@ -96,6 +103,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-02 21:47
-Stopped at: Completed 04-01-PLAN.md
-Resume file: .planning/phases/04-transcription-providers/04-02-PLAN.md
+Last session: 2026-03-02 22:02
+Stopped at: Completed 04-03-PLAN.md
+Resume file: .planning/phases/04-transcription-providers/04-04-PLAN.md

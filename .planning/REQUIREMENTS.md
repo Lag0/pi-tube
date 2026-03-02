@@ -22,8 +22,8 @@
 
 ### Transcription Providers
 
-- [ ] **TRNS-01**: User can select Deepgram as transcription provider.
-- [ ] **TRNS-02**: User can select Groq as transcription provider.
+- [x] **TRNS-01**: User can select Deepgram as transcription provider.
+- [x] **TRNS-02**: User can select Groq as transcription provider.
 - [x] **TRNS-03**: User can pass language preference and receive language metadata in output when available.
 - [x] **TRNS-04**: User receives provider-specific failures mapped to stable public error codes.
 
@@ -92,8 +92,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SRC-04 | Phase 2 | Complete |
 | SRC-05 | Phase 2 | Complete |
 | SRC-06 | Phase 2 | Complete |
-| TRNS-01 | Phase 4 | Pending |
-| TRNS-02 | Phase 4 | Pending |
+| TRNS-01 | Phase 4 | Complete |
+| TRNS-02 | Phase 4 | Complete |
 | TRNS-03 | Phase 4 | Complete |
 | TRNS-04 | Phase 4 | Complete |
 | OUT-01 | Phase 5 | Pending |
