@@ -67,8 +67,8 @@ export async function handleBaselineInput({
 
   if (json) {
     throw new CliPlannedFeatureError("`--json` output mode", "Phase 5", [
-      "Run without `--json` for Phase 2 source-intake behavior.",
-      "Provider execution remains planned for Phase 4.",
+      "Run without `--json` for active Phase 4 transcription behavior.",
+      "Use `--provider` / `--language` options with baseline input mode.",
     ]);
   }
 

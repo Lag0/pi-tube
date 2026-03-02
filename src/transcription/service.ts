@@ -15,6 +15,7 @@ import type {
 
 export const DEFAULT_TRANSCRIPTION_PROVIDER: TranscriptionProviderId = "deepgram";
 export const TRANSCRIPTION_PROVIDER_ENV = "PI_TUBE_TRANSCRIPTION_PROVIDER";
+export const TRANSCRIPTION_LANGUAGE_ENV = "PI_TUBE_TRANSCRIPTION_LANGUAGE";
 
 export interface TranscriptionServiceOptions {
   provider?: string;
@@ -64,8 +65,9 @@ export async function transcribeFromResolvedSource(
   source: ResolvedSource,
   options: TranscriptionServiceOptions = {},
 ): Promise<TranscriptionExecutionResult> {
-  const providerId = selectTranscriptionProvider({ provider: options.provider, env: options.env ?? process.env });
-  const requestedLanguage = normalizeLanguage(options.language);
+  const env = options.env ?? process.env;
+  const providerId = selectTranscriptionProvider({ provider: options.provider, env });
+  const requestedLanguage = normalizeLanguage(options.language ?? env[TRANSCRIPTION_LANGUAGE_ENV]);
   const registry = options.providers ?? getDefaultProviderRegistry();
   const provider = resolveProvider(providerId, registry);
 
