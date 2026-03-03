@@ -13,6 +13,12 @@ interface SegmentLike {
   text: string;
 }
 
+const SEGMENT_COMPACTION_THRESHOLD = 400;
+const SEGMENT_COMPACTION_TARGET_WORDS = 16;
+const SEGMENT_COMPACTION_MIN_SENTENCE_WORDS = 8;
+const SEGMENT_COMPACTION_MAX_GAP_MS = 1400;
+const SEGMENT_COMPACTION_MAX_DURATION_MS = 18000;
+
 export interface BuildOutputArtifactOptions {
   generatedAt?: string;
 }
@@ -51,7 +57,7 @@ function mapSegments(segments?: SegmentLike[]): OutputArtifactSegment[] | undefi
     return undefined;
   }
 
-  return [...segments]
+  const normalized = [...segments]
     .filter((segment) => segment.text.trim().length > 0 && segment.endMs >= segment.startMs)
     .sort((left, right) => {
       if (left.startMs !== right.startMs) {
@@ -63,10 +69,101 @@ function mapSegments(segments?: SegmentLike[]): OutputArtifactSegment[] | undefi
       return left.text.localeCompare(right.text);
     })
     .map((segment) => ({
-      start_ms: segment.startMs,
-      end_ms: segment.endMs,
+      startMs: segment.startMs,
+      endMs: segment.endMs,
       text: segment.text.trim(),
     }));
+
+  const compacted = normalized.length >= SEGMENT_COMPACTION_THRESHOLD
+    ? compactDenseSegments(normalized)
+    : normalized;
+
+  return compacted.map((segment) => ({
+    start_ms: segment.startMs,
+    end_ms: segment.endMs,
+    text: segment.text.trim(),
+  }));
+}
+
+function countWords(text: string): number {
+  return text.trim().split(/\s+/).filter(Boolean).length;
+}
+
+function appendSegmentText(base: string, token: string): string {
+  if (!base) {
+    return token;
+  }
+
+  if (/^[,.;:!?)]/.test(token) || token.startsWith("'")) {
+    return `${base}${token}`;
+  }
+
+  return `${base} ${token}`;
+}
+
+function compactDenseSegments(segments: SegmentLike[]): SegmentLike[] {
+  const compacted: SegmentLike[] = [];
+  let current: (SegmentLike & { wordCount: number; lastToken: string }) | null = null;
+
+  for (const segment of segments) {
+    const token = segment.text.trim();
+    const tokenWordCount = countWords(token);
+
+    if (!current) {
+      current = {
+        startMs: segment.startMs,
+        endMs: segment.endMs,
+        text: token,
+        wordCount: tokenWordCount,
+        lastToken: token,
+      };
+      continue;
+    }
+
+    const gapMs = segment.startMs - current.endMs;
+    const projectedDurationMs = segment.endMs - current.startMs;
+    const reachedWordTarget = current.wordCount >= SEGMENT_COMPACTION_TARGET_WORDS;
+    const sentenceBoundary = /[.!?]$/.test(current.lastToken) && current.wordCount >= SEGMENT_COMPACTION_MIN_SENTENCE_WORDS;
+    const shouldBreak =
+      gapMs > SEGMENT_COMPACTION_MAX_GAP_MS ||
+      projectedDurationMs > SEGMENT_COMPACTION_MAX_DURATION_MS ||
+      reachedWordTarget ||
+      sentenceBoundary;
+
+    if (shouldBreak) {
+      compacted.push({
+        startMs: current.startMs,
+        endMs: current.endMs,
+        text: current.text,
+      });
+      current = {
+        startMs: segment.startMs,
+        endMs: segment.endMs,
+        text: token,
+        wordCount: tokenWordCount,
+        lastToken: token,
+      };
+      continue;
+    }
+
+    current = {
+      ...current,
+      endMs: Math.max(current.endMs, segment.endMs),
+      text: appendSegmentText(current.text, token),
+      wordCount: current.wordCount + tokenWordCount,
+      lastToken: token,
+    };
+  }
+
+  if (current) {
+    compacted.push({
+      startMs: current.startMs,
+      endMs: current.endMs,
+      text: current.text,
+    });
+  }
+
+  return compacted;
 }
 
 function summarize(result: TranscriptionExecutionResult, segmentCount: number) {

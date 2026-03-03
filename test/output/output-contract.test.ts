@@ -71,4 +71,35 @@ describe("output contract", () => {
     });
     expect(artifact.summary.key_points[4]).toBe("Segment count: 0");
   });
+
+  test("compacts dense timestamp streams into readable chunks", () => {
+    const denseSegments = Array.from({ length: 500 }, (_unused, index) => {
+      const n = index + 1;
+      const startMs = n * 200;
+      return {
+        startMs,
+        endMs: startMs + 120,
+        text: n % 12 === 0 ? `w${n}.` : `w${n}`,
+      };
+    });
+
+    const artifact = buildOutputArtifact(
+      {
+        ...baseResult,
+        segments: denseSegments,
+      } as TranscriptionExecutionResult & {
+        segments: { startMs: number; endMs: number; text: string }[];
+      },
+      {
+        generatedAt: "2026-03-02T23:00:00.000Z",
+      },
+    );
+
+    const compacted = artifact.transcript.segments ?? [];
+    expect(compacted.length).toBeGreaterThan(0);
+    expect(compacted.length).toBeLessThan(200);
+    expect(compacted[0]?.start_ms).toBe(200);
+    expect(compacted[0]?.text.includes(" ")).toBe(true);
+    expect(compacted[compacted.length - 1]?.end_ms).toBe(100120);
+  });
 });
