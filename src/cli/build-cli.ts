@@ -27,8 +27,6 @@ interface ParsedArgs {
   provider?: string;
   language?: string;
   setupGlobal: boolean;
-  setupDryRun: boolean;
-  setupNonInteractive: boolean;
   setupAgent?: string;
   positionals: string[];
 }
@@ -37,7 +35,7 @@ function renderHelp(): string {
   const lines = [
     HELP_SECTIONS.usage,
     `  ${COMMAND_IDENTITY} <input> [--provider <deepgram|groq>] [--language <code>] [--timestamps] [--json]`,
-    `  ${COMMAND_IDENTITY} setup <install|skills|mcp> [--global] [--agent <name>] [--non-interactive] [--dry-run]`,
+    `  ${COMMAND_IDENTITY} setup <install|skills|mcp> [--global] [--agent <name>]`,
     `  ${COMMAND_IDENTITY} config <set|get|list> [args] [--json]`,
     `  ${COMMAND_IDENTITY} provider-status [--json]`,
     "",
@@ -70,8 +68,6 @@ function parse(argv: string[]): ParsedArgs {
       json: false,
       timestamps: false,
       setupGlobal: false,
-      setupDryRun: false,
-      setupNonInteractive: false,
       positionals: [],
     };
   }
@@ -83,8 +79,6 @@ function parse(argv: string[]): ParsedArgs {
   let provider: string | undefined;
   let language: string | undefined;
   let setupGlobal = false;
-  let setupDryRun = false;
-  let setupNonInteractive = false;
   let setupAgent: string | undefined;
   const positionals: string[] = [];
 
@@ -111,23 +105,14 @@ function parse(argv: string[]): ParsedArgs {
       continue;
     }
 
-    if (arg === "--global") {
+    if (arg === "--global" || arg === "-g") {
       setupGlobal = true;
       continue;
     }
 
-    if (arg === "--dry-run") {
-      setupDryRun = true;
-      continue;
-    }
-
-    if (arg === "--non-interactive") {
-      setupNonInteractive = true;
-      continue;
-    }
-
-    if (arg === "--agent" || arg.startsWith("--agent=")) {
-      const value = arg === "--agent" ? argv[index + 1] : arg.slice("--agent=".length).trim();
+    if (arg === "--agent" || arg === "-a" || arg.startsWith("--agent=")) {
+      const value =
+        arg === "--agent" || arg === "-a" ? argv[index + 1] : arg.slice("--agent=".length).trim();
       if (!value || value.startsWith("-")) {
         throw new CliError("`--agent` requires a value.", {
           code: "CLI_CONTRACT_VIOLATION",
@@ -135,7 +120,7 @@ function parse(argv: string[]): ParsedArgs {
         });
       }
       setupAgent = value;
-      if (arg === "--agent") {
+      if (arg === "--agent" || arg === "-a") {
         index += 1;
       }
       continue;
@@ -192,8 +177,6 @@ function parse(argv: string[]): ParsedArgs {
     provider,
     language,
     setupGlobal,
-    setupDryRun,
-    setupNonInteractive,
     setupAgent,
     positionals,
   };
@@ -245,19 +228,18 @@ export async function runCli(argv: string[]): Promise<number> {
           exitCode: 2,
         });
       }
-      console.log(
-        handleSetupCommand(subcommand, {
-          global: parsed.setupGlobal,
-          dryRun: parsed.setupDryRun,
-          nonInteractive: parsed.setupNonInteractive,
-          agent: parsed.setupAgent,
-        }),
-      );
+      const output = handleSetupCommand(subcommand, {
+        global: parsed.setupGlobal,
+        agent: parsed.setupAgent,
+      });
+      if (output) {
+        console.log(output);
+      }
       return 0;
     }
 
-    if (parsed.setupGlobal || parsed.setupDryRun || parsed.setupNonInteractive || parsed.setupAgent) {
-      throw new CliError("`--global`, `--agent`, `--non-interactive`, and `--dry-run` are only valid with `setup`.", {
+    if (parsed.setupGlobal || parsed.setupAgent) {
+      throw new CliError("`--global` and `--agent` are only valid with `setup`.", {
         code: "CLI_CONTRACT_VIOLATION",
         exitCode: 2,
       });

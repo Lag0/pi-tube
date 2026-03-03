@@ -7,14 +7,7 @@ const NPM_PACKAGE_NAME = "@syxs/pi-tube";
 export interface SetupOptions {
   global?: boolean;
   agent?: string;
-  dryRun?: boolean;
-  nonInteractive?: boolean;
   env?: Record<string, string | undefined>;
-}
-
-interface SetupCommandResult {
-  commandString: string;
-  executed: boolean;
 }
 
 function toCommandString(command: string, args: string[]): string {
@@ -24,15 +17,14 @@ function toCommandString(command: string, args: string[]): string {
   return parts.join(" ");
 }
 
-function runOrDryRun(command: string, args: string[], options: SetupOptions): SetupCommandResult {
+function runCommand(command: string, args: string[], options: SetupOptions): void {
   const commandString = toCommandString(command, args);
-  const testDryRun = options.env?.PI_TUBE_TEST_SETUP_DRY_RUN === "1";
+  const testDryRun = (options.env?.PI_TUBE_TEST_SETUP_DRY_RUN ?? process.env.PI_TUBE_TEST_SETUP_DRY_RUN) === "1";
 
-  if (options.dryRun || testDryRun) {
-    return {
-      commandString,
-      executed: false,
-    };
+  console.log(`Running: ${commandString}\n`);
+
+  if (testDryRun) {
+    return;
   }
 
   const result = Bun.spawnSync({
@@ -47,19 +39,13 @@ function runOrDryRun(command: string, args: string[], options: SetupOptions): Se
     throw new CliError(`Failed to run setup command: \`${commandString}\`.`, {
       code: "SETUP_COMMAND_FAILED",
       guidance: [
-        "Retry with `--dry-run` to inspect the generated command.",
         "Verify that Node.js and npx are available in your environment.",
       ],
     });
   }
-
-  return {
-    commandString,
-    executed: true,
-  };
 }
 
-function handleSetupInstall(options: SetupOptions): string {
+function handleSetupInstall(): string {
   const lines = [
     "[SETUP_INSTALL]",
     "Install globally with npm:",
@@ -75,47 +61,26 @@ function handleSetupInstall(options: SetupOptions): string {
     "pi-tube setup skills",
   ];
 
-  if (options.dryRun) {
-    lines.push("", "Dry-run enabled: no external command executed.");
-  }
-
   return lines.join("\n");
 }
 
-function handleSetupSkills(options: SetupOptions): string {
+function handleSetupSkills(options: SetupOptions): null {
   const args = ["-y", SKILLS_NPX_PACKAGE, "add", SKILL_SOURCE];
-  if (options.nonInteractive) {
-    if (options.agent) {
-      throw new CliError("`--agent` is not supported with `--non-interactive` for `setup skills`.", {
-        code: "CLI_CONTRACT_VIOLATION",
-        guidance: [
-          "Use `pi-tube setup skills --non-interactive` for AI/global installs.",
-          "Use `pi-tube setup skills --agent <name>` for interactive/manual targeting.",
-        ],
-      });
-    }
-    args.push("--yes", "--global");
-  } else {
-    if (options.global) {
-      args.push("--global");
-    }
-    if (options.agent) {
-      args.push("--agent", options.agent);
-    }
+  if (options.global) {
+    args.push("--global");
+  }
+  if (options.agent) {
+    args.push("--agent", options.agent);
   }
 
-  const result = runOrDryRun("npx", args, options);
-  if (!result.executed) {
-    return `[SETUP_SKILLS_DRY_RUN] ${result.commandString}`;
-  }
-
-  return "[SETUP_SKILLS_DONE] Skills installation completed.";
+  runCommand("npx", args, options);
+  return null;
 }
 
 export function handleSetupCommand(
   subcommand: string | undefined,
   options: SetupOptions = {},
-): string {
+): string | null {
   if (!subcommand) {
     throw new CliError("Missing `setup` subcommand. Use `install`, `skills`, or `mcp`.", {
       code: "CLI_CONTRACT_VIOLATION",
@@ -127,7 +92,7 @@ export function handleSetupCommand(
   }
 
   if (subcommand === "install") {
-    return handleSetupInstall(options);
+    return handleSetupInstall();
   }
 
   if (subcommand === "skills") {

@@ -62,7 +62,7 @@ Implemented now:
 - `pi-tube --language <code> <input>`
 - `pi-tube --timestamps <input>` (optional timestamp blocks, default off)
 - `pi-tube setup install`
-- `pi-tube setup skills [--global] [--agent <name>] [--non-interactive] [--dry-run]`
+- `pi-tube setup skills [--global] [--agent <name>]`
 - `pi-tube config set <key> <value>`
 - `pi-tube config get <key>`
 - `pi-tube config list`
@@ -90,8 +90,7 @@ pi-tube --json "https://youtube.com/watch?v=dQw4w9WgXcQ"  # active JSON output
 pi-tube setup install                                      # npm install/setup guidance
 pi-tube setup skills                                       # interactive default (human flow)
 pi-tube setup skills --global                              # interactive global scope
-pi-tube setup skills --non-interactive                     # AI/automation mode (forces --yes --global)
-pi-tube setup skills --dry-run                             # preview installer command
+pi-tube setup skills --agent codex                         # install for a specific agent
 pi-tube config set defaults.provider groq                 # active config flow
 pi-tube config set providers.groq.api_key_env GROQ_API_KEY
 pi-tube config list
@@ -127,8 +126,7 @@ Resolution precedence:
 - `--json` emits a deterministic schema-versioned contract from the same canonical artifact model.
 - `provider-status` reports registered providers and missing required env vars in deterministic text or JSON.
 - `setup skills` installs the repository skill bundle (`skills/pi-tube`) into supported agent tooling.
-- `setup skills` is interactive by default for humans.
-- `setup skills --non-interactive` is intended for AI/automation and enforces `skills --yes --global`.
+- `setup skills` follows Firecrawl-style behavior: interactive default, optional `--global` and `--agent`.
 - Temporary media downloads for YouTube/Instagram transcription use `~/.pi-tube/tmp` and are deleted after each run (success or error).
 
 ## Release Hardening
