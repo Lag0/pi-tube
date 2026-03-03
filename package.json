@@ -1,5 +1,5 @@
 {
-  "name": "pi-tube",
+  "name": "@syxs/pi-tube",
   "version": "0.2.0",
   "description": "Bun + TypeScript CLI foundation for deterministic media-intake workflows",
   "type": "module",
@@ -14,10 +14,30 @@
     "pi-tube": "bun run --bun bin/pi-tube.ts",
     "start": "bun run --bun bin/pi-tube.ts",
     "test": "bun test",
-    "verify:fixtures": "bun run --bun scripts/verify-fixtures.ts"
+    "verify:fixtures": "bun run --bun scripts/verify-fixtures.ts",
+    "publish-beta": "npm publish --tag beta --access public",
+    "publish-prod": "npm publish --access public"
   },
+  "files": [
+    "bin",
+    "src",
+    "skills",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Lag0/pi-tube.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Lag0/pi-tube/issues"
+  },
+  "homepage": "https://github.com/Lag0/pi-tube",
   "devDependencies": {
     "@types/bun": "latest",
     "typescript": "^5.9.2"
+  },
+  "dependencies": {
+    "@deepgram/sdk": "^4.11.3",
+    "groq-sdk": "^0.37.0"
   }
 }
