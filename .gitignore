@@ -25,4 +25,3 @@ output/
 .firecrawl/
 .tmp-repos
 node_modules
-bin
