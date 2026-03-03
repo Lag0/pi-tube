@@ -8,7 +8,13 @@ export interface SetupOptions {
   global?: boolean;
   agent?: string;
   dryRun?: boolean;
+  nonInteractive?: boolean;
   env?: Record<string, string | undefined>;
+}
+
+interface SetupCommandResult {
+  commandString: string;
+  executed: boolean;
 }
 
 function toCommandString(command: string, args: string[]): string {
@@ -18,18 +24,22 @@ function toCommandString(command: string, args: string[]): string {
   return parts.join(" ");
 }
 
-function runOrDryRun(command: string, args: string[], options: SetupOptions): string {
+function runOrDryRun(command: string, args: string[], options: SetupOptions): SetupCommandResult {
   const commandString = toCommandString(command, args);
   const testDryRun = options.env?.PI_TUBE_TEST_SETUP_DRY_RUN === "1";
 
   if (options.dryRun || testDryRun) {
-    return commandString;
+    return {
+      commandString,
+      executed: false,
+    };
   }
 
   const result = Bun.spawnSync({
     cmd: [command, ...args],
-    stdout: "pipe",
-    stderr: "pipe",
+    stdin: "inherit",
+    stdout: "inherit",
+    stderr: "inherit",
     env: options.env ?? process.env,
   });
 
@@ -43,7 +53,10 @@ function runOrDryRun(command: string, args: string[], options: SetupOptions): st
     });
   }
 
-  return commandString;
+  return {
+    commandString,
+    executed: true,
+  };
 }
 
 function handleSetupInstall(options: SetupOptions): string {
@@ -71,15 +84,32 @@ function handleSetupInstall(options: SetupOptions): string {
 
 function handleSetupSkills(options: SetupOptions): string {
   const args = ["-y", SKILLS_NPX_PACKAGE, "add", SKILL_SOURCE];
-  if (options.global) {
-    args.push("--global");
-  }
-  if (options.agent) {
-    args.push("--agent", options.agent);
+  if (options.nonInteractive) {
+    if (options.agent) {
+      throw new CliError("`--agent` is not supported with `--non-interactive` for `setup skills`.", {
+        code: "CLI_CONTRACT_VIOLATION",
+        guidance: [
+          "Use `pi-tube setup skills --non-interactive` for AI/global installs.",
+          "Use `pi-tube setup skills --agent <name>` for interactive/manual targeting.",
+        ],
+      });
+    }
+    args.push("--yes", "--global");
+  } else {
+    if (options.global) {
+      args.push("--global");
+    }
+    if (options.agent) {
+      args.push("--agent", options.agent);
+    }
   }
 
-  const commandString = runOrDryRun("npx", args, options);
-  return `[SETUP_SKILLS] ${commandString}`;
+  const result = runOrDryRun("npx", args, options);
+  if (!result.executed) {
+    return `[SETUP_SKILLS_DRY_RUN] ${result.commandString}`;
+  }
+
+  return "[SETUP_SKILLS_DONE] Skills installation completed.";
 }
 
 export function handleSetupCommand(

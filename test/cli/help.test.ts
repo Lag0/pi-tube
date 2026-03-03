@@ -15,7 +15,9 @@ describe("CLI help contract", () => {
 
     expect(result.exitCode).toBe(0);
     expect(stdout).toContain("pi-tube <input> [--provider <deepgram|groq>] [--language <code>] [--timestamps] [--json]");
-    expect(stdout).toContain("pi-tube setup <install|skills|mcp> [--global] [--agent <name>] [--dry-run]");
+    expect(stdout).toContain(
+      "pi-tube setup <install|skills|mcp> [--global] [--agent <name>] [--non-interactive] [--dry-run]",
+    );
     expect(stdout).toContain("pi-tube config <set|get|list> [args] [--json]");
     expect(stdout).toContain("pi-tube provider-status [--json]");
 

@@ -28,6 +28,7 @@ interface ParsedArgs {
   language?: string;
   setupGlobal: boolean;
   setupDryRun: boolean;
+  setupNonInteractive: boolean;
   setupAgent?: string;
   positionals: string[];
 }
@@ -36,7 +37,7 @@ function renderHelp(): string {
   const lines = [
     HELP_SECTIONS.usage,
     `  ${COMMAND_IDENTITY} <input> [--provider <deepgram|groq>] [--language <code>] [--timestamps] [--json]`,
-    `  ${COMMAND_IDENTITY} setup <install|skills|mcp> [--global] [--agent <name>] [--dry-run]`,
+    `  ${COMMAND_IDENTITY} setup <install|skills|mcp> [--global] [--agent <name>] [--non-interactive] [--dry-run]`,
     `  ${COMMAND_IDENTITY} config <set|get|list> [args] [--json]`,
     `  ${COMMAND_IDENTITY} provider-status [--json]`,
     "",
@@ -70,6 +71,7 @@ function parse(argv: string[]): ParsedArgs {
       timestamps: false,
       setupGlobal: false,
       setupDryRun: false,
+      setupNonInteractive: false,
       positionals: [],
     };
   }
@@ -82,6 +84,7 @@ function parse(argv: string[]): ParsedArgs {
   let language: string | undefined;
   let setupGlobal = false;
   let setupDryRun = false;
+  let setupNonInteractive = false;
   let setupAgent: string | undefined;
   const positionals: string[] = [];
 
@@ -115,6 +118,11 @@ function parse(argv: string[]): ParsedArgs {
 
     if (arg === "--dry-run") {
       setupDryRun = true;
+      continue;
+    }
+
+    if (arg === "--non-interactive") {
+      setupNonInteractive = true;
       continue;
     }
 
@@ -185,6 +193,7 @@ function parse(argv: string[]): ParsedArgs {
     language,
     setupGlobal,
     setupDryRun,
+    setupNonInteractive,
     setupAgent,
     positionals,
   };
@@ -240,14 +249,15 @@ export async function runCli(argv: string[]): Promise<number> {
         handleSetupCommand(subcommand, {
           global: parsed.setupGlobal,
           dryRun: parsed.setupDryRun,
+          nonInteractive: parsed.setupNonInteractive,
           agent: parsed.setupAgent,
         }),
       );
       return 0;
     }
 
-    if (parsed.setupGlobal || parsed.setupDryRun || parsed.setupAgent) {
-      throw new CliError("`--global`, `--agent`, and `--dry-run` are only valid with `setup`.", {
+    if (parsed.setupGlobal || parsed.setupDryRun || parsed.setupNonInteractive || parsed.setupAgent) {
+      throw new CliError("`--global`, `--agent`, `--non-interactive`, and `--dry-run` are only valid with `setup`.", {
         code: "CLI_CONTRACT_VIOLATION",
         exitCode: 2,
       });
