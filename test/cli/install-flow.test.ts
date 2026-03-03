@@ -17,6 +17,8 @@ describe("Install and run contract", () => {
     expect(readme).toContain("Bun");
     expect(readme).toContain("pi-tube --json");
     expect(readme).toContain("provider-status");
+    expect(readme).toContain("npm install -g @syxs/pi-tube");
+    expect(readme).toContain("pi-tube setup skills");
     expect(readme).toContain("config set defaults.provider");
     expect(readme).toContain("Config Keys and Precedence");
   });
@@ -38,12 +40,17 @@ describe("Install and run contract", () => {
       scripts?: Record<string, string>;
     };
     const ciWorkflow = readFileSync(".github/workflows/ci.yml", "utf8");
+    const publishWorkflow = readFileSync(".github/workflows/publish.yml", "utf8");
     const releaseChecklist = readFileSync("docs/release-checklist.md", "utf8");
     const readme = readFileSync("README.md", "utf8");
 
     expect(pkg.scripts?.["verify:fixtures"]).toBe("bun run --bun scripts/verify-fixtures.ts");
+    expect(pkg.scripts?.["publish-beta"]).toContain("npm publish");
+    expect(pkg.scripts?.["publish-prod"]).toContain("npm publish");
     expect(ciWorkflow).toContain("run: bun test");
     expect(ciWorkflow).toContain("run: bun run verify:fixtures");
+    expect(publishWorkflow).toContain("name: Publish to npm");
+    expect(publishWorkflow).toContain("npm publish --provenance --access public");
     expect(releaseChecklist).toContain("bun test");
     expect(releaseChecklist).toContain("bun run verify:fixtures");
     expect(releaseChecklist).toContain("test/errors/error-taxonomy.test.ts");

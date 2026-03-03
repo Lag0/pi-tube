@@ -14,7 +14,8 @@ describe("CLI help contract", () => {
     const stdout = result.stdout.toString();
 
     expect(result.exitCode).toBe(0);
-    expect(stdout).toContain("pi-tube <input> [--provider <deepgram|groq>] [--language <code>] [--json]");
+    expect(stdout).toContain("pi-tube <input> [--provider <deepgram|groq>] [--language <code>] [--timestamps] [--json]");
+    expect(stdout).toContain("pi-tube setup <install|skills|mcp> [--global] [--agent <name>] [--dry-run]");
     expect(stdout).toContain("pi-tube config <set|get|list> [args] [--json]");
     expect(stdout).toContain("pi-tube provider-status [--json]");
 
@@ -31,12 +32,14 @@ describe("CLI help contract", () => {
     expect(notes).toBeGreaterThan(examples);
 
     expect(stdout).toContain("Markdown default, JSON optional");
+    expect(stdout).toContain("setup <...>");
     expect(stdout).toContain("config <set|get|list>");
     expect(stdout).toContain("provider-status");
     expect(stdout).toContain("defaults.provider");
     expect(stdout).toContain("deferred command (use `pi-tube <input>`)");
     expect(stdout).toContain("INSTAGRAM_AUTH_REQUIRED");
     expect(stdout).toContain("--provider deepgram|groq");
+    expect(stdout).toContain("--timestamps");
     expect(stdout).toContain("CLI flags > config defaults > env defaults");
     expect(stdout).toContain("TRANSCRIPTION_PROVIDER_*");
 

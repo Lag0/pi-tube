@@ -16,6 +16,10 @@ export const ERROR_CATALOG = {
     exitCode: 2,
     guidance: ["Use `pi-tube --help` for active commands."],
   },
+  SETUP_COMMAND_FAILED: {
+    exitCode: 2,
+    guidance: ["Retry setup command after validating local toolchain availability."],
+  },
   INTAKE_CLASSIFICATION_FAILED: {
     exitCode: 2,
     guidance: ["Retry with a supported input source or run `pi-tube --help`."],

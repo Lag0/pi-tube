@@ -1,4 +1,8 @@
 import { describe, expect, test } from "bun:test";
+import { Buffer } from "node:buffer";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { createDeepgramProvider } from "../../src/transcription/providers/deepgram.ts";
 import type { TranscriptionRequest } from "../../src/transcription/types.ts";
 
@@ -15,26 +19,28 @@ const request: TranscriptionRequest = {
 
 describe("deepgram provider", () => {
   test("maps successful response to canonical result and forwards requested language", async () => {
-    let capturedLanguage: FormDataEntryValue | null = null;
+    let capturedLanguage: unknown = null;
     const provider = createDeepgramProvider({
-      apiKey: "dg-test",
-      fetchImpl: async (_input, init) => {
-        const body = init?.body as FormData;
-        capturedLanguage = body.get("language");
-
-        return new Response(
-          JSON.stringify({
-            results: {
-              channels: [
-                {
-                  detected_language: "en",
-                  alternatives: [{ transcript: "hello from deepgram" }],
-                },
-              ],
+      client: {
+        async transcribeUrl(_source, options) {
+          capturedLanguage = options?.language;
+          return {
+            result: {
+              results: {
+                channels: [
+                  {
+                    detected_language: "en",
+                    alternatives: [{ transcript: "hello from deepgram" }],
+                  },
+                ],
+              },
             },
-          }),
-          { status: 200 },
-        );
+            error: null,
+          };
+        },
+        async transcribeFile() {
+          throw new Error("transcribeFile should not be called for direct_url");
+        },
       },
     });
 
@@ -49,28 +55,33 @@ describe("deepgram provider", () => {
 
   test("normalizes optional word timestamps into segment list", async () => {
     const provider = createDeepgramProvider({
-      apiKey: "dg-test",
-      fetchImpl: async () =>
-        new Response(
-          JSON.stringify({
-            results: {
-              channels: [
-                {
-                  alternatives: [
-                    {
-                      transcript: "hello from deepgram",
-                      words: [
-                        { word: "hello", start: 0.1, end: 0.6 },
-                        { word: "from", start: 0.61, end: 0.9 },
-                      ],
-                    },
-                  ],
-                },
-              ],
+      client: {
+        async transcribeUrl() {
+          return {
+            result: {
+              results: {
+                channels: [
+                  {
+                    alternatives: [
+                      {
+                        transcript: "hello from deepgram",
+                        words: [
+                          { word: "hello", start: 0.1, end: 0.6 },
+                          { word: "from", start: 0.61, end: 0.9 },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
             },
-          }),
-          { status: 200 },
-        ),
+            error: null,
+          };
+        },
+        async transcribeFile() {
+          throw new Error("transcribeFile should not be called for direct_url");
+        },
+      },
     });
 
     const result = await provider.transcribe(request);
@@ -81,10 +92,58 @@ describe("deepgram provider", () => {
     ]);
   });
 
+  test("enables detect_language when no language is explicitly requested", async () => {
+    let capturedDetectLanguage: unknown = null;
+    let capturedLanguage: unknown = null;
+    const provider = createDeepgramProvider({
+      client: {
+        async transcribeUrl(_source, options) {
+          capturedDetectLanguage = options?.detect_language;
+          capturedLanguage = options?.language;
+          return {
+            result: {
+              results: {
+                channels: [
+                  {
+                    detected_language: "pt",
+                    alternatives: [{ transcript: "ola mundo" }],
+                  },
+                ],
+              },
+            },
+            error: null,
+          };
+        },
+        async transcribeFile() {
+          throw new Error("transcribeFile should not be called for direct_url");
+        },
+      },
+    });
+
+    const result = await provider.transcribe({
+      ...request,
+      requestedLanguage: undefined,
+    });
+
+    expect(capturedLanguage).toBeUndefined();
+    expect(capturedDetectLanguage).toBe(true);
+    expect(result.transcript).toBe("ola mundo");
+    expect(result.detectedLanguage).toBe("pt");
+  });
+
   test("maps auth failures to TRANSCRIPTION_PROVIDER_AUTH", async () => {
     const provider = createDeepgramProvider({
-      apiKey: "dg-test",
-      fetchImpl: async () => new Response("invalid api key", { status: 401 }),
+      client: {
+        async transcribeUrl() {
+          return {
+            result: null,
+            error: { status: 401, message: "invalid api key" },
+          };
+        },
+        async transcribeFile() {
+          throw new Error("transcribeFile should not be called for direct_url");
+        },
+      },
     });
 
     await expect(provider.transcribe(request)).rejects.toMatchObject({
@@ -94,8 +153,17 @@ describe("deepgram provider", () => {
 
   test("maps rate limiting to TRANSCRIPTION_PROVIDER_RATE_LIMIT", async () => {
     const provider = createDeepgramProvider({
-      apiKey: "dg-test",
-      fetchImpl: async () => new Response("too many requests", { status: 429 }),
+      client: {
+        async transcribeUrl() {
+          return {
+            result: null,
+            error: { status: 429, message: "too many requests" },
+          };
+        },
+        async transcribeFile() {
+          throw new Error("transcribeFile should not be called for direct_url");
+        },
+      },
     });
 
     await expect(provider.transcribe(request)).rejects.toMatchObject({
@@ -105,12 +173,125 @@ describe("deepgram provider", () => {
 
   test("maps malformed provider payload to TRANSCRIPTION_PROVIDER_INVALID_RESPONSE", async () => {
     const provider = createDeepgramProvider({
-      apiKey: "dg-test",
-      fetchImpl: async () => new Response(JSON.stringify({ results: {} }), { status: 200 }),
+      client: {
+        async transcribeUrl() {
+          return {
+            result: { results: {} },
+            error: null,
+          };
+        },
+        async transcribeFile() {
+          throw new Error("transcribeFile should not be called for direct_url");
+        },
+      },
     });
 
     await expect(provider.transcribe(request)).rejects.toMatchObject({
       code: "TRANSCRIPTION_PROVIDER_INVALID_RESPONSE",
     });
+  });
+
+  test("downloads YouTube source and uploads as file payload", async () => {
+    const tempDir = mkdtempSync(path.join(os.tmpdir(), "pi-tube-deepgram-provider-"));
+    const mockedDownloadPath = path.join(tempDir, "video.m4a");
+    writeFileSync(mockedDownloadPath, "audio");
+
+    const youtubeRequest: TranscriptionRequest = {
+      source: {
+        kind: "youtube",
+        originalInput: "https://www.youtube.com/watch?v=abc123",
+        normalizedUrl: "https://www.youtube.com/watch?v=abc123",
+        mediaUrl: "https://rr1.example.com/videoplayback?itag=140",
+      },
+    };
+
+    const originalMockPath = process.env.PI_TUBE_TEST_YTDLP_DOWNLOAD_PATH;
+    process.env.PI_TUBE_TEST_YTDLP_DOWNLOAD_PATH = mockedDownloadPath;
+
+    try {
+      let fileBuffer: Buffer | null = null;
+      const provider = createDeepgramProvider({
+        client: {
+          async transcribeUrl() {
+            throw new Error("transcribeUrl should not be called for youtube sources");
+          },
+          async transcribeFile(source) {
+            fileBuffer = source;
+            return {
+              result: {
+                results: {
+                  channels: [{ alternatives: [{ transcript: "hello from deepgram" }] }],
+                },
+              },
+              error: null,
+            };
+          },
+        },
+      });
+
+      const result = await provider.transcribe(youtubeRequest);
+
+      expect(fileBuffer).toBeInstanceOf(Buffer);
+      expect((fileBuffer as Buffer).length).toBeGreaterThan(0);
+      expect(result.transcript).toBe("hello from deepgram");
+      expect(existsSync(mockedDownloadPath)).toBe(false);
+    } finally {
+      if (originalMockPath === undefined) {
+        delete process.env.PI_TUBE_TEST_YTDLP_DOWNLOAD_PATH;
+      } else {
+        process.env.PI_TUBE_TEST_YTDLP_DOWNLOAD_PATH = originalMockPath;
+      }
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  test("cleans downloaded media file when transcription fails", async () => {
+    const tempDir = mkdtempSync(path.join(os.tmpdir(), "pi-tube-deepgram-provider-"));
+    const mockedDownloadPath = path.join(tempDir, "video.m4a");
+    writeFileSync(mockedDownloadPath, "audio");
+
+    const youtubeRequest: TranscriptionRequest = {
+      source: {
+        kind: "youtube",
+        originalInput: "https://www.youtube.com/watch?v=abc123",
+        normalizedUrl: "https://www.youtube.com/watch?v=abc123",
+        mediaUrl: "https://rr1.example.com/videoplayback?itag=140",
+      },
+    };
+
+    const originalMockPath = process.env.PI_TUBE_TEST_YTDLP_DOWNLOAD_PATH;
+    process.env.PI_TUBE_TEST_YTDLP_DOWNLOAD_PATH = mockedDownloadPath;
+
+    try {
+      const provider = createDeepgramProvider({
+        client: {
+          async transcribeUrl() {
+            throw new Error("transcribeUrl should not be called for youtube sources");
+          },
+          async transcribeFile() {
+            return {
+              result: {
+                results: {
+                  channels: [{ alternatives: [{ transcript: "" }] }],
+                },
+              },
+              error: null,
+            };
+          },
+        },
+      });
+
+      await expect(provider.transcribe(youtubeRequest)).rejects.toMatchObject({
+        code: "TRANSCRIPTION_PROVIDER_INVALID_RESPONSE",
+      });
+      expect(existsSync(mockedDownloadPath)).toBe(false);
+    } finally {
+      if (originalMockPath === undefined) {
+        delete process.env.PI_TUBE_TEST_YTDLP_DOWNLOAD_PATH;
+      } else {
+        process.env.PI_TUBE_TEST_YTDLP_DOWNLOAD_PATH = originalMockPath;
+      }
+      rmSync(tempDir, { recursive: true, force: true });
+    }
   });
 });

@@ -40,7 +40,7 @@ describe("markdown renderer", () => {
     });
     const markdown = renderMarkdown(artifact);
 
-    expect(markdown).toContain("## Transcript");
+    expect(markdown).not.toContain("## Transcript");
     expect(markdown).toContain("### Full Text");
     expect(markdown).not.toContain("### Timestamped Segments");
     expect(markdown).toContain("hello world");
@@ -57,10 +57,12 @@ describe("markdown renderer", () => {
       },
       {
         generatedAt: "2026-03-02T23:30:00.000Z",
+        includeTimestamps: true,
       },
     );
     const markdown = renderMarkdown(artifact);
 
+    expect(markdown).toContain("## Transcript");
     expect(markdown).toContain("### Timestamped Segments");
     expect(markdown).toContain("- [00:00:01.000 - 00:00:02.200] hello");
     expect(markdown).toContain("- [00:00:02.300 - 00:00:03.200] world");

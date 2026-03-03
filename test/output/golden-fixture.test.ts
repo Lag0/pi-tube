@@ -30,6 +30,7 @@ const canonicalExecutionResult: TranscriptionExecutionResult = {
 function renderCanonicalArtifact(): { markdown: string; json: string } {
   const artifact = buildOutputArtifact(canonicalExecutionResult, {
     generatedAt: FIXTURE_GENERATED_AT,
+    includeTimestamps: true,
   });
 
   return {

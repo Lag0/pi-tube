@@ -21,3 +21,8 @@ wheels/
 
 # Output
 output/
+
+.firecrawl/
+.tmp-repos
+node_modules
+bin

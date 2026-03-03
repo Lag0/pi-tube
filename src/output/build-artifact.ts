@@ -21,6 +21,7 @@ const SEGMENT_COMPACTION_MAX_DURATION_MS = 18000;
 
 export interface BuildOutputArtifactOptions {
   generatedAt?: string;
+  includeTimestamps?: boolean;
 }
 
 function mapSource(source: ResolvedSource): OutputArtifactSource {
@@ -52,7 +53,11 @@ function mapSource(source: ResolvedSource): OutputArtifactSource {
   }
 }
 
-function mapSegments(segments?: SegmentLike[]): OutputArtifactSegment[] | undefined {
+function mapSegments(segments: SegmentLike[] | undefined, includeTimestamps: boolean): OutputArtifactSegment[] | undefined {
+  if (!includeTimestamps) {
+    return undefined;
+  }
+
   if (!segments || segments.length === 0) {
     return undefined;
   }
@@ -166,28 +171,54 @@ function compactDenseSegments(segments: SegmentLike[]): SegmentLike[] {
   return compacted;
 }
 
-function summarize(result: TranscriptionExecutionResult, segmentCount: number) {
+function splitSentences(text: string): string[] {
+  return text
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(/(?<=[.!?])\s+/)
+    .map((sentence) => sentence.trim())
+    .filter((sentence) => sentence.length > 0);
+}
+
+function buildExtractiveSummary(fullText: string): string {
+  const normalized = fullText.replace(/\s+/g, " ").trim();
+  if (!normalized) {
+    return "No transcript text was produced.";
+  }
+
+  const sentences = splitSentences(normalized);
+  if (sentences.length === 0) {
+    return normalized.slice(0, 280);
+  }
+
+  const selected = sentences.slice(0, 2).join(" ");
+  if (selected.length <= 320) {
+    return selected;
+  }
+
+  return `${selected.slice(0, 317).trimEnd()}...`;
+}
+
+function summarize(
+  result: TranscriptionExecutionResult,
+  segmentCount: number,
+  includeTimestamps: boolean,
+) {
   const requestedLanguage = result.requestedLanguage ?? "auto";
   const detectedLanguage = result.detectedLanguage ?? "unknown";
-  const sourceLabel =
-    result.source.kind === "local_file" ? "local file" : `${result.source.kind} source`;
-  const segmentSentence =
-    segmentCount > 0
-      ? `The transcript includes ${segmentCount} timestamped segments for deterministic rendering.`
-      : "The transcript has no provider timestamp segments, so fallback plain-text rendering applies.";
+  const paragraph = buildExtractiveSummary(result.transcript);
+  const timestampPoint = includeTimestamps
+    ? `Timestamp mode: on (${segmentCount} blocks)`
+    : "Timestamp mode: off (use --timestamps)";
 
   return {
-    paragraph: [
-      `This artifact was generated from a ${sourceLabel} using the ${result.provider} transcription provider.`,
-      `Requested language was ${requestedLanguage} and detected language was ${detectedLanguage}.`,
-      segmentSentence,
-    ].join(" "),
+    paragraph,
     key_points: [
       `Source kind: ${result.source.kind}`,
       `Provider: ${result.provider}`,
       `Requested language: ${requestedLanguage}`,
       `Detected language: ${detectedLanguage}`,
-      `Segment count: ${segmentCount}`,
+      timestampPoint,
     ] as [string, string, string, string, string],
   };
 }
@@ -196,9 +227,13 @@ export function buildOutputArtifact(
   result: TranscriptionExecutionResult,
   options: BuildOutputArtifactOptions = {},
 ): OutputArtifact {
-  const segments = mapSegments((result as TranscriptionExecutionResult & { segments?: SegmentLike[] }).segments);
+  const includeTimestamps = options.includeTimestamps ?? false;
+  const segments = mapSegments(
+    (result as TranscriptionExecutionResult & { segments?: SegmentLike[] }).segments,
+    includeTimestamps,
+  );
   const segmentCount = segments?.length ?? 0;
-  const summary = summarize(result, segmentCount);
+  const summary = summarize(result, segmentCount, includeTimestamps);
 
   return {
     schema_version: OUTPUT_SCHEMA_VERSION,

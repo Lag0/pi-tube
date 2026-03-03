@@ -81,14 +81,9 @@ export function resolveConfigPath(options: ConfigStoreOptions = {}): string {
     return path.isAbsolute(explicit) ? explicit : path.resolve(cwd, explicit);
   }
 
-  const xdgConfigHome = normalizeOptionalString(env.XDG_CONFIG_HOME);
-  if (xdgConfigHome) {
-    return path.join(xdgConfigHome, "pi-tube", "config.json");
-  }
-
   const home = normalizeOptionalString(env.HOME);
   if (home) {
-    return path.join(home, ".config", "pi-tube", "config.json");
+    return path.join(home, ".pi-tube", "config.json");
   }
 
   return path.resolve(cwd, ".pi-tube", "config.json");

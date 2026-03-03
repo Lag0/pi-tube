@@ -9,14 +9,14 @@ detected_language: "en"
 ---
 
 ## Summary
-This artifact was generated from a direct_url source using the deepgram transcription provider. Requested language was en and detected language was en. The transcript includes 2 timestamped segments for deterministic rendering.
+hello world
 
 ### Key Points
 - Source kind: direct_url
 - Provider: deepgram
 - Requested language: en
 - Detected language: en
-- Segment count: 2
+- Timestamp mode: on (2 blocks)
 
 ## Transcript
 

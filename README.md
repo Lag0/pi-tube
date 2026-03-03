@@ -6,10 +6,22 @@ Current delivery status: Phase 6 reliability hardening is active (deterministic 
 
 ## Install (macOS/Linux)
 
+### npm install (published package)
+
+```bash
+npm install -g @syxs/pi-tube
+```
+
+Or without global install:
+
+```bash
+npx -y @syxs/pi-tube --help
+```
+
 ### Quick install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Lag0/pi-tube/master/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Lag0/pi-tube/main/install.sh | bash
 ```
 
 ### Local dev install
@@ -26,6 +38,8 @@ bun install
 pi-tube --help
 pi-tube --version
 pi-tube <input>
+pi-tube setup install
+pi-tube setup skills
 ```
 
 ## Help Contract (Phase 5)
@@ -46,6 +60,9 @@ Implemented now:
 - `pi-tube --json <input>`
 - `pi-tube --provider <deepgram|groq> <input>`
 - `pi-tube --language <code> <input>`
+- `pi-tube --timestamps <input>` (optional timestamp blocks, default off)
+- `pi-tube setup install`
+- `pi-tube setup skills [--global] [--agent <name>] [--dry-run]`
 - `pi-tube config set <key> <value>`
 - `pi-tube config get <key>`
 - `pi-tube config list`
@@ -65,10 +82,13 @@ Deferred command aliases (non-zero guidance, use baseline input path):
 pi-tube "https://youtube.com/watch?v=dQw4w9WgXcQ"   # active
 pi-tube --provider deepgram "https://youtube.com/watch?v=dQw4w9WgXcQ"  # active
 pi-tube --provider groq --language pt "./recording.mp3"                # active
+pi-tube --timestamps "https://youtube.com/watch?v=dQw4w9WgXcQ"         # include timestamp blocks
 pi-tube "https://instagram.com/reel/abc123"         # active (public URLs only)
 pi-tube "https://cdn.example.com/audio/demo.wav"    # active
 pi-tube "./recording.mp3"                           # active
 pi-tube --json "https://youtube.com/watch?v=dQw4w9WgXcQ"  # active JSON output
+pi-tube setup install                                      # npm install/setup guidance
+pi-tube setup skills --dry-run                             # preview skill installer command
 pi-tube config set defaults.provider groq                 # active config flow
 pi-tube config set providers.groq.api_key_env GROQ_API_KEY
 pi-tube config list
@@ -87,6 +107,10 @@ Supported configuration keys:
 - `providers.groq.api_key`
 - `providers.groq.api_key_env`
 
+Default config file path:
+
+- `~/.pi-tube/config.json` (override with `PI_TUBE_CONFIG_PATH`)
+
 Resolution precedence:
 
 - Provider: CLI `--provider` > config `defaults.provider` > `PI_TUBE_TRANSCRIPTION_PROVIDER` > `deepgram`
@@ -95,23 +119,24 @@ Resolution precedence:
 
 ## Agent Workflows
 
-- Default output is deterministic Markdown with YAML frontmatter, fixed summary, and transcript sections.
+- Default output is deterministic Markdown with YAML frontmatter, extractive summary, and transcript sections.
+- Timestamp blocks are disabled by default to reduce artifact size/context; use `--timestamps` when needed.
 - `--json` emits a deterministic schema-versioned contract from the same canonical artifact model.
 - `provider-status` reports registered providers and missing required env vars in deterministic text or JSON.
-
-## Fixture Verification
-
-Run fixture drift checks before pushing contract-related changes:
-
-```bash
-bun run verify:fixtures
-```
-
-This command fails when renderer output diverges from committed golden fixtures.
+- `setup skills` installs the repository skill bundle (`skills/pi-tube`) into supported agent tooling.
+- Temporary media downloads for YouTube/Instagram transcription use `~/.pi-tube/tmp` and are deleted after each run (success or error).
 
 ## Release Hardening
 
 Before tagging a release, run the mandatory checks in [docs/release-checklist.md](docs/release-checklist.md).
+
+npm publish automation is defined in `.github/workflows/publish.yml` with provenance and version-exists checks.
+
+## Instagram Public-Only Policy
+
+Before tagging a release, run the mandatory checks in [docs/release-checklist.md](docs/release-checklist.md).
+
+npm publish automation is defined in `.github/workflows/publish.yml` with provenance and version-exists checks.
 
 ## Instagram Public-Only Policy
 

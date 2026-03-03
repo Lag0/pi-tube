@@ -30,6 +30,7 @@ const DEFERRED_COMMAND_PHASE: Record<string, string> = {
 export interface BaselineInput {
   input: string;
   json: boolean;
+  timestamps: boolean;
   extraPositionals: string[];
   provider?: string;
   language?: string;
@@ -39,6 +40,7 @@ export interface BaselineInput {
 export interface BaselineIntakeResult {
   transcription: TranscriptionExecutionResult;
   json: boolean;
+  timestamps: boolean;
 }
 
 export interface ProviderStatusInput {
@@ -83,6 +85,7 @@ export function handleDeferredCommand(command: string, json: boolean): never {
 export async function handleBaselineInput({
   input,
   json,
+  timestamps,
   extraPositionals,
   provider,
   language,
@@ -109,11 +112,14 @@ export async function handleBaselineInput({
   return {
     transcription,
     json,
+    timestamps,
   };
 }
 
 export function formatBaselineIntakeResult(result: BaselineIntakeResult): string {
-  const artifact = buildOutputArtifact(result.transcription);
+  const artifact = buildOutputArtifact(result.transcription, {
+    includeTimestamps: result.timestamps,
+  });
   return result.json ? renderJson(artifact) : renderMarkdown(artifact);
 }
 

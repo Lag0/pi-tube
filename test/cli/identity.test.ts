@@ -14,7 +14,7 @@ describe("CLI identity and placeholders", () => {
     const pkg = JSON.parse(readFileSync("package.json", "utf8")) as { name: string };
     const result = runCli(["--version"]);
 
-    expect(pkg.name).toBe("pi-tube");
+    expect(pkg.name).toBe("@syxs/pi-tube");
     expect(result.exitCode).toBe(0);
     expect(result.stdout.toString().trim().startsWith("pi-tube ")).toBe(true);
   });

@@ -1,3 +1,5 @@
+import { Buffer } from "node:buffer";
+import { createClient, type DeepgramClientOptions } from "@deepgram/sdk";
 import {
   CliError,
   createTranscriptionProviderAuthError,
@@ -6,29 +8,35 @@ import {
   createTranscriptionProviderRateLimitError,
   createTranscriptionProviderUnavailableError,
 } from "../../errors/cli-errors.ts";
-import type { ResolvedSource } from "../../intake/types.ts";
 import type {
   TranscriptionRequest,
   TranscriptionResult,
   TranscriptionSegment,
 } from "../types.ts";
 import type { TranscriptionProvider } from "./provider.ts";
+import { prepareProviderMediaInput } from "./media-input.ts";
 
-type ProviderFetch = (input: string | URL, init?: RequestInit) => Promise<Response>;
-
-export interface DeepgramProviderOptions {
-  fetchImpl?: ProviderFetch;
-  apiKey?: string;
-  endpoint?: string;
-  model?: string;
+interface DeepgramSdkErrorLike {
+  message?: string;
+  status?: number;
 }
 
-function sourceToDeepgramInput(source: ResolvedSource): { key: "url" | "file"; value: string | Blob } {
-  if (source.kind === "local_file") {
-    return { key: "file", value: Bun.file(source.absolutePath) };
-  }
+interface DeepgramSdkResponse {
+  result: unknown;
+  error: DeepgramSdkErrorLike | null;
+}
 
-  return { key: "url", value: source.mediaUrl };
+interface DeepgramListenClient {
+  transcribeUrl(source: { url: string }, options?: Record<string, unknown>, endpoint?: string): Promise<DeepgramSdkResponse>;
+  transcribeFile(source: Buffer, options?: Record<string, unknown>, endpoint?: string): Promise<DeepgramSdkResponse>;
+}
+
+export interface DeepgramProviderOptions {
+  client?: DeepgramListenClient;
+  apiKey?: string;
+  clientOptions?: DeepgramClientOptions;
+  endpoint?: string;
+  model?: string;
 }
 
 function normalizeDeepgramSegments(words: unknown[]): TranscriptionSegment[] | undefined {
@@ -125,9 +133,58 @@ function mapDeepgramHttpError(status: number, detail: string): CliError {
   return createTranscriptionProviderFailedError("deepgram", detail || `status ${status}`);
 }
 
+function extractStatus(error: unknown): number | undefined {
+  if (!error || typeof error !== "object") {
+    return undefined;
+  }
+
+  const status = (error as { status?: unknown }).status;
+  return typeof status === "number" && Number.isFinite(status) ? status : undefined;
+}
+
+function extractDetail(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (error && typeof error === "object" && typeof (error as { message?: unknown }).message === "string") {
+    return (error as { message: string }).message;
+  }
+  return String(error);
+}
+
+function mapDeepgramSdkError(error: unknown): CliError {
+  const status = extractStatus(error);
+  const detail = extractDetail(error);
+
+  if (typeof status === "number") {
+    return mapDeepgramHttpError(status, detail);
+  }
+
+  return createTranscriptionProviderFailedError("deepgram", detail || "unknown Deepgram error");
+}
+
+function mapDeepgramThrownError(error: unknown): CliError {
+  const status = extractStatus(error);
+  const detail = extractDetail(error);
+
+  if (typeof status === "number") {
+    return mapDeepgramHttpError(status, detail);
+  }
+
+  return createTranscriptionProviderUnavailableError("deepgram", detail);
+}
+
+function createDeepgramListenClient(options: DeepgramProviderOptions): DeepgramListenClient {
+  const apiKey = options.apiKey ?? process.env.DEEPGRAM_API_KEY;
+  if (!apiKey) {
+    throw createTranscriptionProviderAuthError("deepgram", "missing DEEPGRAM_API_KEY");
+  }
+
+  const client = createClient(apiKey, options.clientOptions);
+  return client.listen.prerecorded as DeepgramListenClient;
+}
+
 export function createDeepgramProvider(options: DeepgramProviderOptions = {}): TranscriptionProvider {
-  const fetchImpl = options.fetchImpl ?? fetch;
-  const endpoint = options.endpoint ?? "https://api.deepgram.com/v1/listen";
   const model = options.model ?? "nova-3";
 
   return {
@@ -163,50 +220,55 @@ export function createDeepgramProvider(options: DeepgramProviderOptions = {}): T
         throw createTranscriptionProviderFailedError("deepgram", "mocked provider failure");
       }
 
-      const apiKey = options.apiKey ?? process.env.DEEPGRAM_API_KEY;
-      if (!apiKey) {
-        throw createTranscriptionProviderAuthError("deepgram", "missing DEEPGRAM_API_KEY");
-      }
-
-      const media = sourceToDeepgramInput(request.source);
-      const body = new FormData();
-      body.append(media.key, media.value);
-      body.append("model", model);
-      if (request.requestedLanguage) {
-        body.append("language", request.requestedLanguage);
-      }
-
-      let response: Response;
+      const listenClient = options.client ?? createDeepgramListenClient(options);
+      const media = await prepareProviderMediaInput(request.source, "deepgram");
       try {
-        response = await fetchImpl(endpoint, {
-          method: "POST",
-          headers: {
-            Authorization: `Token ${apiKey}`,
-          },
-          body,
-        });
+        const transcriptionOptions: Record<string, unknown> = {
+          model,
+        };
+        if (request.requestedLanguage) {
+          transcriptionOptions.language = request.requestedLanguage;
+        } else {
+          transcriptionOptions.detect_language = true;
+        }
+
+        let response: DeepgramSdkResponse;
+        try {
+          if (media.key === "url") {
+            response = await listenClient.transcribeUrl(
+              { url: String(media.value) },
+              transcriptionOptions,
+              options.endpoint,
+            );
+          } else {
+            const fileBuffer = Buffer.from(await media.value.arrayBuffer());
+            response = await listenClient.transcribeFile(fileBuffer, transcriptionOptions, options.endpoint);
+          }
+        } catch (error) {
+          throw mapDeepgramThrownError(error);
+        }
+
+        if (response.error) {
+          throw mapDeepgramSdkError(response.error);
+        }
+
+        const normalized = parseDeepgramResponse(response.result);
+
+        return {
+          provider: "deepgram",
+          transcript: normalized.transcript,
+          requestedLanguage: request.requestedLanguage,
+          detectedLanguage: normalized.detectedLanguage,
+          segments: normalized.segments,
+        };
       } catch (error) {
-        throw createTranscriptionProviderUnavailableError(
-          "deepgram",
-          error instanceof Error ? error.message : String(error),
-        );
+        if (error instanceof CliError) {
+          throw error;
+        }
+        throw mapDeepgramThrownError(error);
+      } finally {
+        media.cleanup?.();
       }
-
-      if (!response.ok) {
-        const detail = (await response.text()).trim() || `status ${response.status}`;
-        throw mapDeepgramHttpError(response.status, detail);
-      }
-
-      const payload = await response.json();
-      const normalized = parseDeepgramResponse(payload);
-
-      return {
-        provider: "deepgram",
-        transcript: normalized.transcript,
-        requestedLanguage: request.requestedLanguage,
-        detectedLanguage: normalized.detectedLanguage,
-        segments: normalized.segments,
-      };
     },
   };
 }

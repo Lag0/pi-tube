@@ -1,3 +1,4 @@
+import Groq from "groq-sdk";
 import {
   CliError,
   createTranscriptionProviderAuthError,
@@ -6,29 +7,27 @@ import {
   createTranscriptionProviderRateLimitError,
   createTranscriptionProviderUnavailableError,
 } from "../../errors/cli-errors.ts";
-import type { ResolvedSource } from "../../intake/types.ts";
 import type {
   TranscriptionRequest,
   TranscriptionResult,
   TranscriptionSegment,
 } from "../types.ts";
 import type { TranscriptionProvider } from "./provider.ts";
+import { prepareProviderMediaInput } from "./media-input.ts";
 
-type ProviderFetch = (input: string | URL, init?: RequestInit) => Promise<Response>;
+type ProviderFetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
-export interface GroqProviderOptions {
-  fetchImpl?: ProviderFetch;
-  apiKey?: string;
-  endpoint?: string;
-  model?: string;
+interface GroqAudioTranscriptionClient {
+  create(payload: Record<string, unknown>): Promise<unknown>;
 }
 
-function sourceToGroqInput(source: ResolvedSource): { key: "url" | "file"; value: string | Blob } {
-  if (source.kind === "local_file") {
-    return { key: "file", value: Bun.file(source.absolutePath) };
-  }
-
-  return { key: "url", value: source.mediaUrl };
+export interface GroqProviderOptions {
+  client?: GroqAudioTranscriptionClient;
+  fetchImpl?: ProviderFetch;
+  apiKey?: string;
+  baseURL?: string;
+  endpoint?: string;
+  model?: string;
 }
 
 function normalizeGroqSegments(rawSegments: unknown[]): TranscriptionSegment[] | undefined {
@@ -125,9 +124,58 @@ function mapGroqHttpError(status: number, detail: string): CliError {
   return createTranscriptionProviderFailedError("groq", detail || `status ${status}`);
 }
 
+function extractStatus(error: unknown): number | undefined {
+  if (!error || typeof error !== "object") {
+    return undefined;
+  }
+
+  const status = (error as { status?: unknown }).status;
+  return typeof status === "number" && Number.isFinite(status) ? status : undefined;
+}
+
+function extractDetail(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (error && typeof error === "object" && typeof (error as { message?: unknown }).message === "string") {
+    return (error as { message: string }).message;
+  }
+  return String(error);
+}
+
+function resolveBaseUrl(options: GroqProviderOptions): string | undefined {
+  if (options.baseURL) {
+    return options.baseURL;
+  }
+
+  if (!options.endpoint) {
+    return undefined;
+  }
+
+  try {
+    const parsed = new URL(options.endpoint);
+    return `${parsed.protocol}//${parsed.host}`;
+  } catch {
+    return undefined;
+  }
+}
+
+function createGroqTranscriptionClient(options: GroqProviderOptions): GroqAudioTranscriptionClient {
+  const apiKey = options.apiKey ?? process.env.GROQ_API_KEY;
+  if (!apiKey) {
+    throw createTranscriptionProviderAuthError("groq", "missing GROQ_API_KEY");
+  }
+
+  const client = new Groq({
+    apiKey,
+    baseURL: resolveBaseUrl(options),
+    fetch: options.fetchImpl,
+  });
+
+  return client.audio.transcriptions as GroqAudioTranscriptionClient;
+}
+
 export function createGroqProvider(options: GroqProviderOptions = {}): TranscriptionProvider {
-  const fetchImpl = options.fetchImpl ?? fetch;
-  const endpoint = options.endpoint ?? "https://api.groq.com/openai/v1/audio/transcriptions";
   const model = options.model ?? "whisper-large-v3";
 
   return {
@@ -163,50 +211,47 @@ export function createGroqProvider(options: GroqProviderOptions = {}): Transcrip
         throw createTranscriptionProviderFailedError("groq", "mocked provider failure");
       }
 
-      const apiKey = options.apiKey ?? process.env.GROQ_API_KEY;
-      if (!apiKey) {
-        throw createTranscriptionProviderAuthError("groq", "missing GROQ_API_KEY");
-      }
-
-      const media = sourceToGroqInput(request.source);
-      const body = new FormData();
-      body.append(media.key, media.value);
-      body.append("model", model);
-      if (request.requestedLanguage) {
-        body.append("language", request.requestedLanguage);
-      }
-
-      let response: Response;
+      const transcriptionClient = options.client ?? createGroqTranscriptionClient(options);
+      const media = await prepareProviderMediaInput(request.source, "groq");
       try {
-        response = await fetchImpl(endpoint, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-          },
-          body,
-        });
-      } catch (error) {
-        throw createTranscriptionProviderUnavailableError(
-          "groq",
-          error instanceof Error ? error.message : String(error),
-        );
+        const payload: Record<string, unknown> = {
+          model,
+          response_format: "verbose_json",
+          timestamp_granularities: ["segment", "word"],
+        };
+        if (request.requestedLanguage) {
+          payload.language = request.requestedLanguage;
+        }
+        if (media.key === "url") {
+          payload.url = String(media.value);
+        } else {
+          payload.file = media.value;
+        }
+
+        let response: unknown;
+        try {
+          response = await transcriptionClient.create(payload);
+        } catch (error) {
+          const status = extractStatus(error);
+          const detail = extractDetail(error);
+          if (typeof status === "number") {
+            throw mapGroqHttpError(status, detail);
+          }
+          throw createTranscriptionProviderUnavailableError("groq", detail);
+        }
+
+        const normalized = parseGroqResponse(response);
+
+        return {
+          provider: "groq",
+          transcript: normalized.transcript,
+          requestedLanguage: request.requestedLanguage,
+          detectedLanguage: normalized.detectedLanguage,
+          segments: normalized.segments,
+        };
+      } finally {
+        media.cleanup?.();
       }
-
-      if (!response.ok) {
-        const detail = (await response.text()).trim() || `status ${response.status}`;
-        throw mapGroqHttpError(response.status, detail);
-      }
-
-      const payload = await response.json();
-      const normalized = parseGroqResponse(payload);
-
-      return {
-        provider: "groq",
-        transcript: normalized.transcript,
-        requestedLanguage: request.requestedLanguage,
-        detectedLanguage: normalized.detectedLanguage,
-        segments: normalized.segments,
-      };
     },
   };
 }

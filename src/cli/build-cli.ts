@@ -15,6 +15,7 @@ import {
   handleProviderStatus,
   isDeferredCommand,
 } from "./handlers.ts";
+import { handleSetupCommand } from "./setup.ts";
 import { CliError, formatCliError } from "../errors/cli-errors.ts";
 import { isLegacyCommand, throwLegacyCommandGuidance } from "../legacy/compatibility.ts";
 
@@ -22,15 +23,20 @@ interface ParsedArgs {
   showHelp: boolean;
   showVersion: boolean;
   json: boolean;
+  timestamps: boolean;
   provider?: string;
   language?: string;
+  setupGlobal: boolean;
+  setupDryRun: boolean;
+  setupAgent?: string;
   positionals: string[];
 }
 
 function renderHelp(): string {
   const lines = [
     HELP_SECTIONS.usage,
-    `  ${COMMAND_IDENTITY} <input> [--provider <deepgram|groq>] [--language <code>] [--json]`,
+    `  ${COMMAND_IDENTITY} <input> [--provider <deepgram|groq>] [--language <code>] [--timestamps] [--json]`,
+    `  ${COMMAND_IDENTITY} setup <install|skills|mcp> [--global] [--agent <name>] [--dry-run]`,
     `  ${COMMAND_IDENTITY} config <set|get|list> [args] [--json]`,
     `  ${COMMAND_IDENTITY} provider-status [--json]`,
     "",
@@ -43,6 +49,7 @@ function renderHelp(): string {
     `      ${GLOBAL_FLAGS[2]}      Output deterministic JSON format`,
     `      ${GLOBAL_FLAGS[3]} <deepgram|groq>  Select transcription provider (default: deepgram)`,
     `      ${GLOBAL_FLAGS[4]} <code>            Optional language preference`,
+    `      ${GLOBAL_FLAGS[5]}      Include timestamp blocks in transcript output`,
     "",
     HELP_SECTIONS.examples,
     ...HELP_EXAMPLES.map((example) => `  ${example}`),
@@ -56,14 +63,26 @@ function renderHelp(): string {
 
 function parse(argv: string[]): ParsedArgs {
   if (argv.length === 0) {
-    return { showHelp: true, showVersion: false, json: false, positionals: [] };
+    return {
+      showHelp: true,
+      showVersion: false,
+      json: false,
+      timestamps: false,
+      setupGlobal: false,
+      setupDryRun: false,
+      positionals: [],
+    };
   }
 
   let showHelp = false;
   let showVersion = false;
   let json = false;
+  let timestamps = false;
   let provider: string | undefined;
   let language: string | undefined;
+  let setupGlobal = false;
+  let setupDryRun = false;
+  let setupAgent: string | undefined;
   const positionals: string[] = [];
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -81,6 +100,36 @@ function parse(argv: string[]): ParsedArgs {
 
     if (arg === "--json") {
       json = true;
+      continue;
+    }
+
+    if (arg === "--timestamps") {
+      timestamps = true;
+      continue;
+    }
+
+    if (arg === "--global") {
+      setupGlobal = true;
+      continue;
+    }
+
+    if (arg === "--dry-run") {
+      setupDryRun = true;
+      continue;
+    }
+
+    if (arg === "--agent" || arg.startsWith("--agent=")) {
+      const value = arg === "--agent" ? argv[index + 1] : arg.slice("--agent=".length).trim();
+      if (!value || value.startsWith("-")) {
+        throw new CliError("`--agent` requires a value.", {
+          code: "CLI_CONTRACT_VIOLATION",
+          exitCode: 2,
+        });
+      }
+      setupAgent = value;
+      if (arg === "--agent") {
+        index += 1;
+      }
       continue;
     }
 
@@ -127,7 +176,18 @@ function parse(argv: string[]): ParsedArgs {
     positionals.push(arg);
   }
 
-  return { showHelp, showVersion, json, provider, language, positionals };
+  return {
+    showHelp,
+    showVersion,
+    json,
+    timestamps,
+    provider,
+    language,
+    setupGlobal,
+    setupDryRun,
+    setupAgent,
+    positionals,
+  };
 }
 
 export async function runCli(argv: string[]): Promise<number> {
@@ -161,12 +221,44 @@ export async function runCli(argv: string[]): Promise<number> {
       handleDeferredCommand(first, parsed.json);
     }
 
-    if (first === "config") {
-      if (parsed.provider || parsed.language) {
-        throw new CliError("`config` does not support `--provider` or `--language`.", {
+    if (first === "setup") {
+      if (parsed.provider || parsed.language || parsed.timestamps || parsed.json) {
+        throw new CliError("`setup` does not support `--provider`, `--language`, `--timestamps`, or `--json`.", {
           code: "CLI_CONTRACT_VIOLATION",
           exitCode: 2,
-          guidance: ["Use `pi-tube config <set|get|list> ...` without provider/language flags."],
+        });
+      }
+
+      const [subcommand, ...extraSetupArgs] = rest;
+      if (extraSetupArgs.length > 0) {
+        throw new CliError("`setup` accepts only one subcommand at a time.", {
+          code: "CLI_CONTRACT_VIOLATION",
+          exitCode: 2,
+        });
+      }
+      console.log(
+        handleSetupCommand(subcommand, {
+          global: parsed.setupGlobal,
+          dryRun: parsed.setupDryRun,
+          agent: parsed.setupAgent,
+        }),
+      );
+      return 0;
+    }
+
+    if (parsed.setupGlobal || parsed.setupDryRun || parsed.setupAgent) {
+      throw new CliError("`--global`, `--agent`, and `--dry-run` are only valid with `setup`.", {
+        code: "CLI_CONTRACT_VIOLATION",
+        exitCode: 2,
+      });
+    }
+
+    if (first === "config") {
+      if (parsed.provider || parsed.language || parsed.timestamps) {
+        throw new CliError("`config` does not support `--provider`, `--language`, or `--timestamps`.", {
+          code: "CLI_CONTRACT_VIOLATION",
+          exitCode: 2,
+          guidance: ["Use `pi-tube config <set|get|list> ...` without provider/language/timestamp flags."],
         });
       }
 
@@ -182,8 +274,8 @@ export async function runCli(argv: string[]): Promise<number> {
           guidance: ["Run `pi-tube provider-status` or `pi-tube --json provider-status`."],
         });
       }
-      if (parsed.provider || parsed.language) {
-        throw new CliError("`provider-status` does not support `--provider` or `--language`.", {
+      if (parsed.provider || parsed.language || parsed.timestamps) {
+        throw new CliError("`provider-status` does not support `--provider`, `--language`, or `--timestamps`.", {
           code: "CLI_CONTRACT_VIOLATION",
           exitCode: 2,
           guidance: ["Use `pi-tube provider-status` for readiness inspection."],
@@ -200,6 +292,7 @@ export async function runCli(argv: string[]): Promise<number> {
       extraPositionals: rest,
       provider: parsed.provider,
       language: parsed.language,
+      timestamps: parsed.timestamps,
     });
     console.log(formatBaselineIntakeResult(result));
     return 0;

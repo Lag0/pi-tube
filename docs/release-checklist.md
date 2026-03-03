@@ -33,5 +33,6 @@ bun test test/cli/error-exit-codes.test.ts
 ## 5. Docs and Script Alignment
 
 - Confirm `.github/workflows/ci.yml` runs `bun test` and `bun run verify:fixtures`.
+- Confirm `.github/workflows/publish.yml` runs npm provenance publish with version-exists guard.
 - Confirm `package.json` contains `verify:fixtures`.
 - Confirm README references this checklist and fixture verification command.

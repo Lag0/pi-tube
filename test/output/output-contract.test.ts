@@ -51,6 +51,7 @@ describe("output contract", () => {
       },
       {
         generatedAt: "2026-03-02T23:00:00.000Z",
+        includeTimestamps: true,
       },
     );
 
@@ -69,7 +70,7 @@ describe("output contract", () => {
       full_text: "hello world",
       segments: undefined,
     });
-    expect(artifact.summary.key_points[4]).toBe("Segment count: 0");
+    expect(artifact.summary.key_points[4]).toBe("Timestamp mode: off (use --timestamps)");
   });
 
   test("compacts dense timestamp streams into readable chunks", () => {
@@ -92,6 +93,7 @@ describe("output contract", () => {
       },
       {
         generatedAt: "2026-03-02T23:00:00.000Z",
+        includeTimestamps: true,
       },
     );
 
@@ -101,5 +103,22 @@ describe("output contract", () => {
     expect(compacted[0]?.start_ms).toBe(200);
     expect(compacted[0]?.text.includes(" ")).toBe(true);
     expect(compacted[compacted.length - 1]?.end_ms).toBe(100120);
+  });
+
+  test("keeps timestamps disabled by default even when provider segments exist", () => {
+    const artifact = buildOutputArtifact(
+      {
+        ...baseResult,
+        segments: [{ startMs: 0, endMs: 600, text: "hello" }],
+      } as TranscriptionExecutionResult & {
+        segments: { startMs: number; endMs: number; text: string }[];
+      },
+      {
+        generatedAt: "2026-03-02T23:00:00.000Z",
+      },
+    );
+
+    expect(artifact.transcript.segments).toBeUndefined();
+    expect(artifact.summary.key_points[4]).toBe("Timestamp mode: off (use --timestamps)");
   });
 });

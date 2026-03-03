@@ -39,6 +39,7 @@ describe("output parity", () => {
   test("markdown and JSON remain equivalent views of one canonical artifact", () => {
     const artifact = buildOutputArtifact(executionResult, {
       generatedAt: "2026-03-02T23:50:00.000Z",
+      includeTimestamps: true,
     });
     const markdown = renderMarkdown(artifact);
     const payload = JSON.parse(renderJson(artifact)) as {

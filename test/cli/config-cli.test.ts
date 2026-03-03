@@ -29,6 +29,14 @@ describe("config store", () => {
     expect(configPath).toBe(path.join(cwd, ".tmp/pi-tube-test-config.json"));
   });
 
+  test("uses ~/.pi-tube/config.json as default home config path", () => {
+    const configPath = resolveConfigPath({
+      env: { HOME: "/tmp/pi-tube-home" },
+    });
+
+    expect(configPath).toBe("/tmp/pi-tube-home/.pi-tube/config.json");
+  });
+
   test("supports deterministic set/get/list and stable serialization", () => {
     const tempDir = mkdtempSync(path.join(os.tmpdir(), "pi-tube-config-store-"));
     const configPath = path.join(tempDir, "config.json");

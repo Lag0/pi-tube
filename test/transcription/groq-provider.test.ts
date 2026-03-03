@@ -15,16 +15,13 @@ const request: TranscriptionRequest = {
 
 describe("groq provider", () => {
   test("maps successful response to canonical result and forwards requested language", async () => {
-    let capturedLanguage: FormDataEntryValue | null = null;
+    let capturedLanguage: unknown = null;
     const provider = createGroqProvider({
-      apiKey: "groq-test",
-      fetchImpl: async (_input, init) => {
-        const body = init?.body as FormData;
-        capturedLanguage = body.get("language");
-
-        return new Response(JSON.stringify({ text: "hello from groq", language: "es" }), {
-          status: 200,
-        });
+      client: {
+        async create(payload) {
+          capturedLanguage = payload.language;
+          return { text: "hello from groq", language: "es" };
+        },
       },
     });
 
@@ -39,19 +36,18 @@ describe("groq provider", () => {
 
   test("normalizes optional segment timestamps when provider returns them", async () => {
     const provider = createGroqProvider({
-      apiKey: "groq-test",
-      fetchImpl: async () =>
-        new Response(
-          JSON.stringify({
+      client: {
+        async create() {
+          return {
             text: "hello from groq",
             language: "es",
             segments: [
               { start: 0.2, end: 0.8, text: "hello" },
               { start: 0.81, end: 1.1, text: "from" },
             ],
-          }),
-          { status: 200 },
-        ),
+          };
+        },
+      },
     });
 
     const result = await provider.transcribe(request);
@@ -64,8 +60,13 @@ describe("groq provider", () => {
 
   test("maps auth failures to TRANSCRIPTION_PROVIDER_AUTH", async () => {
     const provider = createGroqProvider({
-      apiKey: "groq-test",
-      fetchImpl: async () => new Response("unauthorized", { status: 401 }),
+      client: {
+        async create() {
+          const error = new Error("unauthorized") as Error & { status: number };
+          error.status = 401;
+          throw error;
+        },
+      },
     });
 
     await expect(provider.transcribe(request)).rejects.toMatchObject({
@@ -75,8 +76,13 @@ describe("groq provider", () => {
 
   test("maps rate limiting to TRANSCRIPTION_PROVIDER_RATE_LIMIT", async () => {
     const provider = createGroqProvider({
-      apiKey: "groq-test",
-      fetchImpl: async () => new Response("too many requests", { status: 429 }),
+      client: {
+        async create() {
+          const error = new Error("too many requests") as Error & { status: number };
+          error.status = 429;
+          throw error;
+        },
+      },
     });
 
     await expect(provider.transcribe(request)).rejects.toMatchObject({
@@ -86,8 +92,11 @@ describe("groq provider", () => {
 
   test("maps malformed provider payload to TRANSCRIPTION_PROVIDER_INVALID_RESPONSE", async () => {
     const provider = createGroqProvider({
-      apiKey: "groq-test",
-      fetchImpl: async () => new Response(JSON.stringify({ language: "es" }), { status: 200 }),
+      client: {
+        async create() {
+          return { language: "es" };
+        },
+      },
     });
 
     await expect(provider.transcribe(request)).rejects.toMatchObject({

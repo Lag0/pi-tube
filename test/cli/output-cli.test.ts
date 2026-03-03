@@ -28,12 +28,41 @@ describe("CLI output contract", () => {
     expect(stdout).toContain("provider: \"deepgram\"");
     expect(stdout).toContain("## Summary");
     expect(stdout).toContain("### Key Points");
-    expect(stdout).toContain("## Transcript");
+    expect(stdout).not.toContain("## Transcript");
     expect(stdout).toContain("### Full Text");
     expect(stdout).toContain("hello deepgram");
   });
 
   test("renders timestamped transcript lines when provider segments are available", () => {
+    const result = runCli(["--timestamps", mediaUrl], {
+      PI_TUBE_TEST_DEEPGRAM_RESPONSE: JSON.stringify({
+        results: {
+          channels: [
+            {
+              alternatives: [
+                {
+                  transcript: "hello world",
+                  words: [
+                    { word: "hello", start: 0.2, end: 0.7 },
+                    { word: "world", start: 0.71, end: 1.2 },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    });
+    const stdout = result.stdout.toString();
+
+    expect(result.exitCode).toBe(0);
+    expect(stdout).toContain("## Transcript");
+    expect(stdout).toContain("### Timestamped Segments");
+    expect(stdout).toContain("- [00:00:00.200 - 00:00:00.700] hello");
+    expect(stdout).toContain("- [00:00:00.710 - 00:00:01.200] world");
+  });
+
+  test("keeps timestamp blocks disabled by default", () => {
     const result = runCli([mediaUrl], {
       PI_TUBE_TEST_DEEPGRAM_RESPONSE: JSON.stringify({
         results: {
@@ -56,9 +85,9 @@ describe("CLI output contract", () => {
     const stdout = result.stdout.toString();
 
     expect(result.exitCode).toBe(0);
-    expect(stdout).toContain("### Timestamped Segments");
-    expect(stdout).toContain("- [00:00:00.200 - 00:00:00.700] hello");
-    expect(stdout).toContain("- [00:00:00.710 - 00:00:01.200] world");
+    expect(stdout).not.toContain("## Transcript");
+    expect(stdout).not.toContain("### Timestamped Segments");
+    expect(stdout).toContain("Timestamp mode: off (use --timestamps)");
   });
 
   test("returns deterministic schema-versioned JSON when --json is used", () => {
@@ -102,8 +131,8 @@ describe("CLI output contract", () => {
       }),
     };
 
-    const markdownResult = runCli([mediaUrl], env);
-    const jsonResult = runCli(["--json", mediaUrl], env);
+    const markdownResult = runCli(["--timestamps", mediaUrl], env);
+    const jsonResult = runCli(["--timestamps", "--json", mediaUrl], env);
 
     expect(markdownResult.exitCode).toBe(0);
     expect(jsonResult.exitCode).toBe(0);

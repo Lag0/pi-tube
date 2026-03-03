@@ -47,6 +47,68 @@ async function defaultYtDlpExecutor(args: string[]): Promise<YtDlpExecutionResul
   return { exitCode, stdout, stderr };
 }
 
+interface ParsedFormatLike {
+  url?: unknown;
+  protocol?: unknown;
+  ext?: unknown;
+  vcodec?: unknown;
+  acodec?: unknown;
+  format_note?: unknown;
+}
+
+function isString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function isLikelyImage(format: ParsedFormatLike): boolean {
+  const ext = isString(format.ext) ? format.ext.toLowerCase() : "";
+  const note = isString(format.format_note) ? format.format_note.toLowerCase() : "";
+  return ext === "jpg" || ext === "jpeg" || ext === "png" || ext === "webp" || ext === "gif" || note.includes("storyboard");
+}
+
+function isSupportedProtocol(format: ParsedFormatLike): boolean {
+  const protocol = isString(format.protocol) ? format.protocol.toLowerCase() : "";
+  return protocol !== "mhtml";
+}
+
+function hasUsableMediaUrl(format: ParsedFormatLike): format is ParsedFormatLike & { url: string } {
+  return isString(format.url) && isSupportedProtocol(format) && !isLikelyImage(format);
+}
+
+function isAudioOnly(format: ParsedFormatLike): boolean {
+  const vcodec = isString(format.vcodec) ? format.vcodec.toLowerCase() : "";
+  const acodec = isString(format.acodec) ? format.acodec.toLowerCase() : "";
+  return vcodec === "none" && acodec !== "" && acodec !== "none";
+}
+
+function pickPreferredMediaUrl(parsed: Record<string, unknown>): string | undefined {
+  if (isString(parsed.url)) {
+    return parsed.url;
+  }
+
+  const requestedFormats = Array.isArray(parsed.requested_formats) ? (parsed.requested_formats as ParsedFormatLike[]) : [];
+  const requestedCandidates = requestedFormats.filter(hasUsableMediaUrl);
+  const requestedAudio = requestedCandidates.find(isAudioOnly);
+  if (requestedAudio?.url) {
+    return requestedAudio.url;
+  }
+  if (requestedCandidates[0]?.url) {
+    return requestedCandidates[0].url;
+  }
+
+  const formats = Array.isArray(parsed.formats) ? (parsed.formats as ParsedFormatLike[]) : [];
+  const formatCandidates = formats.filter(hasUsableMediaUrl);
+  const formatAudio = formatCandidates.find(isAudioOnly);
+  if (formatAudio?.url) {
+    return formatAudio.url;
+  }
+  if (formatCandidates[0]?.url) {
+    return formatCandidates[0].url;
+  }
+
+  return undefined;
+}
+
 function parseYtDlpOutput(stdout: string): YtDlpResult {
   let parsed: Record<string, unknown>;
 
@@ -56,14 +118,7 @@ function parseYtDlpOutput(stdout: string): YtDlpResult {
     throw createYtDlpMalformedOutputError();
   }
 
-  const mediaUrl =
-    typeof parsed.url === "string"
-      ? parsed.url
-      : Array.isArray(parsed.formats)
-        ? (parsed.formats.find(
-            (item) => typeof item === "object" && item !== null && typeof (item as { url?: unknown }).url === "string",
-          ) as { url: string } | undefined)?.url
-        : undefined;
+  const mediaUrl = pickPreferredMediaUrl(parsed);
 
   if (!mediaUrl) {
     throw createYtDlpMalformedOutputError();
@@ -99,7 +154,14 @@ export async function resolveYouTubeWithYtDlp(
   let result: YtDlpExecutionResult;
 
   try {
-    result = await executor(["--no-warnings", "--no-playlist", "--dump-single-json", input]);
+    result = await executor([
+      "--no-warnings",
+      "--no-playlist",
+      "--dump-single-json",
+      "-f",
+      "bestaudio[ext=m4a]/bestaudio/best",
+      input,
+    ]);
   } catch (error) {
     if (error instanceof CliError) {
       throw error;

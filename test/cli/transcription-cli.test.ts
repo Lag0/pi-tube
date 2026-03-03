@@ -30,6 +30,7 @@ describe("CLI transcription integration", () => {
     expect(result.exitCode).toBe(0);
     expect(stdout).toContain('source_kind: "direct_url"');
     expect(stdout).toContain('provider: "deepgram"');
+    expect(stdout).not.toContain("## Transcript");
     expect(stdout).toContain("### Full Text");
     expect(stdout).toContain("hello deepgram");
   });

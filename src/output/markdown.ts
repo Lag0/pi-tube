@@ -39,9 +39,12 @@ function formatTimestamp(milliseconds: number): string {
 }
 
 export function renderMarkdown(artifact: OutputArtifact): string {
+  const includeTranscriptHeader = artifact.summary.key_points.some((point) =>
+    point.startsWith("Timestamp mode: on"),
+  );
   const segments = artifact.transcript.segments ?? [];
   const segmentLines =
-    segments.length > 0
+    includeTranscriptHeader && segments.length > 0
       ? [
           "",
           "### Timestamped Segments",
@@ -51,6 +54,7 @@ export function renderMarkdown(artifact: OutputArtifact): string {
           ),
         ]
       : [];
+  const transcriptHeaderLines = includeTranscriptHeader ? ["", "## Transcript"] : [];
 
   const lines = [
     buildFrontmatter(artifact),
@@ -60,8 +64,7 @@ export function renderMarkdown(artifact: OutputArtifact): string {
     "",
     "### Key Points",
     ...artifact.summary.key_points.map((point) => `- ${point}`),
-    "",
-    "## Transcript",
+    ...transcriptHeaderLines,
     ...segmentLines,
     "",
     "### Full Text",
