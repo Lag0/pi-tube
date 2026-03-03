@@ -1,5 +1,10 @@
+import { readFileSync } from "node:fs";
+
 export const COMMAND_IDENTITY = "pi-tube";
-export const APP_VERSION = "0.2.0";
+
+const PACKAGE_JSON_URL = new URL("../../package.json", import.meta.url);
+const PACKAGE_JSON = JSON.parse(readFileSync(PACKAGE_JSON_URL, "utf8")) as { version?: string };
+export const APP_VERSION = typeof PACKAGE_JSON.version === "string" ? PACKAGE_JSON.version : "0.0.0";
 
 export const GLOBAL_FLAGS = ["--help", "--version", "--json", "--provider", "--language", "--timestamps"] as const;
 

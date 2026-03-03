@@ -11,12 +11,12 @@ function runCli(args: string[]) {
 
 describe("CLI identity and placeholders", () => {
   test("keeps command identity as pi-tube", () => {
-    const pkg = JSON.parse(readFileSync("package.json", "utf8")) as { name: string };
+    const pkg = JSON.parse(readFileSync("package.json", "utf8")) as { name: string; version: string };
     const result = runCli(["--version"]);
 
     expect(pkg.name).toBe("@syxs/pi-tube");
     expect(result.exitCode).toBe(0);
-    expect(result.stdout.toString().trim().startsWith("pi-tube ")).toBe(true);
+    expect(result.stdout.toString().trim()).toBe(`pi-tube ${pkg.version}`);
   });
 
   test("returns deterministic non-zero guidance for deferred command paths", () => {
