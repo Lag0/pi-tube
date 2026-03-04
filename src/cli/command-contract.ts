@@ -176,7 +176,7 @@ const SETUP_HELP_DOCUMENT: HelpDocument = {
   summary: "Install and bootstrap skill workflows from the CLI.",
   usage: [
     `${COMMAND_IDENTITY} setup install`,
-    `${COMMAND_IDENTITY} setup skills [--global] [--agent <name>]`,
+    `${COMMAND_IDENTITY} setup skills [--global] [--agent <name>] [--yes|--no-prompt]`,
     `${COMMAND_IDENTITY} setup mcp`,
   ],
   commandGroups: [
@@ -192,6 +192,8 @@ const SETUP_HELP_DOCUMENT: HelpDocument = {
   options: [
     { term: "--global, -g", description: "Install skills in global target scope." },
     { term: "--agent <name>, -a <name>", description: "Target a specific agent profile." },
+    { term: "--yes, -y", description: "Run setup skills in non-interactive mode." },
+    { term: "--no-prompt, --non-interactive", description: "Alias for non-interactive setup execution." },
     { term: "--no-color", description: "Disable ANSI colors in help output." },
   ],
   examples: [
@@ -199,10 +201,11 @@ const SETUP_HELP_DOCUMENT: HelpDocument = {
     `${COMMAND_IDENTITY} setup skills`,
     `${COMMAND_IDENTITY} setup skills --global`,
     `${COMMAND_IDENTITY} setup skills --agent codex`,
+    `${COMMAND_IDENTITY} setup skills --global --yes`,
   ],
   notes: [
     "Interactive setup remains the default for humans.",
-    "Automation should use explicit non-interactive setup flags when available.",
+    "Automation should use explicit non-interactive setup flags (`--yes` or `--no-prompt`).",
   ],
 };
 

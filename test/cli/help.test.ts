@@ -96,7 +96,9 @@ describe("CLI help contract", () => {
     expect(configHelp).not.toContain("Deferred command");
     expect(configHelpViaHelpCommand).toContain("pi-tube config");
     expect(setupHelp).toContain("pi-tube setup");
-    expect(setupHelp).toContain("setup skills [--global] [--agent <name>]");
+    expect(setupHelp).toContain("setup skills [--global] [--agent <name>] [--yes|--no-prompt]");
+    expect(setupHelp).toContain("Interactive setup remains the default for humans.");
+    expect(setupHelp).toContain("--yes, -y");
     expect(setupHelp).not.toContain("provider-status [--json]");
   });
 });
