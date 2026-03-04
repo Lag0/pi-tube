@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: phase_07_in_progress
-stopped_at: Completed 07-01-PLAN.md
-last_updated: "2026-03-04T14:25:00Z"
-last_activity: 2026-03-04 - Executed 07-01 (help foundation with scoped command help and themed renderer)
+status: executing
+stopped_at: Completed 07-02-PLAN.md
+last_updated: "2026-03-04T15:00:00Z"
+last_activity: 2026-03-04 - Executed 07-02 (friendly config aliases + deterministic validation alignment)
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 27
-  completed_plans: 24
-  percent: 89
+  completed_plans: 25
+  percent: 93
 ---
 
 # Project State
@@ -26,18 +26,18 @@ See: .planning/PROJECT.md (updated 2026-03-02)
 ## Current Position
 
 Phase: 7 of 7 (CLI UX Overhaul)
-Plan: 1 of 4 executed
+Plan: 2 of 4 executed
 Status: Phase 7 in progress
-Last activity: 2026-03-04 - Executed 07-01 (scoped help + colorized renderer)
+Last activity: 2026-03-04 - Executed 07-02 (friendly config aliases + deterministic validation alignment)
 
-Progress: [█████████░] 89%
+Progress: [█████████░] 93%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 24
-- Average duration: 9.2 min
-- Total execution time: 3.68 hours
+- Total plans completed: 25
+- Average duration: 10.2 min
+- Total execution time: 4.23 hours
 
 **By Phase:**
 
@@ -51,8 +51,8 @@ Progress: [█████████░] 89%
 | 6 | 4 | 104 min | 26.0 min |
 
 **Recent Trend:**
-- Last 5 plans: 06-01 (34 min), 06-02 (27 min), 06-03 (24 min), 06-04 (19 min), 07-01 (42 min)
-- Trend: Plan duration increased with UX refactor scope and contract-test expansion in Phase 7.
+- Last 5 plans: 06-02 (27 min), 06-03 (24 min), 06-04 (19 min), 07-01 (42 min), 07-02 (33 min)
+- Trend: CLI UX refactor plans remain longer due migration-safe behavior and expanded regression coverage.
 
 *Updated after each plan completion*
 | Phase 03 P01 | 8 min | 3 tasks | 7 files |
@@ -71,6 +71,7 @@ Progress: [█████████░] 89%
 | Phase 06 P03 | 24 min | 3 tasks | 7 files |
 | Phase 06 P04 | 19 min | 3 tasks | 5 files |
 | Phase 07 P01 | 42 min | 3 tasks | 6 files |
+| Phase 07 P02 | 33 min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -121,12 +122,15 @@ Recent decisions affecting current work:
 - [Phase 07 Planning]: Config UX will gain intuitive command aliases while preserving legacy dot-path compatibility for existing automation.
 - [Phase 07 Execution]: Help rendering now uses a shared document+theme pipeline with scoped `help` routes for root/config/setup/provider status.
 - [Phase 07 Execution]: `--no-color` is a first-class help flag to guarantee readable deterministic fallback output.
+- [Phase 07 Execution]: Friendly `config provider|language` aliases map to canonical keys while preserving legacy dot-path commands.
+- [Phase 07 Execution]: Config validation now normalizes friendly and legacy failures to `CLI_CONTRACT_VIOLATION`.
 
 ### Roadmap Evolution
 
 - Phase 7 added: Melhorar UX da CLI: help colorido com subcomandos, layout intuitivo e paridade 1:1 com experiência do OpenClaw
 - Phase 7 planned: 4 plans across 3 waves (help foundation, config/setup UX, regression lock)
 - Phase 7 execution started: 07-01 completed with scoped help and color/no-color support
+- Phase 7 wave 2 progress: 07-02 completed with config alias migration path and deterministic validation
 
 ### Pending Todos
 
@@ -146,6 +150,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-04T13:49:37.460Z
-Stopped at: Completed 07-01-PLAN.md
-Resume file: .planning/phases/07-melhorar-ux-da-cli-help-colorido-com-subcomandos-layout-intuitivo-e-paridade-1-1-com-experi-ncia-do-openclaw/07-02-PLAN.md
+Last session: 2026-03-04T13:55:21.322Z
+Stopped at: Completed 07-02-PLAN.md
+Resume file: .planning/phases/07-melhorar-ux-da-cli-help-colorido-com-subcomandos-layout-intuitivo-e-paridade-1-1-com-experi-ncia-do-openclaw/07-03-PLAN.md
