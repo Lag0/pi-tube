@@ -65,11 +65,22 @@ describe("CLI error exits and formatting", () => {
   test("keeps config validation deterministic for friendly and legacy routes", () => {
     const friendlyInvalidProvider = runCli(["config", "provider", "set", "invalid-provider"]);
     const legacyInvalidProvider = runCli(["config", "set", "defaults.provider", "invalid-provider"]);
+    const missingFriendlyValue = runCli(["config", "provider", "env", "groq"]);
 
     expect(friendlyInvalidProvider.exitCode).toBe(2);
     expect(friendlyInvalidProvider.stderr.toString()).toContain("[CLI_CONTRACT_VIOLATION]");
 
     expect(legacyInvalidProvider.exitCode).toBe(2);
     expect(legacyInvalidProvider.stderr.toString()).toContain("[CLI_CONTRACT_VIOLATION]");
+
+    expect(missingFriendlyValue.exitCode).toBe(2);
+    expect(missingFriendlyValue.stderr.toString()).toContain("[CLI_CONTRACT_VIOLATION]");
+  });
+
+  test("keeps setup automation flags scoped to setup command", () => {
+    const misplacedSetupFlag = runCli(["--yes", mediaUrl]);
+
+    expect(misplacedSetupFlag.exitCode).toBe(2);
+    expect(misplacedSetupFlag.stderr.toString()).toContain("[CLI_CONTRACT_VIOLATION]");
   });
 });

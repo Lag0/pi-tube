@@ -69,6 +69,18 @@ describe("setup command", () => {
     expect(stdout).toContain("--yes");
   });
 
+  test("supports --non-interactive alias for automation", () => {
+    const result = runCli(["setup", "skills", "--global", "--non-interactive"], {
+      PI_TUBE_TEST_SETUP_DRY_RUN: "1",
+    });
+    const stdout = result.stdout.toString();
+
+    expect(result.exitCode).toBe(0);
+    expect(stdout).toContain("Running: npx -y skills@1.4.1 add https://github.com/Lag0/pi-tube/tree/main");
+    expect(stdout).toContain("--global");
+    expect(stdout).toContain("--yes");
+  });
+
   test("returns deterministic guidance for setup mcp placeholder", () => {
     const result = runCli(["setup", "mcp"]);
     const stderr = result.stderr.toString();

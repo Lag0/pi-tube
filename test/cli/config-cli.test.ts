@@ -106,6 +106,39 @@ describe("config command integration", () => {
     }
   });
 
+  test("returns deterministic json payloads for friendly alias actions", () => {
+    const tempDir = mkdtempSync(path.join(os.tmpdir(), "pi-tube-config-friendly-json-"));
+    const configPath = path.join(tempDir, "config.json");
+
+    try {
+      const env = { PI_TUBE_CONFIG_PATH: configPath };
+
+      const providerSet = runCli(["--json", "config", "provider", "set", "deepgram"], env);
+      expect(providerSet.exitCode).toBe(0);
+      const providerPayload = JSON.parse(providerSet.stdout.toString()) as {
+        action: string;
+        key: string;
+        value: string;
+      };
+      expect(providerPayload.action).toBe("provider.set");
+      expect(providerPayload.key).toBe("defaults.provider");
+      expect(providerPayload.value).toBe("deepgram");
+
+      const languageSet = runCli(["--json", "config", "language", "set", "en"], env);
+      expect(languageSet.exitCode).toBe(0);
+      const languagePayload = JSON.parse(languageSet.stdout.toString()) as {
+        action: string;
+        key: string;
+        value: string;
+      };
+      expect(languagePayload.action).toBe("language.set");
+      expect(languagePayload.key).toBe("defaults.language");
+      expect(languagePayload.value).toBe("en");
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
   test("supports deterministic set/get/list output in text and json modes", () => {
     const tempDir = mkdtempSync(path.join(os.tmpdir(), "pi-tube-config-cli-"));
     const configPath = path.join(tempDir, "config.json");
