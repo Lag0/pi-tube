@@ -36,7 +36,10 @@ export function createTranscriptionProviderNotConfiguredError(provider: string):
   return new CliError(`Provider \`${provider}\` is not configured yet.`, {
     code: "TRANSCRIPTION_PROVIDER_NOT_CONFIGURED",
     exitCode: 2,
-    guidance: ["Choose a configured provider or register the provider adapter."],
+    guidance: [
+      `Configure credentials for \`${provider}\` via \`pi-tube config provider env ${provider} <ENV_VAR>\`.`,
+      "Run `pi-tube provider-status` to inspect missing credentials.",
+    ],
   });
 }
 

@@ -218,10 +218,36 @@ function asPrintableValue(value: unknown): string {
   return String(value);
 }
 
+function isSensitiveConfigKey(key: string): boolean {
+  return key.endsWith(".api_key");
+}
+
+function maskSecretValue(value: unknown): string {
+  const printable = asPrintableValue(value);
+  if (printable === "(unset)") {
+    return printable;
+  }
+
+  const compact = String(value ?? "");
+  if (compact.length <= 6) {
+    return "***";
+  }
+
+  return `${compact.slice(0, 3)}***${compact.slice(-2)}`;
+}
+
+function toDisplayConfigValue(key: string, value: unknown): string {
+  if (isSensitiveConfigKey(key)) {
+    return maskSecretValue(value);
+  }
+
+  return asPrintableValue(value);
+}
+
 function formatConfigListText(configPath: string, values: Record<string, unknown>): string {
   const lines = ["[CONFIG_LIST]", `config_path=${configPath}`];
   for (const [key, value] of Object.entries(values)) {
-    lines.push(`${key}=${asPrintableValue(value)}`);
+    lines.push(`${key}=${toDisplayConfigValue(key, value)}`);
   }
   return lines.join("\n");
 }
@@ -258,6 +284,26 @@ function requireConfigProviderId(input: string): "deepgram" | "groq" {
   });
 }
 
+function requireEnvVarName(value: string): string {
+  const normalized = value.trim();
+  const envVarPattern = /^[A-Z_][A-Z0-9_]*$/;
+  if (envVarPattern.test(normalized)) {
+    return normalized;
+  }
+
+  throw new CliError(
+    "`config provider env` expects an environment variable name (for example `GROQ_API_KEY`), not a raw key value.",
+    {
+      code: "CLI_CONTRACT_VIOLATION",
+      exitCode: 2,
+      guidance: [
+        "Use `pi-tube config provider env <provider> <ENV_VAR>` with an env var name.",
+        "If you intentionally want plaintext storage, use `pi-tube config provider key <provider> <api_key>`.",
+      ],
+    },
+  );
+}
+
 function formatConfigGetResult({
   json,
   configPath,
@@ -277,7 +323,7 @@ function formatConfigGetResult({
         command: "config",
         action,
         key,
-        value: value ?? null,
+        value: value === undefined || value === null ? null : toDisplayConfigValue(key, value),
         config_path: configPath,
       },
       null,
@@ -285,7 +331,7 @@ function formatConfigGetResult({
     );
   }
 
-  return `[CONFIG_GET] key=${key} value=${asPrintableValue(value)} config_path=${configPath}`;
+  return `[CONFIG_GET] key=${key} value=${toDisplayConfigValue(key, value)} config_path=${configPath}`;
 }
 
 function formatConfigSetResult({
@@ -307,7 +353,7 @@ function formatConfigSetResult({
         command: "config",
         action,
         key,
-        value: value ?? null,
+        value: value === undefined || value === null ? null : toDisplayConfigValue(key, value),
         config_path: configPath,
       },
       null,
@@ -315,7 +361,7 @@ function formatConfigSetResult({
     );
   }
 
-  return `[CONFIG_SET] key=${key} value=${asPrintableValue(value)} config_path=${configPath}`;
+  return `[CONFIG_SET] key=${key} value=${toDisplayConfigValue(key, value)} config_path=${configPath}`;
 }
 
 export function handleConfigCommand({
@@ -444,10 +490,11 @@ export function handleConfigCommand({
       }
 
       const providerId = requireConfigProviderId(provider);
+      const normalizedValue = providerAction === "env" ? requireEnvVarName(valueInput) : valueInput;
       const key = providerAction === "env"
         ? (`providers.${providerId}.api_key_env` as ConfigKey)
         : (`providers.${providerId}.api_key` as ConfigKey);
-      withConfigValidation(() => setConfigValue(key, valueInput, options));
+      withConfigValidation(() => setConfigValue(key, normalizedValue, options));
       const value = withConfigValidation(() =>
         getConfigValue(key, { ...options, env: options?.env ?? process.env }));
       return formatConfigSetResult({ json, configPath, action: `provider.${providerAction}`, key, value });

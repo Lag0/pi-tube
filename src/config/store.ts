@@ -143,6 +143,16 @@ function setProvider(value: string): TranscriptionProviderId {
   throw new Error("`defaults.provider` must be `deepgram` or `groq`.");
 }
 
+function validateEnvVarName(value: string, key: ConfigKey): string {
+  const normalized = value.trim();
+  const envVarPattern = /^[A-Z_][A-Z0-9_]*$/;
+  if (!envVarPattern.test(normalized)) {
+    throw new Error(`Config value for \`${key}\` must be an environment variable name (for example GROQ_API_KEY).`);
+  }
+
+  return normalized;
+}
+
 export function setConfigValue(
   key: string,
   value: string,
@@ -166,13 +176,13 @@ export function setConfigValue(
       config.providers.deepgram.api_key = trimmedValue;
       break;
     case "providers.deepgram.api_key_env":
-      config.providers.deepgram.api_key_env = trimmedValue;
+      config.providers.deepgram.api_key_env = validateEnvVarName(trimmedValue, key);
       break;
     case "providers.groq.api_key":
       config.providers.groq.api_key = trimmedValue;
       break;
     case "providers.groq.api_key_env":
-      config.providers.groq.api_key_env = trimmedValue;
+      config.providers.groq.api_key_env = validateEnvVarName(trimmedValue, key);
       break;
   }
 
