@@ -122,7 +122,7 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -132,3 +132,23 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 4. Transcription Providers | 4/4 | Complete   | 2026-03-02 |
 | 5. Output Contracts | 4/4 | Complete | 2026-03-02 |
 | 6. Reliability & Release Gates | 4/4 | Complete | 2026-03-02 |
+| 7. CLI UX Overhaul | 1/4 | In Progress | - |
+
+### Phase 7: Melhorar UX da CLI: help colorido com subcomandos, layout intuitivo e paridade 1:1 com experiência do OpenClaw
+
+**Goal**: Entregar uma UX de CLI moderna e intuitiva com help limpo, ajuda por subcomando, e fluxos de setup/config mais humanos sem quebrar automação determinística.
+**Depends on**: Phase 6
+**Requirements**: CLI-01, CLI-02, CLI-03, ERR-02
+**Success Criteria** (what must be TRUE):
+  1. `pi-tube help`, `pi-tube --help`, `pi-tube config --help`, e `pi-tube setup --help` entregam ajuda específica e fácil de navegar.
+  2. Output de help suporta cor por padrão e fallback claro com `--no-color`.
+  3. Configuração fica mais intuitiva para humanos, mantendo compatibilidade com comandos legacy existentes.
+  4. Setup mantém padrão interativo para humanos e oferece caminho não interativo para AIs/automação executando comandos reais.
+  5. Melhorias de UX ficam protegidas por testes de contrato para evitar regressões.
+**Plans:** 4 plans
+
+Plans:
+- [x] 07-01: Reestruturar fundação de comandos/help com suporte a help por subcomando e tema visual
+- [ ] 07-02: Redesenhar UX de `config` com aliases intuitivos preservando compatibilidade legacy
+- [ ] 07-03: Consolidar UX de `setup` para humano (interativo) e AI (não interativo executável)
+- [ ] 07-04: Fechar regressões de UX/ajuda com testes e alinhamento final de documentação

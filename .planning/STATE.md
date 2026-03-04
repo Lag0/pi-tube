@@ -2,13 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: phase_06_complete
-last_updated: "2026-03-02T23:13:24Z"
+status: phase_07_in_progress
+stopped_at: Completed 07-01-PLAN.md
+last_updated: "2026-03-04T14:25:00Z"
+last_activity: 2026-03-04 - Executed 07-01 (help foundation with scoped command help and themed renderer)
 progress:
-  total_phases: 6
+  total_phases: 7
   completed_phases: 6
-  total_plans: 23
-  completed_plans: 23
+  total_plans: 27
+  completed_plans: 24
+  percent: 89
 ---
 
 # Project State
@@ -18,23 +21,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-02)
 
 **Core value:** Turn public media inputs into trustworthy, structured, ready-to-use knowledge artifacts fast.
-**Current focus:** Phase 6 complete — reliability release gates implemented and verified.
+**Current focus:** Phase 7 execution in progress — Wave 2 (config/setup UX) is next.
 
 ## Current Position
 
-Phase: 6 of 6 (Reliability & Release Gates)
-Plan: 4 of 4 executed
-Status: Phase 6 complete — all v1 planned phases executed
-Last activity: 2026-03-04 - Completed quick task 3: gostaria que o output padrão da resposta fosse na ~/.pi-tube/YYYY-MM-DD-(titulo do video, nome do arquivo). e no stdout do terminal linkasse esse arquivo para poder clicar e abri-lo
+Phase: 7 of 7 (CLI UX Overhaul)
+Plan: 1 of 4 executed
+Status: Phase 7 in progress
+Last activity: 2026-03-04 - Executed 07-01 (scoped help + colorized renderer)
 
-Progress: [██████████] 100%
+Progress: [█████████░] 89%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 23
-- Average duration: 7.8 min
-- Total execution time: 2.98 hours
+- Total plans completed: 24
+- Average duration: 9.2 min
+- Total execution time: 3.68 hours
 
 **By Phase:**
 
@@ -48,8 +51,8 @@ Progress: [██████████] 100%
 | 6 | 4 | 104 min | 26.0 min |
 
 **Recent Trend:**
-- Last 5 plans: 05-04 (3 min), 06-01 (34 min), 06-02 (27 min), 06-03 (24 min), 06-04 (19 min)
-- Trend: Longer plan durations in Phase 6 due reliability hardening, CI integration, and release artifact completion
+- Last 5 plans: 06-01 (34 min), 06-02 (27 min), 06-03 (24 min), 06-04 (19 min), 07-01 (42 min)
+- Trend: Plan duration increased with UX refactor scope and contract-test expansion in Phase 7.
 
 *Updated after each plan completion*
 | Phase 03 P01 | 8 min | 3 tasks | 7 files |
@@ -67,6 +70,7 @@ Progress: [██████████] 100%
 | Phase 06 P02 | 27 min | 3 tasks | 6 files |
 | Phase 06 P03 | 24 min | 3 tasks | 7 files |
 | Phase 06 P04 | 19 min | 3 tasks | 5 files |
+| Phase 07 P01 | 42 min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -113,6 +117,16 @@ Recent decisions affecting current work:
 - [Phase 06]: Centralized all public CLI error codes in one catalog — Error constructors and tests now derive from ERROR_CATALOG to prevent code/exit/guidance drift.
 - [Phase 06]: Established golden fixture regression gate for output contracts — Committed markdown/json fixtures plus verify:fixtures command detect renderer drift before release.
 - [Phase 06]: CI now enforces bun test and fixture verification as release gates — Automation and checklist/test references are aligned to prevent drift between local and CI reliability checks.
+- [Phase 07 Planning]: Help UX will move from one static renderer to scoped root/subcommand help with dedicated `help` command semantics.
+- [Phase 07 Planning]: Config UX will gain intuitive command aliases while preserving legacy dot-path compatibility for existing automation.
+- [Phase 07 Execution]: Help rendering now uses a shared document+theme pipeline with scoped `help` routes for root/config/setup/provider status.
+- [Phase 07 Execution]: `--no-color` is a first-class help flag to guarantee readable deterministic fallback output.
+
+### Roadmap Evolution
+
+- Phase 7 added: Melhorar UX da CLI: help colorido com subcomandos, layout intuitivo e paridade 1:1 com experiência do OpenClaw
+- Phase 7 planned: 4 plans across 3 waves (help foundation, config/setup UX, regression lock)
+- Phase 7 execution started: 07-01 completed with scoped help and color/no-color support
 
 ### Pending Todos
 
@@ -132,6 +146,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-02 23:13
-Stopped at: Completed Phase 06 execution, verification, and roadmap/requirements closure
-Resume file: .planning/phases/06-reliability-release-gates/06-VERIFICATION.md
+Last session: 2026-03-04T13:49:37.460Z
+Stopped at: Completed 07-01-PLAN.md
+Resume file: .planning/phases/07-melhorar-ux-da-cli-help-colorido-com-subcomandos-layout-intuitivo-e-paridade-1-1-com-experi-ncia-do-openclaw/07-02-PLAN.md
