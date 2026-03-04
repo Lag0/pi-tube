@@ -61,4 +61,15 @@ describe("CLI error exits and formatting", () => {
     expect(result.exitCode).toBe(1);
     expect(result.stderr.toString()).toContain("[CLI_UNEXPECTED]");
   });
+
+  test("keeps config validation deterministic for friendly and legacy routes", () => {
+    const friendlyInvalidProvider = runCli(["config", "provider", "set", "invalid-provider"]);
+    const legacyInvalidProvider = runCli(["config", "set", "defaults.provider", "invalid-provider"]);
+
+    expect(friendlyInvalidProvider.exitCode).toBe(2);
+    expect(friendlyInvalidProvider.stderr.toString()).toContain("[CLI_CONTRACT_VIOLATION]");
+
+    expect(legacyInvalidProvider.exitCode).toBe(2);
+    expect(legacyInvalidProvider.stderr.toString()).toContain("[CLI_CONTRACT_VIOLATION]");
+  });
 });
