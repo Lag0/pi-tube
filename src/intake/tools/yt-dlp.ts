@@ -20,6 +20,54 @@ export interface YtDlpExecutionResult {
 
 export type YtDlpExecutor = (args: string[]) => Promise<YtDlpExecutionResult>;
 
+const DEFAULT_YTDLP_TIMEOUT_MS = 120_000;
+const YTDLP_TIMEOUT_ENV = "PI_TUBE_YTDLP_TIMEOUT_MS";
+
+function resolveYtDlpTimeoutMs(env: Record<string, string | undefined> = process.env): number {
+  const raw = env[YTDLP_TIMEOUT_ENV]?.trim();
+  if (!raw) {
+    return DEFAULT_YTDLP_TIMEOUT_MS;
+  }
+
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return DEFAULT_YTDLP_TIMEOUT_MS;
+  }
+
+  return parsed;
+}
+
+async function waitForExitWithTimeout(
+  process: Bun.Subprocess<"pipe", "pipe", "inherit">,
+  timeoutMs: number,
+): Promise<{ timedOut: boolean; exitCode: number }> {
+  return new Promise((resolve) => {
+    let settled = false;
+
+    const timeoutHandle = setTimeout(() => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      try {
+        process.kill();
+      } catch {
+        // Best effort: command timeout should still unblock CLI execution.
+      }
+      resolve({ timedOut: true, exitCode: 124 });
+    }, timeoutMs);
+
+    process.exited.then((exitCode) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timeoutHandle);
+      resolve({ timedOut: false, exitCode });
+    });
+  });
+}
+
 async function defaultYtDlpExecutor(args: string[]): Promise<YtDlpExecutionResult> {
   let process: Bun.Subprocess<"pipe", "pipe", "inherit">;
 
@@ -38,13 +86,18 @@ async function defaultYtDlpExecutor(args: string[]): Promise<YtDlpExecutionResul
     throw createYouTubeExtractFailedError(error instanceof Error ? error.message : String(error));
   }
 
-  const [stdout, stderr, exitCode] = await Promise.all([
+  const timeoutMs = resolveYtDlpTimeoutMs();
+  const exitResult = await waitForExitWithTimeout(process, timeoutMs);
+  if (exitResult.timedOut) {
+    throw createYouTubeExtractFailedError(`yt-dlp timed out after ${timeoutMs}ms`);
+  }
+
+  const [stdout, stderr] = await Promise.all([
     new Response(process.stdout).text(),
     new Response(process.stderr).text(),
-    process.exited,
   ]);
 
-  return { exitCode, stdout, stderr };
+  return { exitCode: exitResult.exitCode, stdout, stderr };
 }
 
 interface ParsedFormatLike {
