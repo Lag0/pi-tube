@@ -41,11 +41,11 @@ describe("CLI help contract", () => {
     expect(notes).toBeGreaterThan(examples);
 
     expect(clean).toContain("Markdown default, JSON optional");
-    expect(clean).toContain("setup <...>");
+    expect(clean).toContain("setup <install|skills|mcp>");
     expect(clean).toContain("config <set|get|list>");
     expect(clean).toContain("provider-status");
     expect(clean).toContain("defaults.provider");
-    expect(clean).toContain("deferred command (use `pi-tube <input>`)");
+    expect(clean).toContain("Deferred command (use `pi-tube <input>`)");
     expect(clean).toContain("INSTAGRAM_AUTH_REQUIRED");
     expect(clean).toContain("--provider deepgram|groq");
     expect(clean).toContain("--timestamps");
@@ -68,5 +68,32 @@ describe("CLI help contract", () => {
     expect(stdout).toContain("Usage");
     expect(stdout).toContain("Global options");
     expect(stdout).toContain("--no-color");
+  });
+
+  test("supports help command and scoped subcommand help", () => {
+    const helpCommand = runCli(["help"]);
+    const configScoped = runCli(["config", "--help"]);
+    const configHelpCommand = runCli(["help", "config"]);
+    const setupScoped = runCli(["setup", "--help"]);
+
+    const rootHelp = stripAnsi(helpCommand.stdout.toString());
+    const configHelp = stripAnsi(configScoped.stdout.toString());
+    const configHelpViaHelpCommand = stripAnsi(configHelpCommand.stdout.toString());
+    const setupHelp = stripAnsi(setupScoped.stdout.toString());
+
+    expect(helpCommand.exitCode).toBe(0);
+    expect(configScoped.exitCode).toBe(0);
+    expect(configHelpCommand.exitCode).toBe(0);
+    expect(setupScoped.exitCode).toBe(0);
+
+    expect(rootHelp).toContain("pi-tube CLI");
+    expect(configHelp).toContain("pi-tube config");
+    expect(configHelp).toContain("set <key> <value>");
+    expect(configHelp).toContain("Supported keys:");
+    expect(configHelp).not.toContain("Deferred command");
+    expect(configHelpViaHelpCommand).toContain("pi-tube config");
+    expect(setupHelp).toContain("pi-tube setup");
+    expect(setupHelp).toContain("setup skills [--global] [--agent <name>]");
+    expect(setupHelp).not.toContain("provider-status [--json]");
   });
 });

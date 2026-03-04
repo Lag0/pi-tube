@@ -1,9 +1,8 @@
 import {
   APP_VERSION,
   COMMAND_IDENTITY,
-  HELP_COMMAND_ROWS,
-  HELP_EXAMPLES,
-  HELP_NOTES,
+  getHelpDocument,
+  type HelpTopic,
 } from "./command-contract.ts";
 import { renderHelpDocument, type HelpDocument } from "./help-renderer.ts";
 import {
@@ -18,8 +17,6 @@ import { handleSetupCommand } from "./setup.ts";
 import { CliError, formatCliError } from "../errors/cli-errors.ts";
 import { isLegacyCommand, throwLegacyCommandGuidance } from "../legacy/compatibility.ts";
 
-type HelpTopic = "root" | "config" | "setup" | "provider-status";
-
 interface ParsedArgs {
   showHelp: boolean;
   showVersion: boolean;
@@ -33,149 +30,8 @@ interface ParsedArgs {
   positionals: string[];
 }
 
-function buildRootHelpDocument(): HelpDocument {
-  return {
-    title: `${COMMAND_IDENTITY} CLI`,
-    summary: "Deterministic media transcription workflows for humans and automation.",
-    usage: [
-      `${COMMAND_IDENTITY} <input> [--provider <deepgram|groq>] [--language <code>] [--timestamps] [--json]`,
-      `${COMMAND_IDENTITY} setup <install|skills|mcp> [--global] [--agent <name>]`,
-      `${COMMAND_IDENTITY} config <set|get|list> [args] [--json]`,
-      `${COMMAND_IDENTITY} provider-status [--json]`,
-      `${COMMAND_IDENTITY} help [command]`,
-    ],
-    commandGroups: [
-      {
-        title: "Core",
-        rows: HELP_COMMAND_ROWS.slice(0, 1).map((row) => {
-          const [term, ...rest] = row.split(/\s{2,}/);
-          return { term: term ?? row, description: rest.join("  ") || "Core transcription input flow." };
-        }),
-      },
-      {
-        title: "Setup & Config",
-        rows: HELP_COMMAND_ROWS.slice(1, 4).map((row) => {
-          const [term, ...rest] = row.split(/\s{2,}/);
-          return { term: term ?? row, description: rest.join("  ") || "Subcommand workflow." };
-        }),
-      },
-      {
-        title: "Compatibility",
-        rows: HELP_COMMAND_ROWS.slice(4).map((row) => {
-          const [term, ...rest] = row.split(/\s{2,}/);
-          return { term: term ?? row, description: rest.join("  ") || "Legacy compatibility guidance." };
-        }),
-      },
-    ],
-    options: [
-      { term: "-h, --help", description: "Show help (or scoped help with `help [command]`)." },
-      { term: "-v, --version", description: "Show version." },
-      { term: "--json", description: "Output deterministic JSON format." },
-      { term: "--provider <deepgram|groq>", description: "Select transcription provider (default: deepgram)." },
-      { term: "--language <code>", description: "Optional language preference." },
-      { term: "--timestamps", description: "Include timestamp blocks in transcript output." },
-      { term: "--no-color", description: "Disable ANSI colors in help output." },
-    ],
-    examples: [...HELP_EXAMPLES],
-    notes: [...HELP_NOTES],
-  };
-}
-
-function buildConfigHelpDocument(): HelpDocument {
-  return {
-    title: `${COMMAND_IDENTITY} config`,
-    summary: "Deterministic configuration for provider defaults and credentials.",
-    usage: [
-      `${COMMAND_IDENTITY} config set <key> <value> [--json]`,
-      `${COMMAND_IDENTITY} config get <key> [--json]`,
-      `${COMMAND_IDENTITY} config list [--json]`,
-    ],
-    commandGroups: [
-      {
-        title: "Actions",
-        rows: [
-          { term: "set <key> <value>", description: "Write a supported config key." },
-          { term: "get <key>", description: "Read one supported config key." },
-          { term: "list", description: "List all supported config values." },
-        ],
-      },
-    ],
-    options: [
-      { term: "--json", description: "Emit deterministic JSON payloads for config output." },
-    ],
-    examples: [
-      `${COMMAND_IDENTITY} config set defaults.provider groq`,
-      `${COMMAND_IDENTITY} config get defaults.provider`,
-      `${COMMAND_IDENTITY} config list`,
-    ],
-    notes: [
-      "Supported keys: defaults.provider, defaults.language, providers.deepgram.api_key, providers.deepgram.api_key_env, providers.groq.api_key, providers.groq.api_key_env.",
-    ],
-  };
-}
-
-function buildSetupHelpDocument(): HelpDocument {
-  return {
-    title: `${COMMAND_IDENTITY} setup`,
-    summary: "Install and bootstrap skill workflows from the CLI.",
-    usage: [
-      `${COMMAND_IDENTITY} setup install`,
-      `${COMMAND_IDENTITY} setup skills [--global] [--agent <name>]`,
-      `${COMMAND_IDENTITY} setup mcp`,
-    ],
-    commandGroups: [
-      {
-        title: "Subcommands",
-        rows: [
-          { term: "install", description: "Show package install guidance." },
-          { term: "skills", description: "Execute the skills installer command." },
-          { term: "mcp", description: "Reserved for follow-up MCP bootstrap release." },
-        ],
-      },
-    ],
-    options: [
-      { term: "--global, -g", description: "Install skills in global target scope." },
-      { term: "--agent <name>, -a <name>", description: "Target a specific agent profile." },
-    ],
-    examples: [
-      `${COMMAND_IDENTITY} setup install`,
-      `${COMMAND_IDENTITY} setup skills`,
-      `${COMMAND_IDENTITY} setup skills --global`,
-      `${COMMAND_IDENTITY} setup skills --agent codex`,
-    ],
-  };
-}
-
-function buildProviderStatusHelpDocument(): HelpDocument {
-  return {
-    title: `${COMMAND_IDENTITY} provider-status`,
-    summary: "Read deterministic provider readiness from registry and env values.",
-    usage: [
-      `${COMMAND_IDENTITY} provider-status [--json]`,
-    ],
-    options: [
-      { term: "--json", description: "Emit provider readiness report as JSON." },
-    ],
-    examples: [
-      `${COMMAND_IDENTITY} provider-status`,
-      `${COMMAND_IDENTITY} --json provider-status`,
-    ],
-  };
-}
-
 function renderHelp(topic: HelpTopic, color: boolean): string {
-  let helpDocument: HelpDocument;
-
-  if (topic === "config") {
-    helpDocument = buildConfigHelpDocument();
-  } else if (topic === "setup") {
-    helpDocument = buildSetupHelpDocument();
-  } else if (topic === "provider-status") {
-    helpDocument = buildProviderStatusHelpDocument();
-  } else {
-    helpDocument = buildRootHelpDocument();
-  }
-
+  const helpDocument: HelpDocument = getHelpDocument(topic);
   return renderHelpDocument(helpDocument, { color });
 }
 

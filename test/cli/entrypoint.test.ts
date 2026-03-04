@@ -19,6 +19,8 @@ describe("CLI entrypoint", () => {
     const result = runCli(["--help"]);
     expect(result.exitCode).toBe(0);
 
-    // TODO(phase-01-03): Add regression checks for legacy compatibility guidance.
+    const helpCommand = runCli(["help"]);
+    expect(helpCommand.exitCode).toBe(0);
+    expect(helpCommand.stdout.toString()).toContain("pi-tube CLI");
   });
 });
