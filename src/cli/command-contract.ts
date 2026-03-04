@@ -166,6 +166,7 @@ const CONFIG_HELP_DOCUMENT: HelpDocument = {
   ],
   notes: [
     "Friendly commands write to the same canonical config keys used by legacy scripts.",
+    "Legacy `config set/get/list` commands remain supported for automation compatibility.",
     "Supported keys: defaults.provider, defaults.language, providers.deepgram.api_key, providers.deepgram.api_key_env, providers.groq.api_key, providers.groq.api_key_env.",
   ],
 };

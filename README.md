@@ -66,6 +66,9 @@ Implemented now:
 - `pi-tube config set <key> <value>`
 - `pi-tube config get <key>`
 - `pi-tube config list`
+- `pi-tube config provider set <deepgram|groq>`
+- `pi-tube config provider env <deepgram|groq> <ENV_VAR>`
+- `pi-tube config language set <code>`
 - `pi-tube provider-status`
 - `pi-tube --json provider-status`
 - `pi-tube --help`
@@ -93,6 +96,9 @@ pi-tube setup skills --global                              # interactive global 
 pi-tube setup skills --agent codex                         # install for a specific agent
 pi-tube config set defaults.provider groq                 # active config flow
 pi-tube config set providers.groq.api_key_env GROQ_API_KEY
+pi-tube config provider set groq                          # friendly provider alias
+pi-tube config provider env groq GROQ_API_KEY             # friendly env alias
+pi-tube config language set pt-BR                         # friendly language alias
 pi-tube config list
 pi-tube provider-status                                   # active provider readiness
 pi-tube --json provider-status                            # active readiness JSON
@@ -108,6 +114,15 @@ Supported configuration keys:
 - `providers.deepgram.api_key_env`
 - `providers.groq.api_key`
 - `providers.groq.api_key_env`
+
+Friendly aliases (mapped to the same canonical keys):
+
+- `pi-tube config provider set <deepgram|groq>` → `defaults.provider`
+- `pi-tube config provider env <provider> <ENV_VAR>` → `providers.<provider>.api_key_env`
+- `pi-tube config provider key <provider> <api_key>` → `providers.<provider>.api_key`
+- `pi-tube config language set <code>` → `defaults.language`
+
+Legacy `config set/get/list` dot-path commands remain supported for existing scripts.
 
 Default config file path:
 

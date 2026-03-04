@@ -88,7 +88,10 @@ describe("CLI help contract", () => {
 
     expect(rootHelp).toContain("pi-tube CLI");
     expect(configHelp).toContain("pi-tube config");
+    expect(configHelp).toContain("provider set <deepgram|groq>");
+    expect(configHelp).toContain("language set <code>");
     expect(configHelp).toContain("set <key> <value>");
+    expect(configHelp).toContain("Legacy `config set/get/list` commands remain supported");
     expect(configHelp).toContain("Supported keys:");
     expect(configHelp).not.toContain("Deferred command");
     expect(configHelpViaHelpCommand).toContain("pi-tube config");
