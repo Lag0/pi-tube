@@ -6,6 +6,7 @@ const NPM_PACKAGE_NAME = "@syxs/pi-tube";
 
 export interface SetupOptions {
   global?: boolean;
+  nonInteractive?: boolean;
   agent?: string;
   env?: Record<string, string | undefined>;
 }
@@ -66,6 +67,9 @@ function handleSetupInstall(): string {
 
 function handleSetupSkills(options: SetupOptions): null {
   const args = ["-y", SKILLS_NPX_PACKAGE, "add", SKILL_SOURCE];
+  if (options.nonInteractive) {
+    args.push("--yes");
+  }
   if (options.global) {
     args.push("--global");
   }

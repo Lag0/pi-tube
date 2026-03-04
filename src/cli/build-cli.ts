@@ -26,6 +26,7 @@ interface ParsedArgs {
   provider?: string;
   language?: string;
   setupGlobal: boolean;
+  setupNonInteractive: boolean;
   setupAgent?: string;
   positionals: string[];
 }
@@ -44,6 +45,7 @@ function parse(argv: string[]): ParsedArgs {
       timestamps: false,
       noColor: false,
       setupGlobal: false,
+      setupNonInteractive: false,
       positionals: [],
     };
   }
@@ -56,6 +58,7 @@ function parse(argv: string[]): ParsedArgs {
   let provider: string | undefined;
   let language: string | undefined;
   let setupGlobal = false;
+  let setupNonInteractive = false;
   let setupAgent: string | undefined;
   const positionals: string[] = [];
 
@@ -89,6 +92,11 @@ function parse(argv: string[]): ParsedArgs {
 
     if (arg === "--global" || arg === "-g") {
       setupGlobal = true;
+      continue;
+    }
+
+    if (arg === "--yes" || arg === "-y" || arg === "--no-prompt" || arg === "--non-interactive") {
+      setupNonInteractive = true;
       continue;
     }
 
@@ -160,6 +168,7 @@ function parse(argv: string[]): ParsedArgs {
     provider,
     language,
     setupGlobal,
+    setupNonInteractive,
     setupAgent,
     positionals,
   };
@@ -249,6 +258,7 @@ export async function runCli(argv: string[]): Promise<number> {
       }
       const output = handleSetupCommand(subcommand, {
         global: parsed.setupGlobal,
+        nonInteractive: parsed.setupNonInteractive,
         agent: parsed.setupAgent,
       });
       if (output) {
@@ -257,8 +267,8 @@ export async function runCli(argv: string[]): Promise<number> {
       return 0;
     }
 
-    if (parsed.setupGlobal || parsed.setupAgent) {
-      throw new CliError("`--global` and `--agent` are only valid with `setup`.", {
+    if (parsed.setupGlobal || parsed.setupAgent || parsed.setupNonInteractive) {
+      throw new CliError("`--global`, `--agent`, `--yes`, and `--no-prompt` are only valid with `setup`.", {
         code: "CLI_CONTRACT_VIOLATION",
         exitCode: 2,
       });

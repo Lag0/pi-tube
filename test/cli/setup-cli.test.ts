@@ -44,6 +44,31 @@ describe("setup command", () => {
     expect(stdout).toContain("--agent codex");
   });
 
+  test("supports non-interactive setup flags for automation paths", () => {
+    const result = runCli(["setup", "skills", "--global", "--yes"], {
+      PI_TUBE_TEST_SETUP_DRY_RUN: "1",
+    });
+    const stdout = result.stdout.toString();
+
+    expect(result.exitCode).toBe(0);
+    expect(stdout).toContain("Running: npx -y skills@1.4.1 add https://github.com/Lag0/pi-tube/tree/main");
+    expect(stdout).toContain("--global");
+    expect(stdout).toContain("--yes");
+  });
+
+  test("maps --no-prompt alias to non-interactive execution", () => {
+    const result = runCli(["setup", "skills", "--global", "--no-prompt", "--agent", "codex"], {
+      PI_TUBE_TEST_SETUP_DRY_RUN: "1",
+    });
+    const stdout = result.stdout.toString();
+
+    expect(result.exitCode).toBe(0);
+    expect(stdout).toContain("Running: npx -y skills@1.4.1 add https://github.com/Lag0/pi-tube/tree/main");
+    expect(stdout).toContain("--global");
+    expect(stdout).toContain("--agent codex");
+    expect(stdout).toContain("--yes");
+  });
+
   test("returns deterministic guidance for setup mcp placeholder", () => {
     const result = runCli(["setup", "mcp"]);
     const stderr = result.stderr.toString();
