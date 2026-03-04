@@ -19,6 +19,8 @@ import { handleSetupCommand } from "./setup.ts";
 import { CliError, formatCliError } from "../errors/cli-errors.ts";
 import { isLegacyCommand, throwLegacyCommandGuidance } from "../legacy/compatibility.ts";
 
+type HelpTopic = "root" | "config" | "setup" | "provider-status";
+
 interface ParsedArgs {
   showHelp: boolean;
   showVersion: boolean;
@@ -31,19 +33,21 @@ interface ParsedArgs {
   positionals: string[];
 }
 
-function renderHelp(): string {
+function renderRootHelp(): string {
   const lines = [
     HELP_SECTIONS.usage,
     `  ${COMMAND_IDENTITY} <input> [--provider <deepgram|groq>] [--language <code>] [--timestamps] [--json]`,
     `  ${COMMAND_IDENTITY} setup <install|skills|mcp> [--global] [--agent <name>]`,
     `  ${COMMAND_IDENTITY} config <set|get|list> [args] [--json]`,
     `  ${COMMAND_IDENTITY} provider-status [--json]`,
+    `  ${COMMAND_IDENTITY} help [command]`,
     "",
     HELP_SECTIONS.commands,
     ...HELP_COMMAND_ROWS.map((row) => `  ${row}`),
     "",
     HELP_SECTIONS.options,
     `  -h, ${GLOBAL_FLAGS[0]}      Show help`,
+    `      ${GLOBAL_FLAGS[0]} [command]  Show help for a command`,
     `  -v, ${GLOBAL_FLAGS[1]}   Show version`,
     `      ${GLOBAL_FLAGS[2]}      Output deterministic JSON format`,
     `      ${GLOBAL_FLAGS[3]} <deepgram|groq>  Select transcription provider (default: deepgram)`,
@@ -58,6 +62,79 @@ function renderHelp(): string {
   ];
 
   return lines.join("\n");
+}
+
+function renderConfigHelp(): string {
+  return [
+    "Usage",
+    `  ${COMMAND_IDENTITY} config set <key> <value> [--json]`,
+    `  ${COMMAND_IDENTITY} config get <key> [--json]`,
+    `  ${COMMAND_IDENTITY} config list [--json]`,
+    "",
+    "Description",
+    "  Deterministic configuration commands for provider defaults and credential references.",
+    "",
+    "Supported keys",
+    "  defaults.provider",
+    "  defaults.language",
+    "  providers.deepgram.api_key",
+    "  providers.deepgram.api_key_env",
+    "  providers.groq.api_key",
+    "  providers.groq.api_key_env",
+    "",
+    "Examples",
+    `  ${COMMAND_IDENTITY} config set defaults.provider groq`,
+    `  ${COMMAND_IDENTITY} config get defaults.provider`,
+    `  ${COMMAND_IDENTITY} config list`,
+  ].join("\n");
+}
+
+function renderSetupHelp(): string {
+  return [
+    "Usage",
+    `  ${COMMAND_IDENTITY} setup install`,
+    `  ${COMMAND_IDENTITY} setup skills [--global] [--agent <name>]`,
+    `  ${COMMAND_IDENTITY} setup mcp`,
+    "",
+    "Description",
+    "  Setup helper commands for installing the package and skill bundle.",
+    "",
+    "Examples",
+    `  ${COMMAND_IDENTITY} setup install`,
+    `  ${COMMAND_IDENTITY} setup skills`,
+    `  ${COMMAND_IDENTITY} setup skills --global`,
+    `  ${COMMAND_IDENTITY} setup skills --agent codex`,
+  ].join("\n");
+}
+
+function renderProviderStatusHelp(): string {
+  return [
+    "Usage",
+    `  ${COMMAND_IDENTITY} provider-status [--json]`,
+    "",
+    "Description",
+    "  Deterministic provider readiness report from registry and configured env vars.",
+    "",
+    "Examples",
+    `  ${COMMAND_IDENTITY} provider-status`,
+    `  ${COMMAND_IDENTITY} --json provider-status`,
+  ].join("\n");
+}
+
+function renderHelp(topic: HelpTopic): string {
+  if (topic === "config") {
+    return renderConfigHelp();
+  }
+
+  if (topic === "setup") {
+    return renderSetupHelp();
+  }
+
+  if (topic === "provider-status") {
+    return renderProviderStatusHelp();
+  }
+
+  return renderRootHelp();
 }
 
 function parse(argv: string[]): ParsedArgs {
@@ -182,12 +259,49 @@ function parse(argv: string[]): ParsedArgs {
   };
 }
 
+function resolveHelpTopic(positionals: string[]): HelpTopic {
+  const [first, second, ...rest] = positionals;
+
+  if (first === "help") {
+    if (rest.length > 0) {
+      throw new CliError("`help` accepts at most one command name.", {
+        code: "CLI_CONTRACT_VIOLATION",
+        exitCode: 2,
+      });
+    }
+
+    if (!second) {
+      return "root";
+    }
+
+    if (second === "config" || second === "setup" || second === "provider-status") {
+      return second;
+    }
+
+    throw new CliError(`Unsupported help topic: \`${second}\`.`, {
+      code: "CLI_CONTRACT_VIOLATION",
+      exitCode: 2,
+      guidance: [
+        `Supported help topics: ${COMMAND_IDENTITY} help, ${COMMAND_IDENTITY} help config, ${COMMAND_IDENTITY} help setup, ${COMMAND_IDENTITY} help provider-status.`,
+      ],
+    });
+  }
+
+  if (first === "config" || first === "setup" || first === "provider-status") {
+    return first;
+  }
+
+  return "root";
+}
+
 export async function runCli(argv: string[]): Promise<number> {
   try {
     const parsed = parse(argv);
+    const [first, ...rest] = parsed.positionals;
 
-    if (parsed.showHelp) {
-      console.log(renderHelp());
+    if (parsed.showHelp || first === "help") {
+      const helpTopic = resolveHelpTopic(parsed.positionals);
+      console.log(renderHelp(helpTopic));
       return 0;
     }
 
@@ -196,9 +310,8 @@ export async function runCli(argv: string[]): Promise<number> {
       return 0;
     }
 
-    const [first, ...rest] = parsed.positionals;
     if (!first) {
-      throw new CliError(`Missing required input.`, {
+      throw new CliError("Missing required input.", {
         code: "CLI_CONTRACT_VIOLATION",
         exitCode: 2,
         guidance: [`Run \`${COMMAND_IDENTITY} --help\` for usage.`],
