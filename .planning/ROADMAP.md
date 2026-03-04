@@ -132,7 +132,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 4. Transcription Providers | 4/4 | Complete   | 2026-03-02 |
 | 5. Output Contracts | 4/4 | Complete | 2026-03-02 |
 | 6. Reliability & Release Gates | 4/4 | Complete | 2026-03-02 |
-| 7. CLI UX Overhaul | 3/4 | In Progress | - |
+| 7. CLI UX Overhaul | 4/4 | Complete | 2026-03-04 |
 
 ### Phase 7: Melhorar UX da CLI: help colorido com subcomandos, layout intuitivo e paridade 1:1 com experiência do OpenClaw
 
@@ -151,4 +151,4 @@ Plans:
 - [x] 07-01: Reestruturar fundação de comandos/help com suporte a help por subcomando e tema visual
 - [x] 07-02: Redesenhar UX de `config` com aliases intuitivos preservando compatibilidade legacy
 - [x] 07-03: Consolidar UX de `setup` para humano (interativo) e AI (não interativo executável)
-- [ ] 07-04: Fechar regressões de UX/ajuda com testes e alinhamento final de documentação
+- [x] 07-04: Fechar regressões de UX/ajuda com testes e alinhamento final de documentação
