@@ -8,24 +8,31 @@ function runCli(args: string[]) {
   });
 }
 
+function stripAnsi(value: string): string {
+  return value.replace(/\u001b\[[0-9;]*m/g, "");
+}
+
 describe("CLI help contract", () => {
-  test("uses the locked section order and labels active/deferred capabilities", () => {
+  test("uses section order and labels active/deferred capabilities", () => {
     const result = runCli(["--help"]);
     const stdout = result.stdout.toString();
+    const clean = stripAnsi(stdout);
 
     expect(result.exitCode).toBe(0);
-    expect(stdout).toContain("pi-tube <input> [--provider <deepgram|groq>] [--language <code>] [--timestamps] [--json]");
-    expect(stdout).toContain(
+    expect(clean).toContain(
+      "pi-tube <input> [--provider <deepgram|groq>] [--language <code>] [--timestamps] [--json]",
+    );
+    expect(clean).toContain(
       "pi-tube setup <install|skills|mcp> [--global] [--agent <name>]",
     );
-    expect(stdout).toContain("pi-tube config <set|get|list> [args] [--json]");
-    expect(stdout).toContain("pi-tube provider-status [--json]");
+    expect(clean).toContain("pi-tube config <set|get|list> [args] [--json]");
+    expect(clean).toContain("pi-tube provider-status [--json]");
 
-    const usage = stdout.indexOf("Usage");
-    const commands = stdout.indexOf("Commands");
-    const options = stdout.indexOf("Global options");
-    const examples = stdout.indexOf("Examples");
-    const notes = stdout.indexOf("Notes");
+    const usage = clean.indexOf("Usage");
+    const commands = clean.indexOf("Commands");
+    const options = clean.indexOf("Global options");
+    const examples = clean.indexOf("Examples");
+    const notes = clean.indexOf("Notes");
 
     expect(usage).toBeGreaterThanOrEqual(0);
     expect(commands).toBeGreaterThan(usage);
@@ -33,21 +40,33 @@ describe("CLI help contract", () => {
     expect(examples).toBeGreaterThan(options);
     expect(notes).toBeGreaterThan(examples);
 
-    expect(stdout).toContain("Markdown default, JSON optional");
-    expect(stdout).toContain("setup <...>");
-    expect(stdout).toContain("config <set|get|list>");
-    expect(stdout).toContain("provider-status");
-    expect(stdout).toContain("defaults.provider");
-    expect(stdout).toContain("deferred command (use `pi-tube <input>`)");
-    expect(stdout).toContain("INSTAGRAM_AUTH_REQUIRED");
-    expect(stdout).toContain("--provider deepgram|groq");
-    expect(stdout).toContain("--timestamps");
-    expect(stdout).toContain("CLI flags > config defaults > env defaults");
-    expect(stdout).toContain("TRANSCRIPTION_PROVIDER_*");
+    expect(clean).toContain("Markdown default, JSON optional");
+    expect(clean).toContain("setup <...>");
+    expect(clean).toContain("config <set|get|list>");
+    expect(clean).toContain("provider-status");
+    expect(clean).toContain("defaults.provider");
+    expect(clean).toContain("deferred command (use `pi-tube <input>`)");
+    expect(clean).toContain("INSTAGRAM_AUTH_REQUIRED");
+    expect(clean).toContain("--provider deepgram|groq");
+    expect(clean).toContain("--timestamps");
+    expect(clean).toContain("CLI flags > config defaults > env defaults");
+    expect(clean).toContain("TRANSCRIPTION_PROVIDER_*");
+    expect(stdout).toContain("\u001b[");
 
-    const exampleLines = stdout
+    const exampleLines = clean
       .split("\n")
       .filter((line) => line.trim().startsWith("pi-tube "));
     expect(exampleLines.length).toBeGreaterThanOrEqual(4);
+  });
+
+  test("supports no-color fallback for readable help output", () => {
+    const result = runCli(["--no-color", "--help"]);
+    const stdout = result.stdout.toString();
+
+    expect(result.exitCode).toBe(0);
+    expect(stdout).not.toContain("\u001b[");
+    expect(stdout).toContain("Usage");
+    expect(stdout).toContain("Global options");
+    expect(stdout).toContain("--no-color");
   });
 });

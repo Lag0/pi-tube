@@ -1,12 +1,11 @@
 import {
   APP_VERSION,
   COMMAND_IDENTITY,
-  GLOBAL_FLAGS,
   HELP_COMMAND_ROWS,
   HELP_EXAMPLES,
   HELP_NOTES,
-  HELP_SECTIONS,
 } from "./command-contract.ts";
+import { renderHelpDocument, type HelpDocument } from "./help-renderer.ts";
 import {
   handleBaselineInput,
   handleConfigCommand,
@@ -26,6 +25,7 @@ interface ParsedArgs {
   showVersion: boolean;
   json: boolean;
   timestamps: boolean;
+  noColor: boolean;
   provider?: string;
   language?: string;
   setupGlobal: boolean;
@@ -33,108 +33,150 @@ interface ParsedArgs {
   positionals: string[];
 }
 
-function renderRootHelp(): string {
-  const lines = [
-    HELP_SECTIONS.usage,
-    `  ${COMMAND_IDENTITY} <input> [--provider <deepgram|groq>] [--language <code>] [--timestamps] [--json]`,
-    `  ${COMMAND_IDENTITY} setup <install|skills|mcp> [--global] [--agent <name>]`,
-    `  ${COMMAND_IDENTITY} config <set|get|list> [args] [--json]`,
-    `  ${COMMAND_IDENTITY} provider-status [--json]`,
-    `  ${COMMAND_IDENTITY} help [command]`,
-    "",
-    HELP_SECTIONS.commands,
-    ...HELP_COMMAND_ROWS.map((row) => `  ${row}`),
-    "",
-    HELP_SECTIONS.options,
-    `  -h, ${GLOBAL_FLAGS[0]}      Show help`,
-    `      ${GLOBAL_FLAGS[0]} [command]  Show help for a command`,
-    `  -v, ${GLOBAL_FLAGS[1]}   Show version`,
-    `      ${GLOBAL_FLAGS[2]}      Output deterministic JSON format`,
-    `      ${GLOBAL_FLAGS[3]} <deepgram|groq>  Select transcription provider (default: deepgram)`,
-    `      ${GLOBAL_FLAGS[4]} <code>            Optional language preference`,
-    `      ${GLOBAL_FLAGS[5]}      Include timestamp blocks in transcript output`,
-    "",
-    HELP_SECTIONS.examples,
-    ...HELP_EXAMPLES.map((example) => `  ${example}`),
-    "",
-    HELP_SECTIONS.notes,
-    ...HELP_NOTES.map((note) => `  ${note}`),
-  ];
-
-  return lines.join("\n");
+function buildRootHelpDocument(): HelpDocument {
+  return {
+    title: `${COMMAND_IDENTITY} CLI`,
+    summary: "Deterministic media transcription workflows for humans and automation.",
+    usage: [
+      `${COMMAND_IDENTITY} <input> [--provider <deepgram|groq>] [--language <code>] [--timestamps] [--json]`,
+      `${COMMAND_IDENTITY} setup <install|skills|mcp> [--global] [--agent <name>]`,
+      `${COMMAND_IDENTITY} config <set|get|list> [args] [--json]`,
+      `${COMMAND_IDENTITY} provider-status [--json]`,
+      `${COMMAND_IDENTITY} help [command]`,
+    ],
+    commandGroups: [
+      {
+        title: "Core",
+        rows: HELP_COMMAND_ROWS.slice(0, 1).map((row) => {
+          const [term, ...rest] = row.split(/\s{2,}/);
+          return { term: term ?? row, description: rest.join("  ") || "Core transcription input flow." };
+        }),
+      },
+      {
+        title: "Setup & Config",
+        rows: HELP_COMMAND_ROWS.slice(1, 4).map((row) => {
+          const [term, ...rest] = row.split(/\s{2,}/);
+          return { term: term ?? row, description: rest.join("  ") || "Subcommand workflow." };
+        }),
+      },
+      {
+        title: "Compatibility",
+        rows: HELP_COMMAND_ROWS.slice(4).map((row) => {
+          const [term, ...rest] = row.split(/\s{2,}/);
+          return { term: term ?? row, description: rest.join("  ") || "Legacy compatibility guidance." };
+        }),
+      },
+    ],
+    options: [
+      { term: "-h, --help", description: "Show help (or scoped help with `help [command]`)." },
+      { term: "-v, --version", description: "Show version." },
+      { term: "--json", description: "Output deterministic JSON format." },
+      { term: "--provider <deepgram|groq>", description: "Select transcription provider (default: deepgram)." },
+      { term: "--language <code>", description: "Optional language preference." },
+      { term: "--timestamps", description: "Include timestamp blocks in transcript output." },
+      { term: "--no-color", description: "Disable ANSI colors in help output." },
+    ],
+    examples: [...HELP_EXAMPLES],
+    notes: [...HELP_NOTES],
+  };
 }
 
-function renderConfigHelp(): string {
-  return [
-    "Usage",
-    `  ${COMMAND_IDENTITY} config set <key> <value> [--json]`,
-    `  ${COMMAND_IDENTITY} config get <key> [--json]`,
-    `  ${COMMAND_IDENTITY} config list [--json]`,
-    "",
-    "Description",
-    "  Deterministic configuration commands for provider defaults and credential references.",
-    "",
-    "Supported keys",
-    "  defaults.provider",
-    "  defaults.language",
-    "  providers.deepgram.api_key",
-    "  providers.deepgram.api_key_env",
-    "  providers.groq.api_key",
-    "  providers.groq.api_key_env",
-    "",
-    "Examples",
-    `  ${COMMAND_IDENTITY} config set defaults.provider groq`,
-    `  ${COMMAND_IDENTITY} config get defaults.provider`,
-    `  ${COMMAND_IDENTITY} config list`,
-  ].join("\n");
+function buildConfigHelpDocument(): HelpDocument {
+  return {
+    title: `${COMMAND_IDENTITY} config`,
+    summary: "Deterministic configuration for provider defaults and credentials.",
+    usage: [
+      `${COMMAND_IDENTITY} config set <key> <value> [--json]`,
+      `${COMMAND_IDENTITY} config get <key> [--json]`,
+      `${COMMAND_IDENTITY} config list [--json]`,
+    ],
+    commandGroups: [
+      {
+        title: "Actions",
+        rows: [
+          { term: "set <key> <value>", description: "Write a supported config key." },
+          { term: "get <key>", description: "Read one supported config key." },
+          { term: "list", description: "List all supported config values." },
+        ],
+      },
+    ],
+    options: [
+      { term: "--json", description: "Emit deterministic JSON payloads for config output." },
+    ],
+    examples: [
+      `${COMMAND_IDENTITY} config set defaults.provider groq`,
+      `${COMMAND_IDENTITY} config get defaults.provider`,
+      `${COMMAND_IDENTITY} config list`,
+    ],
+    notes: [
+      "Supported keys: defaults.provider, defaults.language, providers.deepgram.api_key, providers.deepgram.api_key_env, providers.groq.api_key, providers.groq.api_key_env.",
+    ],
+  };
 }
 
-function renderSetupHelp(): string {
-  return [
-    "Usage",
-    `  ${COMMAND_IDENTITY} setup install`,
-    `  ${COMMAND_IDENTITY} setup skills [--global] [--agent <name>]`,
-    `  ${COMMAND_IDENTITY} setup mcp`,
-    "",
-    "Description",
-    "  Setup helper commands for installing the package and skill bundle.",
-    "",
-    "Examples",
-    `  ${COMMAND_IDENTITY} setup install`,
-    `  ${COMMAND_IDENTITY} setup skills`,
-    `  ${COMMAND_IDENTITY} setup skills --global`,
-    `  ${COMMAND_IDENTITY} setup skills --agent codex`,
-  ].join("\n");
+function buildSetupHelpDocument(): HelpDocument {
+  return {
+    title: `${COMMAND_IDENTITY} setup`,
+    summary: "Install and bootstrap skill workflows from the CLI.",
+    usage: [
+      `${COMMAND_IDENTITY} setup install`,
+      `${COMMAND_IDENTITY} setup skills [--global] [--agent <name>]`,
+      `${COMMAND_IDENTITY} setup mcp`,
+    ],
+    commandGroups: [
+      {
+        title: "Subcommands",
+        rows: [
+          { term: "install", description: "Show package install guidance." },
+          { term: "skills", description: "Execute the skills installer command." },
+          { term: "mcp", description: "Reserved for follow-up MCP bootstrap release." },
+        ],
+      },
+    ],
+    options: [
+      { term: "--global, -g", description: "Install skills in global target scope." },
+      { term: "--agent <name>, -a <name>", description: "Target a specific agent profile." },
+    ],
+    examples: [
+      `${COMMAND_IDENTITY} setup install`,
+      `${COMMAND_IDENTITY} setup skills`,
+      `${COMMAND_IDENTITY} setup skills --global`,
+      `${COMMAND_IDENTITY} setup skills --agent codex`,
+    ],
+  };
 }
 
-function renderProviderStatusHelp(): string {
-  return [
-    "Usage",
-    `  ${COMMAND_IDENTITY} provider-status [--json]`,
-    "",
-    "Description",
-    "  Deterministic provider readiness report from registry and configured env vars.",
-    "",
-    "Examples",
-    `  ${COMMAND_IDENTITY} provider-status`,
-    `  ${COMMAND_IDENTITY} --json provider-status`,
-  ].join("\n");
+function buildProviderStatusHelpDocument(): HelpDocument {
+  return {
+    title: `${COMMAND_IDENTITY} provider-status`,
+    summary: "Read deterministic provider readiness from registry and env values.",
+    usage: [
+      `${COMMAND_IDENTITY} provider-status [--json]`,
+    ],
+    options: [
+      { term: "--json", description: "Emit provider readiness report as JSON." },
+    ],
+    examples: [
+      `${COMMAND_IDENTITY} provider-status`,
+      `${COMMAND_IDENTITY} --json provider-status`,
+    ],
+  };
 }
 
-function renderHelp(topic: HelpTopic): string {
+function renderHelp(topic: HelpTopic, color: boolean): string {
+  let helpDocument: HelpDocument;
+
   if (topic === "config") {
-    return renderConfigHelp();
+    helpDocument = buildConfigHelpDocument();
+  } else if (topic === "setup") {
+    helpDocument = buildSetupHelpDocument();
+  } else if (topic === "provider-status") {
+    helpDocument = buildProviderStatusHelpDocument();
+  } else {
+    helpDocument = buildRootHelpDocument();
   }
 
-  if (topic === "setup") {
-    return renderSetupHelp();
-  }
-
-  if (topic === "provider-status") {
-    return renderProviderStatusHelp();
-  }
-
-  return renderRootHelp();
+  return renderHelpDocument(helpDocument, { color });
 }
 
 function parse(argv: string[]): ParsedArgs {
@@ -144,6 +186,7 @@ function parse(argv: string[]): ParsedArgs {
       showVersion: false,
       json: false,
       timestamps: false,
+      noColor: false,
       setupGlobal: false,
       positionals: [],
     };
@@ -153,6 +196,7 @@ function parse(argv: string[]): ParsedArgs {
   let showVersion = false;
   let json = false;
   let timestamps = false;
+  let noColor = false;
   let provider: string | undefined;
   let language: string | undefined;
   let setupGlobal = false;
@@ -179,6 +223,11 @@ function parse(argv: string[]): ParsedArgs {
 
     if (arg === "--timestamps") {
       timestamps = true;
+      continue;
+    }
+
+    if (arg === "--no-color") {
+      noColor = true;
       continue;
     }
 
@@ -251,6 +300,7 @@ function parse(argv: string[]): ParsedArgs {
     showVersion,
     json,
     timestamps,
+    noColor,
     provider,
     language,
     setupGlobal,
@@ -301,7 +351,7 @@ export async function runCli(argv: string[]): Promise<number> {
 
     if (parsed.showHelp || first === "help") {
       const helpTopic = resolveHelpTopic(parsed.positionals);
-      console.log(renderHelp(helpTopic));
+      console.log(renderHelp(helpTopic, !parsed.noColor));
       return 0;
     }
 
