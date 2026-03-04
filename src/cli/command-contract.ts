@@ -15,7 +15,7 @@ const ROOT_HELP_DOCUMENT: HelpDocument = {
   usage: [
     `${COMMAND_IDENTITY} <input> [--provider <deepgram|groq>] [--language <code>] [--timestamps] [--json]`,
     `${COMMAND_IDENTITY} help [command]`,
-    `${COMMAND_IDENTITY} setup <install|skills|mcp> [--global] [--agent <name>]`,
+    `${COMMAND_IDENTITY} setup <install|skills|mcp> [--global] [--agent <name>] [--yes|--no-prompt]`,
     `${COMMAND_IDENTITY} config <set|get|list> [args] [--json]`,
     `${COMMAND_IDENTITY} provider-status [--json]`,
   ],
@@ -43,7 +43,7 @@ const ROOT_HELP_DOCUMENT: HelpDocument = {
       rows: [
         {
           term: `${COMMAND_IDENTITY} config <set|get|list>`,
-          description: "Deterministic provider/default configuration",
+          description: "Deterministic configuration (friendly aliases + legacy compatibility)",
         },
       ],
     },
@@ -93,7 +93,11 @@ const ROOT_HELP_DOCUMENT: HelpDocument = {
     `${COMMAND_IDENTITY} setup skills`,
     `${COMMAND_IDENTITY} setup skills --global`,
     `${COMMAND_IDENTITY} setup skills --agent codex`,
+    `${COMMAND_IDENTITY} setup skills --global --yes`,
     `${COMMAND_IDENTITY} "https://youtube.com/watch?v=dQw4w9WgXcQ"  # writes ~/.pi-tube/YYYY-MM-DD-*.md`,
+    `${COMMAND_IDENTITY} config provider set groq`,
+    `${COMMAND_IDENTITY} config provider env groq GROQ_API_KEY`,
+    `${COMMAND_IDENTITY} config language set pt-BR`,
     `${COMMAND_IDENTITY} config set defaults.provider groq`,
     `${COMMAND_IDENTITY} config set providers.groq.api_key_env GROQ_API_KEY`,
     `${COMMAND_IDENTITY} config list`,
@@ -112,6 +116,7 @@ const ROOT_HELP_DOCUMENT: HelpDocument = {
     "Provider/language precedence is CLI flags > config defaults > env defaults.",
     "Use `setup install` for npm install commands and `setup skills` to install the repo skill bundle.",
     "`setup skills` follows Firecrawl-style behavior: interactive by default, with optional `--global`/`--agent` targeting.",
+    "Use `setup skills --global --yes` (or `--no-prompt`) for non-interactive automation installs.",
     "Use `config` to set deterministic provider defaults and credential key references.",
     "Use `provider-status` to inspect registered providers and missing credential env vars.",
     "Instagram URLs requiring authentication fail with `INSTAGRAM_AUTH_REQUIRED`.",

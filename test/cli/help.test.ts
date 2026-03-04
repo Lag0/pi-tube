@@ -27,6 +27,11 @@ describe("CLI help contract", () => {
     );
     expect(clean).toContain("pi-tube config <set|get|list> [args] [--json]");
     expect(clean).toContain("pi-tube provider-status [--json]");
+    expect(clean).toContain("Core");
+    expect(clean).toContain("Setup");
+    expect(clean).toContain("Config");
+    expect(clean).toContain("Provider");
+    expect(clean).toContain("Compatibility");
 
     const usage = clean.indexOf("Usage");
     const commands = clean.indexOf("Commands");
@@ -68,6 +73,8 @@ describe("CLI help contract", () => {
     expect(stdout).toContain("Usage");
     expect(stdout).toContain("Global options");
     expect(stdout).toContain("--no-color");
+    expect(stdout).toContain("pi-tube help [command]");
+    expect(stdout).toContain("pi-tube config provider set groq");
   });
 
   test("supports help command and scoped subcommand help", () => {

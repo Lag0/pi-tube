@@ -34,6 +34,9 @@ describe("Install and run contract", () => {
     expect(output).toContain("Global options");
     expect(output).toContain("Examples");
     expect(output).toContain("Notes");
+    expect(output).toContain("pi-tube help [command]");
+    expect(output).toContain("pi-tube config provider set groq");
+    expect(output).toContain("pi-tube setup <install|skills|mcp> [--global] [--agent <name>] [--yes|--no-prompt]");
   });
 
   test("CI and release-gate docs stay aligned with executable commands", () => {
