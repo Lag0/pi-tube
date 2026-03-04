@@ -19,6 +19,7 @@ describe("Install and run contract", () => {
     expect(readme).toContain("provider-status");
     expect(readme).toContain("npm install -g @syxs/pi-tube");
     expect(readme).toContain("pi-tube setup skills");
+    expect(readme).toContain("pi-tube setup skills --global --yes");
     expect(readme).toContain("config set defaults.provider");
     expect(readme).toContain("Config Keys and Precedence");
   });
