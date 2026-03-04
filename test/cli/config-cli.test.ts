@@ -1,7 +1,8 @@
-import { describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { readOutputFileFromStdout } from "./output-file.ts";
 import {
   getConfigValue,
   listConfigValues,
@@ -9,12 +10,18 @@ import {
   setConfigValue,
 } from "../../src/config/store.ts";
 
+const outputDir = mkdtempSync(path.join(os.tmpdir(), "pi-tube-cli-config-output-"));
+
+afterAll(() => {
+  rmSync(outputDir, { recursive: true, force: true });
+});
+
 function runCli(args: string[], env: Record<string, string> = {}) {
   return Bun.spawnSync({
     cmd: ["bun", "run", "--bun", "bin/pi-tube.ts", ...args],
     stdout: "pipe",
     stderr: "pipe",
-    env: { ...process.env, ...env },
+    env: { ...process.env, PI_TUBE_OUTPUT_DIR: outputDir, ...env },
   });
 }
 
@@ -117,7 +124,7 @@ describe("config command integration", () => {
         }),
       });
 
-      const output = runResult.stdout.toString();
+      const output = readOutputFileFromStdout(runResult.stdout.toString());
       expect(runResult.exitCode).toBe(0);
       expect(output).toContain('provider: "groq"');
       expect(output).toContain('requested_language: "pt-br"');

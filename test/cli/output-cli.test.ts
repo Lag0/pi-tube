@@ -1,11 +1,21 @@
-import { describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { extractOutputPath, readOutputFileFromStdout } from "./output-file.ts";
+
+const outputDir = mkdtempSync(path.join(os.tmpdir(), "pi-tube-cli-output-"));
+
+afterAll(() => {
+  rmSync(outputDir, { recursive: true, force: true });
+});
 
 function runCli(args: string[], env: Record<string, string> = {}) {
   return Bun.spawnSync({
     cmd: ["bun", "run", "--bun", "bin/pi-tube.ts", ...args],
     stdout: "pipe",
     stderr: "pipe",
-    env: { ...process.env, ...env },
+    env: { ...process.env, PI_TUBE_OUTPUT_DIR: outputDir, ...env },
   });
 }
 
@@ -21,16 +31,21 @@ describe("CLI output contract", () => {
       }),
     });
     const stdout = result.stdout.toString();
+    const outputPath = extractOutputPath(stdout);
+    const fileContent = readOutputFileFromStdout(stdout);
 
     expect(result.exitCode).toBe(0);
-    expect(stdout).toContain("---\nschema_version: \"1.0.0\"");
-    expect(stdout).toContain("source_kind: \"direct_url\"");
-    expect(stdout).toContain("provider: \"deepgram\"");
-    expect(stdout).toContain("## Summary");
-    expect(stdout).toContain("### Key Points");
-    expect(stdout).not.toContain("## Transcript");
-    expect(stdout).toContain("### Full Text");
-    expect(stdout).toContain("hello deepgram");
+    expect(stdout).toContain("[OUTPUT_FILE]");
+    expect(stdout).toContain("[OUTPUT_FILE_URI]");
+    expect(path.basename(outputPath)).toMatch(/^\d{4}-\d{2}-\d{2}-demo(-\d+)?\.md$/);
+    expect(fileContent).toContain("---\nschema_version: \"1.0.0\"");
+    expect(fileContent).toContain("source_kind: \"direct_url\"");
+    expect(fileContent).toContain("provider: \"deepgram\"");
+    expect(fileContent).toContain("## Summary");
+    expect(fileContent).toContain("### Key Points");
+    expect(fileContent).not.toContain("## Transcript");
+    expect(fileContent).toContain("### Full Text");
+    expect(fileContent).toContain("hello deepgram");
   });
 
   test("renders timestamped transcript lines when provider segments are available", () => {
@@ -54,12 +69,13 @@ describe("CLI output contract", () => {
       }),
     });
     const stdout = result.stdout.toString();
+    const fileContent = readOutputFileFromStdout(stdout);
 
     expect(result.exitCode).toBe(0);
-    expect(stdout).toContain("## Transcript");
-    expect(stdout).toContain("### Timestamped Segments");
-    expect(stdout).toContain("- [00:00:00.200 - 00:00:00.700] hello");
-    expect(stdout).toContain("- [00:00:00.710 - 00:00:01.200] world");
+    expect(fileContent).toContain("## Transcript");
+    expect(fileContent).toContain("### Timestamped Segments");
+    expect(fileContent).toContain("- [00:00:00.200 - 00:00:00.700] hello");
+    expect(fileContent).toContain("- [00:00:00.710 - 00:00:01.200] world");
   });
 
   test("keeps timestamp blocks disabled by default", () => {
@@ -83,11 +99,12 @@ describe("CLI output contract", () => {
       }),
     });
     const stdout = result.stdout.toString();
+    const fileContent = readOutputFileFromStdout(stdout);
 
     expect(result.exitCode).toBe(0);
-    expect(stdout).not.toContain("## Transcript");
-    expect(stdout).not.toContain("### Timestamped Segments");
-    expect(stdout).toContain("Timestamp mode: off (use --timestamps)");
+    expect(fileContent).not.toContain("## Transcript");
+    expect(fileContent).not.toContain("### Timestamped Segments");
+    expect(fileContent).toContain("Timestamp mode: off (use --timestamps)");
   });
 
   test("returns deterministic schema-versioned JSON when --json is used", () => {
@@ -100,7 +117,7 @@ describe("CLI output contract", () => {
     });
 
     expect(result.exitCode).toBe(0);
-    const payload = JSON.parse(result.stdout.toString()) as {
+    const payload = JSON.parse(readOutputFileFromStdout(result.stdout.toString())) as {
       schema_version: string;
       source: { kind: string };
       transcription: { provider: string };
@@ -137,8 +154,8 @@ describe("CLI output contract", () => {
     expect(markdownResult.exitCode).toBe(0);
     expect(jsonResult.exitCode).toBe(0);
 
-    const markdown = markdownResult.stdout.toString();
-    const jsonPayload = JSON.parse(jsonResult.stdout.toString()) as {
+    const markdown = readOutputFileFromStdout(markdownResult.stdout.toString());
+    const jsonPayload = JSON.parse(readOutputFileFromStdout(jsonResult.stdout.toString())) as {
       source: { kind: string };
       transcription: { provider: string; detected_language: string | null };
       transcript: { full_text: string; segments: Array<{ text: string }> };
@@ -160,7 +177,7 @@ describe("CLI output contract", () => {
     });
 
     expect(result.exitCode).toBe(0);
-    const payload = JSON.parse(result.stdout.toString()) as {
+    const payload = JSON.parse(readOutputFileFromStdout(result.stdout.toString())) as {
       schema_version: string;
       transcription: { provider: string; requested_language: string | null; detected_language: string | null };
       transcript: { full_text: string };

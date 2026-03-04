@@ -8,12 +8,12 @@ import {
   HELP_SECTIONS,
 } from "./command-contract.ts";
 import {
-  formatBaselineIntakeResult,
   handleBaselineInput,
   handleConfigCommand,
   handleDeferredCommand,
   handleProviderStatus,
   isDeferredCommand,
+  persistBaselineIntakeResult,
 } from "./handlers.ts";
 import { handleSetupCommand } from "./setup.ts";
 import { CliError, formatCliError } from "../errors/cli-errors.ts";
@@ -286,7 +286,12 @@ export async function runCli(argv: string[]): Promise<number> {
       language: parsed.language,
       timestamps: parsed.timestamps,
     });
-    console.log(formatBaselineIntakeResult(result));
+    const persisted = persistBaselineIntakeResult(result, {
+      env: process.env,
+      cwd: process.cwd(),
+    });
+    console.log(`[OUTPUT_FILE] ${persisted.outputPath}`);
+    console.log(`[OUTPUT_FILE_URI] ${persisted.outputUri}`);
     return 0;
   } catch (error) {
     const formatted = formatCliError(error);

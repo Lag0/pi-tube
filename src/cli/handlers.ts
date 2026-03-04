@@ -3,6 +3,7 @@ import { resolveSource } from "../intake/resolver.ts";
 import { buildOutputArtifact } from "../output/build-artifact.ts";
 import { renderJson } from "../output/json.ts";
 import { renderMarkdown } from "../output/markdown.ts";
+import { persistOutputArtifact, type PersistedOutputArtifact } from "./persist-output.ts";
 import {
   getConfigValue,
   listConfigValues,
@@ -41,6 +42,12 @@ export interface BaselineIntakeResult {
   transcription: TranscriptionExecutionResult;
   json: boolean;
   timestamps: boolean;
+}
+
+interface PersistBaselineIntakeOptions {
+  env?: Record<string, string | undefined>;
+  cwd?: string;
+  now?: Date;
 }
 
 export interface ProviderStatusInput {
@@ -121,6 +128,25 @@ export function formatBaselineIntakeResult(result: BaselineIntakeResult): string
     includeTimestamps: result.timestamps,
   });
   return result.json ? renderJson(artifact) : renderMarkdown(artifact);
+}
+
+export function persistBaselineIntakeResult(
+  result: BaselineIntakeResult,
+  options: PersistBaselineIntakeOptions = {},
+): PersistedOutputArtifact {
+  const artifact = buildOutputArtifact(result.transcription, {
+    includeTimestamps: result.timestamps,
+  });
+  const content = result.json ? renderJson(artifact) : renderMarkdown(artifact);
+
+  return persistOutputArtifact({
+    artifact,
+    content,
+    asJson: result.json,
+    env: options.env,
+    cwd: options.cwd,
+    now: options.now,
+  });
 }
 
 function buildProviderStatusEntries({

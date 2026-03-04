@@ -122,6 +122,8 @@ Resolution precedence:
 ## Agent Workflows
 
 - Default output is deterministic Markdown with YAML frontmatter, extractive summary, and transcript sections.
+- Baseline runs write artifacts to `~/.pi-tube/YYYY-MM-DD-<title-or-file>.{md|json}` by default.
+- Stdout prints `[OUTPUT_FILE]` and `[OUTPUT_FILE_URI]` so you can click/open the generated file from terminal output.
 - Timestamp blocks are disabled by default to reduce artifact size/context; use `--timestamps` when needed.
 - `--json` emits a deterministic schema-versioned contract from the same canonical artifact model.
 - `provider-status` reports registered providers and missing required env vars in deterministic text or JSON.

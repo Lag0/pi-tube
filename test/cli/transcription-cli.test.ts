@@ -1,11 +1,21 @@
-import { describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { readOutputFileFromStdout } from "./output-file.ts";
+
+const outputDir = mkdtempSync(path.join(os.tmpdir(), "pi-tube-cli-transcription-"));
+
+afterAll(() => {
+  rmSync(outputDir, { recursive: true, force: true });
+});
 
 function runCli(args: string[], env: Record<string, string> = {}) {
   return Bun.spawnSync({
     cmd: ["bun", "run", "--bun", "bin/pi-tube.ts", ...args],
     stdout: "pipe",
     stderr: "pipe",
-    env: { ...process.env, ...env },
+    env: { ...process.env, PI_TUBE_OUTPUT_DIR: outputDir, ...env },
   });
 }
 
@@ -26,7 +36,7 @@ describe("CLI transcription integration", () => {
       }),
     });
 
-    const stdout = result.stdout.toString();
+    const stdout = readOutputFileFromStdout(result.stdout.toString());
     expect(result.exitCode).toBe(0);
     expect(stdout).toContain('source_kind: "direct_url"');
     expect(stdout).toContain('provider: "deepgram"');
@@ -40,7 +50,7 @@ describe("CLI transcription integration", () => {
       PI_TUBE_TEST_GROQ_RESPONSE: JSON.stringify({ text: "ola groq", language: "pt" }),
     });
 
-    const stdout = result.stdout.toString();
+    const stdout = readOutputFileFromStdout(result.stdout.toString());
     expect(result.exitCode).toBe(0);
     expect(stdout).toContain('provider: "groq"');
     expect(stdout).toContain('requested_language: "pt-br"');
@@ -53,7 +63,7 @@ describe("CLI transcription integration", () => {
       PI_TUBE_TEST_GROQ_RESPONSE: JSON.stringify({ text: "env groq", language: "es" }),
     });
 
-    const stdout = result.stdout.toString();
+    const stdout = readOutputFileFromStdout(result.stdout.toString());
     expect(result.exitCode).toBe(0);
     expect(stdout).toContain('provider: "groq"');
     expect(stdout).toContain("env groq");
@@ -68,7 +78,7 @@ describe("CLI transcription integration", () => {
       PI_TUBE_TEST_GROQ_RESPONSE: JSON.stringify({ text: "env loses", language: "en" }),
     });
 
-    const stdout = result.stdout.toString();
+    const stdout = readOutputFileFromStdout(result.stdout.toString());
     expect(result.exitCode).toBe(0);
     expect(stdout).toContain('provider: "deepgram"');
     expect(stdout).toContain("cli wins");

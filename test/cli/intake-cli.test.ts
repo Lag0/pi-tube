@@ -1,7 +1,14 @@
-import { describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { readOutputFileFromStdout } from "./output-file.ts";
+
+const outputDir = mkdtempSync(path.join(os.tmpdir(), "pi-tube-cli-intake-output-"));
+
+afterAll(() => {
+  rmSync(outputDir, { recursive: true, force: true });
+});
 
 function runCli(args: string[], env: Record<string, string> = {}) {
   const defaultEnv = {
@@ -16,7 +23,7 @@ function runCli(args: string[], env: Record<string, string> = {}) {
     cmd: ["bun", "run", "--bun", "bin/pi-tube.ts", ...args],
     stdout: "pipe",
     stderr: "pipe",
-    env: { ...process.env, ...defaultEnv, ...env },
+    env: { ...process.env, ...defaultEnv, PI_TUBE_OUTPUT_DIR: outputDir, ...env },
   });
 }
 
@@ -29,7 +36,7 @@ describe("CLI intake integration", () => {
       }),
     });
 
-    const stdout = result.stdout.toString();
+    const stdout = readOutputFileFromStdout(result.stdout.toString());
 
     expect(result.exitCode).toBe(0);
     expect(stdout).toContain('source_kind: "youtube"');
@@ -58,7 +65,7 @@ describe("CLI intake integration", () => {
 
   test("resolves direct media URL through baseline intake path", () => {
     const result = runCli(["https://cdn.example.com/audio/demo.wav"]);
-    const stdout = result.stdout.toString();
+    const stdout = readOutputFileFromStdout(result.stdout.toString());
 
     expect(result.exitCode).toBe(0);
     expect(stdout).toContain('source_kind: "direct_url"');
@@ -72,7 +79,7 @@ describe("CLI intake integration", () => {
         title: "Instagram Mock",
       }),
     });
-    const stdout = result.stdout.toString();
+    const stdout = readOutputFileFromStdout(result.stdout.toString());
 
     expect(result.exitCode).toBe(0);
     expect(stdout).toContain('source_kind: "instagram"');
@@ -115,7 +122,7 @@ describe("CLI intake integration", () => {
     try {
       writeFileSync(filePath, "audio-data");
       const result = runCli([filePath]);
-      const stdout = result.stdout.toString();
+      const stdout = readOutputFileFromStdout(result.stdout.toString());
 
       expect(result.exitCode).toBe(0);
       expect(stdout).toContain('source_kind: "local_file"');
