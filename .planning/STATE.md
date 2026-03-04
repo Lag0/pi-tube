@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 07-02-PLAN.md
-last_updated: "2026-03-04T15:00:00Z"
-last_activity: 2026-03-04 - Executed 07-02 (friendly config aliases + deterministic validation alignment)
+stopped_at: Completed 07-03-PLAN.md
+last_updated: "2026-03-04T15:25:00Z"
+last_activity: 2026-03-04 - Executed 07-03 (setup interactive/non-interactive UX hardening)
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 27
-  completed_plans: 25
-  percent: 93
+  completed_plans: 26
+  percent: 96
 ---
 
 # Project State
@@ -21,23 +21,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-02)
 
 **Core value:** Turn public media inputs into trustworthy, structured, ready-to-use knowledge artifacts fast.
-**Current focus:** Phase 7 execution in progress — Wave 2 (config/setup UX) is next.
+**Current focus:** Phase 7 execution in progress — Wave 3 final regression lock is next.
 
 ## Current Position
 
 Phase: 7 of 7 (CLI UX Overhaul)
-Plan: 2 of 4 executed
+Plan: 3 of 4 executed
 Status: Phase 7 in progress
-Last activity: 2026-03-04 - Executed 07-02 (friendly config aliases + deterministic validation alignment)
+Last activity: 2026-03-04 - Executed 07-03 (setup interactive/non-interactive UX hardening)
 
-Progress: [█████████░] 93%
+Progress: [██████████] 96%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 25
-- Average duration: 10.2 min
-- Total execution time: 4.23 hours
+- Total plans completed: 26
+- Average duration: 10.7 min
+- Total execution time: 4.63 hours
 
 **By Phase:**
 
@@ -51,8 +51,8 @@ Progress: [█████████░] 93%
 | 6 | 4 | 104 min | 26.0 min |
 
 **Recent Trend:**
-- Last 5 plans: 06-02 (27 min), 06-03 (24 min), 06-04 (19 min), 07-01 (42 min), 07-02 (33 min)
-- Trend: CLI UX refactor plans remain longer due migration-safe behavior and expanded regression coverage.
+- Last 5 plans: 06-03 (24 min), 06-04 (19 min), 07-01 (42 min), 07-02 (33 min), 07-03 (24 min)
+- Trend: UX refactor remains above historical average while setup/config behavior and docs are being locked.
 
 *Updated after each plan completion*
 | Phase 03 P01 | 8 min | 3 tasks | 7 files |
@@ -72,6 +72,7 @@ Progress: [█████████░] 93%
 | Phase 06 P04 | 19 min | 3 tasks | 5 files |
 | Phase 07 P01 | 42 min | 3 tasks | 6 files |
 | Phase 07 P02 | 33 min | 3 tasks | 8 files |
+| Phase 07 P03 | 24 min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -124,6 +125,8 @@ Recent decisions affecting current work:
 - [Phase 07 Execution]: `--no-color` is a first-class help flag to guarantee readable deterministic fallback output.
 - [Phase 07 Execution]: Friendly `config provider|language` aliases map to canonical keys while preserving legacy dot-path commands.
 - [Phase 07 Execution]: Config validation now normalizes friendly and legacy failures to `CLI_CONTRACT_VIOLATION`.
+- [Phase 07 Execution]: Setup keeps interactive default while adding explicit non-interactive flags (`--yes`, `--no-prompt`) for automation flows.
+- [Phase 07 Execution]: Setup docs and install-flow checks now enforce parity between documented and executable non-interactive behavior.
 
 ### Roadmap Evolution
 
@@ -131,6 +134,7 @@ Recent decisions affecting current work:
 - Phase 7 planned: 4 plans across 3 waves (help foundation, config/setup UX, regression lock)
 - Phase 7 execution started: 07-01 completed with scoped help and color/no-color support
 - Phase 7 wave 2 progress: 07-02 completed with config alias migration path and deterministic validation
+- Phase 7 wave 2 complete: 07-03 completed with setup UX parity for human + automation paths
 
 ### Pending Todos
 
@@ -150,6 +154,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-04T13:55:21.322Z
-Stopped at: Completed 07-02-PLAN.md
-Resume file: .planning/phases/07-melhorar-ux-da-cli-help-colorido-com-subcomandos-layout-intuitivo-e-paridade-1-1-com-experi-ncia-do-openclaw/07-03-PLAN.md
+Last session: 2026-03-04T15:25:00Z
+Stopped at: Completed 07-03-PLAN.md
+Resume file: .planning/phases/07-melhorar-ux-da-cli-help-colorido-com-subcomandos-layout-intuitivo-e-paridade-1-1-com-experi-ncia-do-openclaw/07-04-PLAN.md
