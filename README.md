@@ -2,7 +2,7 @@
 
 `pi-tube` is a Bun + TypeScript CLI for turning media inputs into structured artifacts.
 
-Current delivery status: Phase 6 reliability hardening is active (deterministic config flow, stable error contracts, golden fixtures, and release gates).
+Current delivery status: Phase 7 CLI UX overhaul is active (scoped help, friendly config aliases, and setup automation parity).
 
 ## Install (macOS/Linux)
 
@@ -36,6 +36,7 @@ bun install
 
 ```bash
 pi-tube --help
+pi-tube help config
 pi-tube --version
 pi-tube <input>
 pi-tube setup install
