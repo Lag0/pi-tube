@@ -3,6 +3,7 @@ import type { ResolvedSource } from "../../src/intake/types.ts";
 import { transcribeFromResolvedSource } from "../../src/transcription/service.ts";
 import type { ProviderRegistry } from "../../src/transcription/providers/index.ts";
 import type { PiTubeConfig } from "../../src/config/types.ts";
+import { createTranscriptionProviderFailedError } from "../../src/errors/cli-errors.ts";
 
 const source: ResolvedSource = {
   kind: "direct_url",
@@ -137,5 +138,50 @@ describe("transcription service", () => {
     });
 
     expect(result.segments).toEqual([{ startMs: 0, endMs: 400, text: "hello" }]);
+  });
+
+  test("falls back to alternate provider when primary provider fails", async () => {
+    const fallbackProviders: ProviderRegistry = {
+      deepgram: {
+        id: "deepgram",
+        async transcribe() {
+          throw createTranscriptionProviderFailedError("deepgram", "mock failure");
+        },
+      },
+      groq: {
+        id: "groq",
+        async transcribe(request) {
+          return {
+            provider: "groq",
+            transcript: `fallback:${request.requestedLanguage ?? "auto"}`,
+            requestedLanguage: request.requestedLanguage,
+            detectedLanguage: "en",
+          };
+        },
+      },
+    };
+
+    const result = await transcribeFromResolvedSource(source, {
+      provider: "deepgram",
+      providers: fallbackProviders,
+    });
+
+    expect(result.provider).toBe("groq");
+    expect(result.transcript).toContain("fallback");
+  });
+
+  test("fails fast when no providers are configured with credentials", async () => {
+    await expect(
+      transcribeFromResolvedSource(source, {
+        env: {
+          DEEPGRAM_API_KEY: "",
+          GROQ_API_KEY: "",
+          PI_TUBE_CONFIG_PATH: ".tmp/non-existing-config.json",
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "TRANSCRIPTION_PROVIDER_NOT_CONFIGURED",
+      exitCode: 2,
+    });
   });
 });

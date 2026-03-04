@@ -5,9 +5,12 @@ import path from "node:path";
 import { readOutputFileFromStdout } from "./output-file.ts";
 
 const outputDir = mkdtempSync(path.join(os.tmpdir(), "pi-tube-cli-transcription-"));
+const configDir = mkdtempSync(path.join(os.tmpdir(), "pi-tube-cli-transcription-config-"));
+const configPath = path.join(configDir, "config.json");
 
 afterAll(() => {
   rmSync(outputDir, { recursive: true, force: true });
+  rmSync(configDir, { recursive: true, force: true });
 });
 
 function runCli(args: string[], env: Record<string, string> = {}) {
@@ -15,7 +18,14 @@ function runCli(args: string[], env: Record<string, string> = {}) {
     cmd: ["bun", "run", "--bun", "bin/pi-tube.ts", ...args],
     stdout: "pipe",
     stderr: "pipe",
-    env: { ...process.env, PI_TUBE_OUTPUT_DIR: outputDir, ...env },
+    env: {
+      ...process.env,
+      PI_TUBE_OUTPUT_DIR: outputDir,
+      PI_TUBE_CONFIG_PATH: configPath,
+      DEEPGRAM_API_KEY: "",
+      GROQ_API_KEY: "",
+      ...env,
+    },
   });
 }
 
@@ -127,5 +137,28 @@ describe("CLI transcription integration", () => {
 
     expect(result.exitCode).toBe(2);
     expect(result.stderr.toString()).toContain("[TRANSCRIPTION_PROVIDER_INVALID_RESPONSE]");
+  });
+
+  test("fails fast when no provider credentials are configured", () => {
+    const result = runCli([mediaUrl], {
+      DEEPGRAM_API_KEY: "",
+      GROQ_API_KEY: "",
+    });
+
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr.toString()).toContain("[TRANSCRIPTION_PROVIDER_NOT_CONFIGURED]");
+    expect(result.stderr.toString()).toContain("provider-status");
+  });
+
+  test("falls back to alternate provider when primary fails", () => {
+    const result = runCli(["--provider", "deepgram", mediaUrl], {
+      PI_TUBE_TEST_DEEPGRAM_ERROR: "failed",
+      PI_TUBE_TEST_GROQ_RESPONSE: JSON.stringify({ text: "fallback groq", language: "en" }),
+    });
+
+    const stdout = readOutputFileFromStdout(result.stdout.toString());
+    expect(result.exitCode).toBe(0);
+    expect(stdout).toContain('provider: "groq"');
+    expect(stdout).toContain("fallback groq");
   });
 });

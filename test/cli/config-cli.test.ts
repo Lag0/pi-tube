@@ -106,6 +106,52 @@ describe("config command integration", () => {
     }
   });
 
+  test("rejects raw secrets in provider env command and enforces env-var naming", () => {
+    const tempDir = mkdtempSync(path.join(os.tmpdir(), "pi-tube-config-env-validate-"));
+    const configPath = path.join(tempDir, "config.json");
+
+    try {
+      const env = { PI_TUBE_CONFIG_PATH: configPath };
+      const invalid = runCli(["config", "provider", "env", "groq", "gsk_very_secret_token"], env);
+
+      expect(invalid.exitCode).toBe(2);
+      expect(invalid.stderr.toString()).toContain("[CLI_CONTRACT_VIOLATION]");
+      expect(invalid.stderr.toString()).toContain("environment variable name");
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  test("masks api_key values in set/get/list outputs", () => {
+    const tempDir = mkdtempSync(path.join(os.tmpdir(), "pi-tube-config-mask-"));
+    const configPath = path.join(tempDir, "config.json");
+
+    try {
+      const env = { PI_TUBE_CONFIG_PATH: configPath };
+      const rawSecret = "gsk_super_secret_token_12345";
+      const setResult = runCli(["config", "provider", "key", "groq", rawSecret], env);
+      const getResult = runCli(["config", "get", "providers.groq.api_key"], env);
+      const listResult = runCli(["config", "list"], env);
+
+      expect(setResult.exitCode).toBe(0);
+      expect(getResult.exitCode).toBe(0);
+      expect(listResult.exitCode).toBe(0);
+
+      const setOut = setResult.stdout.toString();
+      const getOut = getResult.stdout.toString();
+      const listOut = listResult.stdout.toString();
+
+      expect(setOut).not.toContain(rawSecret);
+      expect(getOut).not.toContain(rawSecret);
+      expect(listOut).not.toContain(rawSecret);
+      expect(setOut).toContain("***");
+      expect(getOut).toContain("***");
+      expect(listOut).toContain("providers.groq.api_key=");
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
   test("returns deterministic json payloads for friendly alias actions", () => {
     const tempDir = mkdtempSync(path.join(os.tmpdir(), "pi-tube-config-friendly-json-"));
     const configPath = path.join(tempDir, "config.json");

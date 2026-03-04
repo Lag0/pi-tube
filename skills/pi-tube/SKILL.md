@@ -82,5 +82,6 @@ pi-tube provider-status
 - Precedence: CLI flags > config defaults > env defaults.
 - If no provider credential is configured, CLI exits early with deterministic error guidance.
 - If selected provider fails with auth/unavailable/failed and alternate provider is configured, CLI can fallback automatically.
+- `config provider env` expects an env var name (ex: `GROQ_API_KEY`), not a raw secret value.
 - Instagram private/auth-gated URLs fail with `INSTAGRAM_AUTH_REQUIRED`.
 - For release quality gates, run `bun test` and `bun run verify:fixtures`.

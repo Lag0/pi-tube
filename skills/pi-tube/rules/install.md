@@ -36,6 +36,8 @@ pi-tube config provider env groq GROQ_API_KEY
 pi-tube provider-status
 ```
 
+`config provider env` must receive env var names (not raw API keys).
+
 Legacy compatibility:
 
 ```bash
