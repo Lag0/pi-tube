@@ -122,18 +122,32 @@ const ROOT_HELP_DOCUMENT: HelpDocument = {
 
 const CONFIG_HELP_DOCUMENT: HelpDocument = {
   title: `${COMMAND_IDENTITY} config`,
-  summary: "Deterministic configuration for provider defaults and credentials.",
+  summary: "Deterministic configuration with friendly aliases and legacy dot-path compatibility.",
   usage: [
+    `${COMMAND_IDENTITY} config provider set <deepgram|groq> [--json]`,
+    `${COMMAND_IDENTITY} config provider env <deepgram|groq> <ENV_VAR> [--json]`,
+    `${COMMAND_IDENTITY} config language set <code> [--json]`,
     `${COMMAND_IDENTITY} config set <key> <value> [--json]`,
     `${COMMAND_IDENTITY} config get <key> [--json]`,
     `${COMMAND_IDENTITY} config list [--json]`,
   ],
   commandGroups: [
     {
-      title: "Actions",
+      title: "Friendly actions",
       rows: [
-        { term: "set <key> <value>", description: "Write a supported config key." },
-        { term: "get <key>", description: "Read one supported config key." },
+        { term: "provider set <deepgram|groq>", description: "Set default provider." },
+        { term: "provider get", description: "Read default provider." },
+        { term: "provider env <provider> <ENV_VAR>", description: "Set provider API key env var reference." },
+        { term: "provider key <provider> <api_key>", description: "Set provider API key directly." },
+        { term: "language set <code>", description: "Set default language." },
+        { term: "language get", description: "Read default language." },
+      ],
+    },
+    {
+      title: "Legacy actions (still supported)",
+      rows: [
+        { term: "set <key> <value>", description: "Write a supported dot-path config key." },
+        { term: "get <key>", description: "Read one dot-path config key." },
         { term: "list", description: "List all supported config values." },
       ],
     },
@@ -143,11 +157,15 @@ const CONFIG_HELP_DOCUMENT: HelpDocument = {
     { term: "--no-color", description: "Disable ANSI colors in help output." },
   ],
   examples: [
+    `${COMMAND_IDENTITY} config provider set groq`,
+    `${COMMAND_IDENTITY} config provider env groq GROQ_API_KEY`,
+    `${COMMAND_IDENTITY} config language set pt-BR`,
     `${COMMAND_IDENTITY} config set defaults.provider groq`,
     `${COMMAND_IDENTITY} config get defaults.provider`,
     `${COMMAND_IDENTITY} config list`,
   ],
   notes: [
+    "Friendly commands write to the same canonical config keys used by legacy scripts.",
     "Supported keys: defaults.provider, defaults.language, providers.deepgram.api_key, providers.deepgram.api_key_env, providers.groq.api_key, providers.groq.api_key_env.",
   ],
 };

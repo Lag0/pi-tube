@@ -75,6 +75,37 @@ describe("config store", () => {
 });
 
 describe("config command integration", () => {
+  test("supports friendly provider/language aliases while preserving legacy dot-path compatibility", () => {
+    const tempDir = mkdtempSync(path.join(os.tmpdir(), "pi-tube-config-friendly-"));
+    const configPath = path.join(tempDir, "config.json");
+
+    try {
+      const env = { PI_TUBE_CONFIG_PATH: configPath };
+
+      const providerSet = runCli(["config", "provider", "set", "groq"], env);
+      expect(providerSet.exitCode).toBe(0);
+      expect(providerSet.stdout.toString()).toContain("[CONFIG_SET] key=defaults.provider value=groq");
+
+      const providerGet = runCli(["config", "provider", "get"], env);
+      expect(providerGet.exitCode).toBe(0);
+      expect(providerGet.stdout.toString()).toContain("[CONFIG_GET] key=defaults.provider value=groq");
+
+      const providerEnv = runCli(["config", "provider", "env", "groq", "GROQ_API_KEY"], env);
+      expect(providerEnv.exitCode).toBe(0);
+      expect(providerEnv.stdout.toString()).toContain("key=providers.groq.api_key_env value=GROQ_API_KEY");
+
+      const languageSet = runCli(["config", "language", "set", "pt-BR"], env);
+      expect(languageSet.exitCode).toBe(0);
+      expect(languageSet.stdout.toString()).toContain("[CONFIG_SET] key=defaults.language value=pt-br");
+
+      const legacyGet = runCli(["config", "get", "providers.groq.api_key_env"], env);
+      expect(legacyGet.exitCode).toBe(0);
+      expect(legacyGet.stdout.toString()).toContain("[CONFIG_GET] key=providers.groq.api_key_env value=GROQ_API_KEY");
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
   test("supports deterministic set/get/list output in text and json modes", () => {
     const tempDir = mkdtempSync(path.join(os.tmpdir(), "pi-tube-config-cli-"));
     const configPath = path.join(tempDir, "config.json");

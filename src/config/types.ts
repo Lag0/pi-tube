@@ -1,6 +1,8 @@
 import type { TranscriptionProviderId } from "../transcription/types.ts";
 
 export const CONFIG_VERSION = 1;
+export const CONFIG_PROVIDER_IDS = ["deepgram", "groq"] as const;
+export type ConfigProviderId = (typeof CONFIG_PROVIDER_IDS)[number];
 
 export interface ProviderCredentialConfig {
   api_key?: string;

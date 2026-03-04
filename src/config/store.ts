@@ -1,7 +1,14 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import type { TranscriptionProviderId } from "../transcription/types.ts";
-import { CONFIG_KEYS, CONFIG_VERSION, type ConfigKey, type PiTubeConfig } from "./types.ts";
+import {
+  CONFIG_KEYS,
+  CONFIG_PROVIDER_IDS,
+  CONFIG_VERSION,
+  type ConfigKey,
+  type ConfigProviderId,
+  type PiTubeConfig,
+} from "./types.ts";
 
 export const CONFIG_PATH_ENV = "PI_TUBE_CONFIG_PATH";
 
@@ -32,10 +39,14 @@ function normalizeOptionalString(value: unknown): string | undefined {
 
 function normalizeProvider(value: unknown): TranscriptionProviderId | undefined {
   const normalized = normalizeOptionalString(value)?.toLowerCase();
-  if (normalized === "deepgram" || normalized === "groq") {
+  if (normalized && isConfigProviderId(normalized)) {
     return normalized;
   }
   return undefined;
+}
+
+export function isConfigProviderId(value: string): value is ConfigProviderId {
+  return CONFIG_PROVIDER_IDS.includes(value as ConfigProviderId);
 }
 
 function normalizeConfig(raw: unknown): PiTubeConfig {
@@ -125,7 +136,7 @@ function assertConfigKey(key: string): asserts key is ConfigKey {
 
 function setProvider(value: string): TranscriptionProviderId {
   const normalized = value.trim().toLowerCase();
-  if (normalized === "deepgram" || normalized === "groq") {
+  if (isConfigProviderId(normalized)) {
     return normalized;
   }
 

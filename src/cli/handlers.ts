@@ -6,12 +6,13 @@ import { renderMarkdown } from "../output/markdown.ts";
 import { persistOutputArtifact, type PersistedOutputArtifact } from "./persist-output.ts";
 import {
   getConfigValue,
+  isConfigProviderId,
   listConfigValues,
   resolveConfigPath,
   setConfigValue,
   type ConfigStoreOptions,
 } from "../config/store.ts";
-import type { ConfigKey } from "../config/types.ts";
+import { CONFIG_KEYS, type ConfigKey } from "../config/types.ts";
 import {
   getDefaultProviderRegistry,
   TRANSCRIPTION_PROVIDER_DEFINITIONS,
@@ -196,14 +197,7 @@ export function handleProviderStatus(input: ProviderStatusInput): string {
 }
 
 function requireConfigKey(key: string): ConfigKey {
-  const supportedKeys = new Set([
-    "defaults.provider",
-    "defaults.language",
-    "providers.deepgram.api_key",
-    "providers.deepgram.api_key_env",
-    "providers.groq.api_key",
-    "providers.groq.api_key_env",
-  ] as const);
+  const supportedKeys = new Set(CONFIG_KEYS);
 
   if (!supportedKeys.has(key as ConfigKey)) {
     throw new CliError(`Unsupported config key: \`${key}\`.`, {
@@ -232,6 +226,98 @@ function formatConfigListText(configPath: string, values: Record<string, unknown
   return lines.join("\n");
 }
 
+function withConfigValidation<T>(operation: () => T): T {
+  try {
+    return operation();
+  } catch (error) {
+    if (error instanceof CliError) {
+      throw error;
+    }
+
+    const detail = error instanceof Error ? error.message : "Invalid config operation.";
+    throw new CliError(detail, {
+      code: "CLI_CONTRACT_VIOLATION",
+      exitCode: 2,
+      guidance: [
+        "Run `pi-tube config --help` for supported keys and aliases.",
+      ],
+    });
+  }
+}
+
+function requireConfigProviderId(input: string): "deepgram" | "groq" {
+  const normalized = input.trim().toLowerCase();
+  if (isConfigProviderId(normalized)) {
+    return normalized;
+  }
+
+  throw new CliError(`Unsupported provider: \`${input}\`.`, {
+    code: "CLI_CONTRACT_VIOLATION",
+    exitCode: 2,
+    guidance: ["Use one of: deepgram, groq."],
+  });
+}
+
+function formatConfigGetResult({
+  json,
+  configPath,
+  action,
+  key,
+  value,
+}: {
+  json: boolean;
+  configPath: string;
+  action: string;
+  key: ConfigKey;
+  value: unknown;
+}): string {
+  if (json) {
+    return JSON.stringify(
+      {
+        command: "config",
+        action,
+        key,
+        value: value ?? null,
+        config_path: configPath,
+      },
+      null,
+      2,
+    );
+  }
+
+  return `[CONFIG_GET] key=${key} value=${asPrintableValue(value)} config_path=${configPath}`;
+}
+
+function formatConfigSetResult({
+  json,
+  configPath,
+  action,
+  key,
+  value,
+}: {
+  json: boolean;
+  configPath: string;
+  action: string;
+  key: ConfigKey;
+  value: unknown;
+}): string {
+  if (json) {
+    return JSON.stringify(
+      {
+        command: "config",
+        action,
+        key,
+        value: value ?? null,
+        config_path: configPath,
+      },
+      null,
+      2,
+    );
+  }
+
+  return `[CONFIG_SET] key=${key} value=${asPrintableValue(value)} config_path=${configPath}`;
+}
+
 export function handleConfigCommand({
   args,
   json,
@@ -241,13 +327,15 @@ export function handleConfigCommand({
   const configPath = resolveConfigPath(options);
 
   if (!action) {
-    throw new CliError("Missing `config` action. Use `set`, `get`, or `list`.", {
+    throw new CliError("Missing `config` action. Use `set`, `get`, `list`, `provider`, or `language`.", {
       code: "CLI_CONTRACT_VIOLATION",
       exitCode: 2,
       guidance: [
         "Use `pi-tube config list`.",
         "Use `pi-tube config get <key>`.",
         "Use `pi-tube config set <key> <value>`.",
+        "Use `pi-tube config provider set <deepgram|groq>`.",
+        "Use `pi-tube config language set <code>`.",
       ],
     });
   }
@@ -259,7 +347,7 @@ export function handleConfigCommand({
         exitCode: 2,
       });
     }
-    const values = listConfigValues(options);
+    const values = withConfigValidation(() => listConfigValues(options));
     if (json) {
       return JSON.stringify(
         {
@@ -285,22 +373,8 @@ export function handleConfigCommand({
     }
 
     const key = requireConfigKey(rawKey);
-    const value = getConfigValue(key, options);
-    if (json) {
-      return JSON.stringify(
-        {
-          command: "config",
-          action: "get",
-          key,
-          value: value ?? null,
-          config_path: configPath,
-        },
-        null,
-        2,
-      );
-    }
-
-    return `[CONFIG_GET] key=${key} value=${asPrintableValue(value)} config_path=${configPath}`;
+    const value = withConfigValidation(() => getConfigValue(key, options));
+    return formatConfigGetResult({ json, configPath, action: "get", key, value });
   }
 
   if (action === "set") {
@@ -313,29 +387,127 @@ export function handleConfigCommand({
     }
 
     const key = requireConfigKey(rawKey);
-    setConfigValue(key, rawValue, options);
-    const value = getConfigValue(key, { ...options, env: options?.env ?? process.env });
+    withConfigValidation(() => setConfigValue(key, rawValue, options));
+    const value = withConfigValidation(() =>
+      getConfigValue(key, { ...options, env: options?.env ?? process.env }));
+    return formatConfigSetResult({ json, configPath, action: "set", key, value });
+  }
 
-    if (json) {
-      return JSON.stringify(
-        {
-          command: "config",
-          action: "set",
-          key,
-          value,
-          config_path: configPath,
-        },
-        null,
-        2,
-      );
+  if (action === "provider") {
+    const [providerAction, ...providerArgs] = rest;
+    if (!providerAction) {
+      throw new CliError("`config provider` requires one of: set, get, env, key.", {
+        code: "CLI_CONTRACT_VIOLATION",
+        exitCode: 2,
+      });
     }
 
-    return `[CONFIG_SET] key=${key} value=${asPrintableValue(value)} config_path=${configPath}`;
+    if (providerAction === "set") {
+      const [provider, ...extra] = providerArgs;
+      if (!provider || extra.length > 0) {
+        throw new CliError("`config provider set` expects exactly one provider.", {
+          code: "CLI_CONTRACT_VIOLATION",
+          exitCode: 2,
+          guidance: ["Use `pi-tube config provider set <deepgram|groq>`."],
+        });
+      }
+
+      const key: ConfigKey = "defaults.provider";
+      const providerId = requireConfigProviderId(provider);
+      withConfigValidation(() => setConfigValue(key, providerId, options));
+      const value = withConfigValidation(() =>
+        getConfigValue(key, { ...options, env: options?.env ?? process.env }));
+      return formatConfigSetResult({ json, configPath, action: "provider.set", key, value });
+    }
+
+    if (providerAction === "get") {
+      if (providerArgs.length > 0) {
+        throw new CliError("`config provider get` does not accept extra arguments.", {
+          code: "CLI_CONTRACT_VIOLATION",
+          exitCode: 2,
+        });
+      }
+
+      const key: ConfigKey = "defaults.provider";
+      const value = withConfigValidation(() => getConfigValue(key, options));
+      return formatConfigGetResult({ json, configPath, action: "provider.get", key, value });
+    }
+
+    if (providerAction === "env" || providerAction === "key") {
+      const [provider, valueInput, ...extra] = providerArgs;
+      if (!provider || !valueInput || extra.length > 0) {
+        const actionHint = providerAction === "env" ? "<provider> <ENV_VAR>" : "<provider> <api_key>";
+        throw new CliError(`\`config provider ${providerAction}\` expects exactly ${actionHint}.`, {
+          code: "CLI_CONTRACT_VIOLATION",
+          exitCode: 2,
+        });
+      }
+
+      const providerId = requireConfigProviderId(provider);
+      const key = providerAction === "env"
+        ? (`providers.${providerId}.api_key_env` as ConfigKey)
+        : (`providers.${providerId}.api_key` as ConfigKey);
+      withConfigValidation(() => setConfigValue(key, valueInput, options));
+      const value = withConfigValidation(() =>
+        getConfigValue(key, { ...options, env: options?.env ?? process.env }));
+      return formatConfigSetResult({ json, configPath, action: `provider.${providerAction}`, key, value });
+    }
+
+    throw new CliError(`Unsupported \`config provider\` action: \`${providerAction}\`.`, {
+      code: "CLI_CONTRACT_VIOLATION",
+      exitCode: 2,
+      guidance: ["Use one of: set, get, env, key."],
+    });
+  }
+
+  if (action === "language") {
+    const [languageAction, ...languageArgs] = rest;
+    if (!languageAction) {
+      throw new CliError("`config language` requires one of: set, get.", {
+        code: "CLI_CONTRACT_VIOLATION",
+        exitCode: 2,
+      });
+    }
+
+    const key: ConfigKey = "defaults.language";
+
+    if (languageAction === "set") {
+      const [valueInput, ...extra] = languageArgs;
+      if (!valueInput || extra.length > 0) {
+        throw new CliError("`config language set` expects exactly one language code.", {
+          code: "CLI_CONTRACT_VIOLATION",
+          exitCode: 2,
+        });
+      }
+
+      withConfigValidation(() => setConfigValue(key, valueInput, options));
+      const value = withConfigValidation(() =>
+        getConfigValue(key, { ...options, env: options?.env ?? process.env }));
+      return formatConfigSetResult({ json, configPath, action: "language.set", key, value });
+    }
+
+    if (languageAction === "get") {
+      if (languageArgs.length > 0) {
+        throw new CliError("`config language get` does not accept extra arguments.", {
+          code: "CLI_CONTRACT_VIOLATION",
+          exitCode: 2,
+        });
+      }
+
+      const value = withConfigValidation(() => getConfigValue(key, options));
+      return formatConfigGetResult({ json, configPath, action: "language.get", key, value });
+    }
+
+    throw new CliError(`Unsupported \`config language\` action: \`${languageAction}\`.`, {
+      code: "CLI_CONTRACT_VIOLATION",
+      exitCode: 2,
+      guidance: ["Use one of: set, get."],
+    });
   }
 
   throw new CliError(`Unsupported config action: \`${action}\`.`, {
     code: "CLI_CONTRACT_VIOLATION",
     exitCode: 2,
-    guidance: ["Use one of: set, get, list."],
+    guidance: ["Use one of: set, get, list, provider, language."],
   });
 }
