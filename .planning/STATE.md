@@ -25,7 +25,7 @@ See: .planning/PROJECT.md (updated 2026-03-02)
 Phase: 6 of 6 (Reliability & Release Gates)
 Plan: 4 of 4 executed
 Status: Phase 6 complete — all v1 planned phases executed
-Last activity: 2026-03-03 - Completed quick task 2: No caso eu quero interativo por padrão, que é para humanos instalarem e eu quero não interativo com flag para AIs instalarem. E o não interativo deve ser junto com o global, deve ser para instalar o pacote de maneira global na máquina com o symlink. E alem disso ele deve executar o comando, não só enviar qual comando deve ser executado
+Last activity: 2026-03-04 - Completed quick task 3: gostaria que o output padrão da resposta fosse na ~/.pi-tube/YYYY-MM-DD-(titulo do video, nome do arquivo). e no stdout do terminal linkasse esse arquivo para poder clicar e abri-lo
 
 Progress: [██████████] 100%
 
@@ -128,6 +128,7 @@ None yet.
 |---|-------------|------|--------|-----------|
 | 1 | o time stamp ta por keyword, isso deixa o arquivo muito grande e come muito contexto do AI, fora que deixa o arquivo impossivel de ler para humanos. Tem que pensar em outra solução | 2026-03-03 | 3ee352d | [1-o-time-stamp-ta-por-keyword-isso-deixa-o](./quick/1-o-time-stamp-ta-por-keyword-isso-deixa-o/) |
 | 2 | No caso eu quero interativo por padrão, que é para humanos instalarem e eu quero não interativo com flag para AIs instalarem. E o não interativo deve ser junto com o global, deve ser para instalar o pacote de maneira global na máquina com o symlink. E alem disso ele deve executar o comando, não só enviar qual comando deve ser executado | 2026-03-03 | 362c2cc | [2-no-caso-eu-quero-interativo-por-padr-o-q](./quick/2-no-caso-eu-quero-interativo-por-padr-o-q/) |
+| 3 | gostaria que o output padrão da resposta fosse na ~/.pi-tube/YYYY-MM-DD-(titulo do video, nome do arquivo). e no stdout do terminal linkasse esse arquivo para poder clicar e abri-lo | 2026-03-04 | a61ac34 | [3-gostaria-que-o-output-padr-o-da-resposta](./quick/3-gostaria-que-o-output-padr-o-da-resposta/) |
 
 ## Session Continuity
 
