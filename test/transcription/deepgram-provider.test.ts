@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { Buffer } from "node:buffer";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createDeepgramProvider } from "../../src/transcription/providers/deepgram.ts";
@@ -291,6 +291,74 @@ describe("deepgram provider", () => {
       } else {
         process.env.PI_TUBE_TEST_YTDLP_DOWNLOAD_PATH = originalMockPath;
       }
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  test("fails fast when yt-dlp download stalls for youtube sources", async () => {
+    const tempDir = mkdtempSync(path.join(os.tmpdir(), "pi-tube-deepgram-provider-timeout-"));
+    const mockYtDlpPath = path.join(tempDir, "yt-dlp");
+    writeFileSync(mockYtDlpPath, "#!/usr/bin/env bash\nsleep 60\n");
+    chmodSync(mockYtDlpPath, 0o755);
+
+    const originalPath = process.env.PATH;
+    const originalTimeout = process.env.PI_TUBE_YTDLP_TIMEOUT_MS;
+    const originalMockPath = process.env.PI_TUBE_TEST_YTDLP_DOWNLOAD_PATH;
+    const originalMockFailure = process.env.PI_TUBE_TEST_YTDLP_DOWNLOAD_ERROR;
+    process.env.PATH = `${tempDir}:${originalPath ?? ""}`;
+    process.env.PI_TUBE_YTDLP_TIMEOUT_MS = "20";
+    delete process.env.PI_TUBE_TEST_YTDLP_DOWNLOAD_PATH;
+    delete process.env.PI_TUBE_TEST_YTDLP_DOWNLOAD_ERROR;
+
+    const youtubeRequest: TranscriptionRequest = {
+      source: {
+        kind: "youtube",
+        originalInput: "https://www.youtube.com/watch?v=abc123",
+        normalizedUrl: "https://www.youtube.com/watch?v=abc123",
+        mediaUrl: "https://rr1.example.com/videoplayback?itag=140",
+      },
+    };
+
+    try {
+      const provider = createDeepgramProvider({
+        client: {
+          async transcribeUrl() {
+            throw new Error("transcribeUrl should not be called for youtube sources");
+          },
+          async transcribeFile() {
+            throw new Error("transcribeFile should not be called when yt-dlp download times out");
+          },
+        },
+      });
+
+      await expect(provider.transcribe(youtubeRequest)).rejects.toMatchObject({
+        code: "TRANSCRIPTION_PROVIDER_FAILED",
+      });
+    } finally {
+      if (originalPath === undefined) {
+        delete process.env.PATH;
+      } else {
+        process.env.PATH = originalPath;
+      }
+
+      if (originalTimeout === undefined) {
+        delete process.env.PI_TUBE_YTDLP_TIMEOUT_MS;
+      } else {
+        process.env.PI_TUBE_YTDLP_TIMEOUT_MS = originalTimeout;
+      }
+
+      if (originalMockPath === undefined) {
+        delete process.env.PI_TUBE_TEST_YTDLP_DOWNLOAD_PATH;
+      } else {
+        process.env.PI_TUBE_TEST_YTDLP_DOWNLOAD_PATH = originalMockPath;
+      }
+
+      if (originalMockFailure === undefined) {
+        delete process.env.PI_TUBE_TEST_YTDLP_DOWNLOAD_ERROR;
+      } else {
+        process.env.PI_TUBE_TEST_YTDLP_DOWNLOAD_ERROR = originalMockFailure;
+      }
+
       rmSync(tempDir, { recursive: true, force: true });
     }
   });

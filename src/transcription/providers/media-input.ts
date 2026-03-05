@@ -14,6 +14,8 @@ export interface ProviderMediaInput {
 }
 
 const AUDIO_FORMAT_SELECTOR = "bestaudio[ext=m4a]/bestaudio/best";
+const DEFAULT_YTDLP_TIMEOUT_MS = 120_000;
+const YTDLP_TIMEOUT_ENV = "PI_TUBE_YTDLP_TIMEOUT_MS";
 
 function resolvePiTubeBaseDir(): string {
   const home = process.env.HOME?.trim();
@@ -26,6 +28,51 @@ function resolvePiTubeBaseDir(): string {
 
 function shouldUseDownloadedMedia(source: ResolvedSource): boolean {
   return source.kind === "youtube" || source.kind === "instagram";
+}
+
+function resolveYtDlpTimeoutMs(env: Record<string, string | undefined> = process.env): number {
+  const raw = env[YTDLP_TIMEOUT_ENV]?.trim();
+  if (!raw) {
+    return DEFAULT_YTDLP_TIMEOUT_MS;
+  }
+
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return DEFAULT_YTDLP_TIMEOUT_MS;
+  }
+
+  return parsed;
+}
+
+async function waitForExitWithTimeout(
+  process: Bun.Subprocess<"pipe", "pipe", "inherit">,
+  timeoutMs: number,
+): Promise<{ timedOut: boolean; exitCode: number }> {
+  return new Promise((resolve) => {
+    let settled = false;
+
+    const timeoutHandle = setTimeout(() => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      try {
+        process.kill();
+      } catch {
+        // Best effort: command timeout should still unblock CLI execution.
+      }
+      resolve({ timedOut: true, exitCode: 124 });
+    }, timeoutMs);
+
+    process.exited.then((exitCode) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timeoutHandle);
+      resolve({ timedOut: false, exitCode });
+    });
+  });
 }
 
 function parseDownloadedPath(stdout: string): string | undefined {
@@ -87,18 +134,23 @@ async function downloadMediaForTranscription(
     );
   }
 
-  const [stdout, stderr, exitCode] = await Promise.all([
+  const timeoutMs = resolveYtDlpTimeoutMs();
+  const exitResult = await waitForExitWithTimeout(child, timeoutMs);
+  if (exitResult.timedOut) {
+    throw createTranscriptionProviderFailedError(providerId, `yt-dlp media download timed out after ${timeoutMs}ms`);
+  }
+
+  const [stdout, stderr] = await Promise.all([
     new Response(child.stdout).text(),
     new Response(child.stderr).text(),
-    child.exited,
   ]);
 
-  if (exitCode !== 0) {
+  if (exitResult.exitCode !== 0) {
     if (/not found|command not found|enoent/i.test(stderr)) {
       throw createYtDlpNotFoundError();
     }
 
-    const detail = stderr.trim() || stdout.trim() || `exit code ${exitCode}`;
+    const detail = stderr.trim() || stdout.trim() || `exit code ${exitResult.exitCode}`;
     throw createTranscriptionProviderFailedError(providerId, `yt-dlp media download failed: ${detail}`);
   }
 

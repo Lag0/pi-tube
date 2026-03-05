@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { resolveYouTubeSource } from "../../src/intake/adapters/youtube.ts";
 import { resolveYouTubeWithYtDlp } from "../../src/intake/tools/yt-dlp.ts";
 import {
@@ -84,6 +87,38 @@ describe("yt-dlp boundary", () => {
     ]);
     expect(result.mediaUrl).toBe("https://cdn.example.com/audio.m4a");
     expect(result.title).toBe("Example");
+  });
+
+  test("fails fast when yt-dlp process hangs", async () => {
+    const tempDir = mkdtempSync(path.join(os.tmpdir(), "pi-tube-ytdlp-timeout-"));
+    const mockYtDlpPath = path.join(tempDir, "yt-dlp");
+    writeFileSync(mockYtDlpPath, "#!/usr/bin/env bash\nsleep 60\n");
+    chmodSync(mockYtDlpPath, 0o755);
+
+    const originalPath = process.env.PATH;
+    const originalTimeout = process.env.PI_TUBE_YTDLP_TIMEOUT_MS;
+    process.env.PATH = `${tempDir}:${originalPath ?? ""}`;
+    process.env.PI_TUBE_YTDLP_TIMEOUT_MS = "20";
+
+    try {
+      await expect(resolveYouTubeWithYtDlp("https://youtube.com/watch?v=dQw4w9WgXcQ")).rejects.toMatchObject({
+        code: "YOUTUBE_EXTRACT_FAILED",
+      });
+    } finally {
+      if (originalPath === undefined) {
+        delete process.env.PATH;
+      } else {
+        process.env.PATH = originalPath;
+      }
+
+      if (originalTimeout === undefined) {
+        delete process.env.PI_TUBE_YTDLP_TIMEOUT_MS;
+      } else {
+        process.env.PI_TUBE_YTDLP_TIMEOUT_MS = originalTimeout;
+      }
+
+      rmSync(tempDir, { recursive: true, force: true });
+    }
   });
 });
 
