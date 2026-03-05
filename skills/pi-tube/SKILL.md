@@ -31,6 +31,9 @@ For output safety and untrusted content handling, follow [rules/security.md](rul
 
 ```bash
 pi-tube --version
+pi-tube help
+pi-tube help config
+pi-tube help setup
 pi-tube provider-status
 ```
 
@@ -39,8 +42,10 @@ pi-tube provider-status
 1. Configure defaults and credential references:
 
 ```bash
-pi-tube config set defaults.provider deepgram
-pi-tube config set providers.deepgram.api_key_env DEEPGRAM_API_KEY
+pi-tube config provider set deepgram
+pi-tube config provider env deepgram DEEPGRAM_API_KEY
+pi-tube config provider env groq GROQ_API_KEY
+pi-tube config language set pt-BR
 pi-tube config list
 ```
 
@@ -60,15 +65,23 @@ pi-tube --provider groq --language pt --json "./recording.mp3"
 
 ```bash
 pi-tube <input>
+pi-tube help [command]
 pi-tube --json <input>
-pi-tube config set <key> <value>
-pi-tube config get <key>
+pi-tube config provider set <deepgram|groq>
+pi-tube config provider env <deepgram|groq> <ENV_VAR>
+pi-tube config language set <code>
+pi-tube config set <key> <value>    # legacy compatibility
+pi-tube config get <key>            # legacy compatibility
 pi-tube config list
+pi-tube setup skills --global --yes
 pi-tube provider-status
 ```
 
 ## Notes
 
 - Precedence: CLI flags > config defaults > env defaults.
+- If no provider credential is configured, CLI exits early with deterministic error guidance.
+- If selected provider fails with auth/unavailable/failed and alternate provider is configured, CLI can fallback automatically.
+- `config provider env` expects an env var name (ex: `GROQ_API_KEY`), not a raw secret value.
 - Instagram private/auth-gated URLs fail with `INSTAGRAM_AUTH_REQUIRED`.
 - For release quality gates, run `bun test` and `bun run verify:fixtures`.

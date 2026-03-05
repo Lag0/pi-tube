@@ -1,11 +1,23 @@
-import { describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
+const configDir = mkdtempSync(path.join(os.tmpdir(), "pi-tube-cli-error-config-"));
+const configPath = path.join(configDir, "config.json");
 
 function runCli(args: string[], env: Record<string, string> = {}) {
   return Bun.spawnSync({
     cmd: ["bun", "run", "--bun", "bin/pi-tube.ts", ...args],
     stdout: "pipe",
     stderr: "pipe",
-    env: { ...process.env, ...env },
+    env: {
+      ...process.env,
+      PI_TUBE_CONFIG_PATH: configPath,
+      DEEPGRAM_API_KEY: "",
+      GROQ_API_KEY: "",
+      ...env,
+    },
   });
 }
 
@@ -83,4 +95,8 @@ describe("CLI error exits and formatting", () => {
     expect(misplacedSetupFlag.exitCode).toBe(2);
     expect(misplacedSetupFlag.stderr.toString()).toContain("[CLI_CONTRACT_VIOLATION]");
   });
+});
+
+afterAll(() => {
+  rmSync(configDir, { recursive: true, force: true });
 });
