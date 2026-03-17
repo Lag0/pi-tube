@@ -298,7 +298,7 @@ describe("deepgram provider", () => {
   test("fails fast when yt-dlp download stalls for youtube sources", async () => {
     const tempDir = mkdtempSync(path.join(os.tmpdir(), "pi-tube-deepgram-provider-timeout-"));
     const mockYtDlpPath = path.join(tempDir, "yt-dlp");
-    writeFileSync(mockYtDlpPath, "#!/usr/bin/env bash\nsleep 60\n");
+    writeFileSync(mockYtDlpPath, "#!/bin/sh\nsleep 60\n");
     chmodSync(mockYtDlpPath, 0o755);
 
     const originalPath = process.env.PATH;
