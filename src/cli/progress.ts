@@ -8,7 +8,7 @@ const ANSI_BOLD = "\u001b[1m";
 const ANSI_DIM = "\u001b[2m";
 const ANSI_HIDE_CURSOR = "\u001b[?25l";
 const ANSI_SHOW_CURSOR = "\u001b[?25h";
-const ANSI_CLEAR_LINE = "\u001b[2K\r";
+const ANSI_CLEAR_LINE = "\r\u001b[K";
 
 interface ProgressStep {
   label: string;
@@ -43,6 +43,11 @@ const truncatePath = (filePath: string, maxLength: number = 60): string => {
   return filePath;
 };
 
+const truncateDetail = (detail: string, maxLength: number = 50): string => {
+  if (detail.length <= maxLength) return detail;
+  return `${detail.slice(0, maxLength - 3)}...`;
+};
+
 /** Creates a no-op reporter for non-TTY or machine-readable output. */
 const createSilentReporter = (): ProgressReporter => ({
   update: () => {},
@@ -70,11 +75,10 @@ export const createProgressReporter = (options: ProgressOptions): ProgressReport
   const renderFrame = () => {
     const frame = SPINNER_FRAMES[frameIndex % SPINNER_FRAMES.length] ?? "⠋";
     const spinner = paint(frame, ANSI_CYAN, color);
-    const detail = currentDetail ? paint(` ${currentDetail}`, ANSI_DIM, color) : "";
+    const truncated = currentDetail ? truncateDetail(currentDetail) : "";
+    const detail = truncated ? paint(` ${truncated}`, ANSI_DIM, color) : "";
     const line = `${spinner} ${currentLabel}${detail}`;
-    // Pad to 120 chars then clear to handle terminal width variations
-    const padded = line.padEnd(120);
-    stream.write(`${ANSI_CLEAR_LINE}${padded}`);
+    stream.write(`${ANSI_CLEAR_LINE}${line}`);
     frameIndex += 1;
   };
 
