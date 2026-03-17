@@ -75,10 +75,32 @@ export const createProgressReporter = (options: ProgressOptions): ProgressReport
   const renderFrame = () => {
     const frame = SPINNER_FRAMES[frameIndex % SPINNER_FRAMES.length] ?? "⠋";
     const spinner = paint(frame, ANSI_CYAN, color);
-    const truncated = currentDetail ? truncateDetail(currentDetail) : "";
-    const detail = truncated ? paint(` ${truncated}`, ANSI_DIM, color) : "";
-    const line = `${spinner} ${currentLabel}${detail}`;
-    stream.write(`${ANSI_CLEAR_LINE}${line}`);
+
+    // Get terminal width, default to 80 if unavailable
+    const terminalWidth = ("columns" in stream && typeof (stream as any).columns === "number")
+      ? (stream as any).columns
+      : 80;
+
+    // Build content and ensure it fits in terminal width
+    const maxWidth = Math.max(30, terminalWidth - 2);
+    let content = `${frame} ${currentLabel}`;
+
+    if (currentDetail) {
+      const detailWithSpace = ` ${currentDetail}`;
+      if (content.length + detailWithSpace.length <= maxWidth) {
+        content += detailWithSpace;
+      } else {
+        // Truncate detail to fit
+        const availableForDetail = maxWidth - content.length - 3; // -3 for "..."
+        if (availableForDetail > 0) {
+          content += ` ${currentDetail.slice(0, availableForDetail)}...`;
+        }
+      }
+    }
+
+    // Apply colors to the frame only
+    const displayLine = content.replace(frame, spinner);
+    stream.write(`${ANSI_CLEAR_LINE}${displayLine}`);
     frameIndex += 1;
   };
 
