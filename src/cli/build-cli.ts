@@ -16,6 +16,7 @@ import {
 import { handleSetupCommand } from "./setup.ts";
 import { CliError, formatCliError } from "../errors/cli-errors.ts";
 import { isLegacyCommand, throwLegacyCommandGuidance } from "../legacy/compatibility.ts";
+import { createProgressReporter } from "./progress.ts";
 
 interface ParsedArgs {
   showHelp: boolean;
@@ -307,21 +308,34 @@ export async function runCli(argv: string[]): Promise<number> {
       return 0;
     }
 
-    const result = await handleBaselineInput({
-      input: first,
-      json: parsed.json,
-      extraPositionals: rest,
-      provider: parsed.provider,
-      language: parsed.language,
-      timestamps: parsed.timestamps,
-    });
-    const persisted = persistBaselineIntakeResult(result, {
-      env: process.env,
-      cwd: process.cwd(),
-    });
-    console.log(`[OUTPUT_FILE] ${persisted.outputPath}`);
-    console.log(`[OUTPUT_FILE_URI] ${persisted.outputUri}`);
-    return 0;
+    const progress = createProgressReporter({ color: !parsed.noColor });
+    const startTime = Date.now();
+
+    try {
+      const result = await handleBaselineInput({
+        input: first,
+        json: parsed.json,
+        extraPositionals: rest,
+        provider: parsed.provider,
+        language: parsed.language,
+        timestamps: parsed.timestamps,
+        onProgress: (step) => progress.update(step),
+      });
+
+      progress.update({ label: "Saving output..." });
+      const persisted = persistBaselineIntakeResult(result, {
+        env: process.env,
+        cwd: process.cwd(),
+      });
+
+      progress.succeed(persisted.outputPath, Date.now() - startTime);
+      console.log(`[OUTPUT_FILE] ${persisted.outputPath}`);
+      console.log(`[OUTPUT_FILE_URI] ${persisted.outputUri}`);
+      return 0;
+    } catch (error) {
+      progress.fail("Failed");
+      throw error;
+    }
   } catch (error) {
     const formatted = formatCliError(error);
     console.error(formatted.message);

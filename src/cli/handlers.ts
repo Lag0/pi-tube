@@ -29,6 +29,11 @@ const DEFERRED_COMMAND_PHASE: Record<string, string> = {
   instagram: "Phase 3",
 };
 
+export interface ProgressStep {
+  label: string;
+  detail?: string;
+}
+
 export interface BaselineInput {
   input: string;
   json: boolean;
@@ -37,6 +42,7 @@ export interface BaselineInput {
   provider?: string;
   language?: string;
   transcriptionOptions?: Omit<TranscriptionServiceOptions, "provider" | "language">;
+  onProgress?: (step: ProgressStep) => void;
 }
 
 export interface BaselineIntakeResult {
@@ -98,6 +104,7 @@ export async function handleBaselineInput({
   provider,
   language,
   transcriptionOptions,
+  onProgress,
 }: BaselineInput): Promise<BaselineIntakeResult> {
   if (extraPositionals.length > 0) {
     throw new CliError("Only one positional input is supported in Phase 2.", {
@@ -110,7 +117,16 @@ export async function handleBaselineInput({
     });
   }
 
+  onProgress?.({ label: "Resolving source..." });
   const source = await resolveSource(input);
+
+  const sourceDetail = source.kind === "youtube" || source.kind === "instagram"
+    ? source.title ?? source.kind
+    : source.kind === "local_file"
+      ? source.kind
+      : "direct url";
+
+  onProgress?.({ label: "Transcribing audio...", detail: `(${sourceDetail})` });
   const transcription = await transcribeFromResolvedSource(source, {
     ...transcriptionOptions,
     provider,
