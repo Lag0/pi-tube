@@ -71,7 +71,10 @@ export const createProgressReporter = (options: ProgressOptions): ProgressReport
     const frame = SPINNER_FRAMES[frameIndex % SPINNER_FRAMES.length] ?? "⠋";
     const spinner = paint(frame, ANSI_CYAN, color);
     const detail = currentDetail ? paint(` ${currentDetail}`, ANSI_DIM, color) : "";
-    stream.write(`${ANSI_CLEAR_LINE}${spinner} ${currentLabel}${detail}`);
+    const line = `${spinner} ${currentLabel}${detail}`;
+    // Pad to 120 chars then clear to handle terminal width variations
+    const padded = line.padEnd(120);
+    stream.write(`${ANSI_CLEAR_LINE}${padded}`);
     frameIndex += 1;
   };
 
