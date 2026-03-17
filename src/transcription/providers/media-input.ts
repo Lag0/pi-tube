@@ -123,6 +123,7 @@ async function downloadMediaForTranscription(
       stdout: "pipe",
       stderr: "pipe",
       stdin: "inherit",
+      env: globalThis.process.env,
     });
   } catch (error) {
     if (error instanceof Error && /ENOENT|not found/i.test(error.message)) {
