@@ -10,6 +10,7 @@ import {
   handleBaselineInput,
   handleConfigCommand,
   handleDeferredCommand,
+  handleDownloadCommand,
   handleProviderStatus,
   isDeferredCommand,
   persistBaselineIntakeResult,
@@ -30,6 +31,8 @@ interface ParsedArgs {
   setupGlobal: boolean;
   setupNonInteractive: boolean;
   setupAgent?: string;
+  downloadAudio: boolean;
+  outputDir?: string;
   positionals: string[];
 }
 
@@ -57,6 +60,8 @@ function createProgram(): Command {
     .option("--provider <provider>", "Select transcription provider (deepgram or groq).")
     .option("--language <code>", "Optional language preference.")
     .option("--timestamps", "Include timestamp blocks in transcript output.")
+    .option("--audio", "Download audio only for download command.")
+    .option("--output <dir>", "Output directory for download command.")
     .option("--no-color", "Disable ANSI colors in help output.")
     .option("-g, --global", "Use global setup target.")
     .option("-a, --agent <name>", "Select setup agent target.")
@@ -89,6 +94,7 @@ function parse(argv: string[]): ParsedArgs {
       noColor,
       setupGlobal: false,
       setupNonInteractive: false,
+      downloadAudio: false,
       positionals,
     };
   }
@@ -109,6 +115,8 @@ function parse(argv: string[]): ParsedArgs {
     provider?: string;
     language?: string;
     timestamps?: boolean;
+    audio?: boolean;
+    output?: string;
     color?: boolean;
     global?: boolean;
     agent?: string;
@@ -128,6 +136,8 @@ function parse(argv: string[]): ParsedArgs {
     setupGlobal: Boolean(options.global),
     setupNonInteractive: Boolean(options.yes || options.prompt === false || options.nonInteractive),
     setupAgent: options.agent,
+    downloadAudio: Boolean(options.audio),
+    outputDir: options.output,
     positionals: program.args.map(String),
   };
 }
@@ -197,6 +207,46 @@ export async function runCli(argv: string[]): Promise<number> {
 
     if (isDeferredCommand(first)) {
       handleDeferredCommand(first, parsed.json);
+    }
+
+    if (first === "download") {
+      if (parsed.provider || parsed.language || parsed.timestamps || parsed.json) {
+        throw new CliError("`download` does not support `--provider`, `--language`, `--timestamps`, or `--json`.", {
+          code: "CLI_CONTRACT_VIOLATION",
+          exitCode: 2,
+          guidance: ["Use `pi-tube download <url> [--audio] [--output <dir>]`."],
+        });
+      }
+
+      const progress = createProgressReporter({ color: !parsed.noColor });
+      const startTime = Date.now();
+      try {
+        const [downloadInput, ...extraDownloadArgs] = rest;
+        const result = await handleDownloadCommand({
+          input: downloadInput,
+          extraPositionals: extraDownloadArgs,
+          audio: parsed.downloadAudio,
+          outputDir: parsed.outputDir,
+          env: process.env,
+          cwd: process.cwd(),
+          onProgress: (step) => progress.update(step),
+        });
+        progress.succeed(result.outputPath, Date.now() - startTime);
+        console.log(`[DOWNLOAD_FILE] ${result.outputPath}`);
+        console.log(`[DOWNLOAD_FILE_URI] ${result.outputUri}`);
+        return 0;
+      } catch (error) {
+        progress.fail("Failed");
+        throw error;
+      }
+    }
+
+    if (parsed.downloadAudio || parsed.outputDir) {
+      throw new CliError("`--audio` and `--output` are only valid with `download`.", {
+        code: "CLI_CONTRACT_VIOLATION",
+        exitCode: 2,
+        guidance: ["Use `pi-tube download <url> [--audio] [--output <dir>]`."],
+      });
     }
 
     if (first === "setup") {

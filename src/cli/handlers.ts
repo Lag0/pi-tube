@@ -1,4 +1,6 @@
 import { CliError, CliPlannedFeatureError } from "../errors/cli-errors.ts";
+import { downloadMedia } from "../download/service.ts";
+import type { DownloadResult } from "../download/types.ts";
 import { resolveSource } from "../intake/resolver.ts";
 import { buildOutputArtifact } from "../output/build-artifact.ts";
 import { renderJson } from "../output/json.ts";
@@ -77,6 +79,16 @@ interface ConfigCommandInput {
   options?: ConfigStoreOptions;
 }
 
+export interface DownloadCommandInput {
+  input?: string;
+  extraPositionals: string[];
+  audio: boolean;
+  outputDir?: string;
+  env?: Record<string, string | undefined>;
+  cwd?: string;
+  onProgress?: (step: ProgressStep) => void;
+}
+
 export function isDeferredCommand(command: string): boolean {
   return command in DEFERRED_COMMAND_PHASE;
 }
@@ -145,6 +157,40 @@ export function formatBaselineIntakeResult(result: BaselineIntakeResult): string
     includeTimestamps: result.timestamps,
   });
   return result.json ? renderJson(artifact) : renderMarkdown(artifact);
+}
+
+export async function handleDownloadCommand({
+  input,
+  extraPositionals,
+  audio,
+  outputDir,
+  env,
+  cwd,
+  onProgress,
+}: DownloadCommandInput): Promise<DownloadResult> {
+  if (!input) {
+    throw new CliError("`download` expects a YouTube or Instagram URL.", {
+      code: "CLI_CONTRACT_VIOLATION",
+      exitCode: 2,
+      guidance: ["Use `pi-tube download <url> [--audio] [--output <dir>]`."],
+    });
+  }
+
+  if (extraPositionals.length > 0) {
+    throw new CliError("`download` accepts exactly one URL input.", {
+      code: "CLI_CONTRACT_VIOLATION",
+      exitCode: 2,
+      guidance: ["Use `pi-tube download <url> [--audio] [--output <dir>]`."],
+    });
+  }
+
+  onProgress?.({ label: "Downloading media...", detail: audio ? "(audio)" : "(video)" });
+  return downloadMedia(input, {
+    media: audio ? "audio" : "video",
+    outputDir,
+    env,
+    cwd,
+  });
 }
 
 export function persistBaselineIntakeResult(
