@@ -64,6 +64,10 @@ export const ERROR_CATALOG = {
     exitCode: 2,
     guidance: ["Use a supported audio/video file extension."],
   },
+  DOWNLOAD_FAILED: {
+    exitCode: 2,
+    guidance: ["Retry with a valid public YouTube or Instagram URL."],
+  },
   TRANSCRIPTION_PROVIDER_INVALID: {
     exitCode: 2,
     guidance: ["Use `deepgram` or `groq`."],

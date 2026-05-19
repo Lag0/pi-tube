@@ -176,6 +176,15 @@ export function createUnsupportedLocalFileExtensionError(filePath: string): CliE
   });
 }
 
+export function createDownloadFailedError(detail?: string): CliError {
+  const suffix = detail ? ` (${detail})` : "";
+  return new CliError(`Failed to download media via yt-dlp${suffix}.`, {
+    code: "DOWNLOAD_FAILED",
+    exitCode: 2,
+    guidance: ["Retry with a valid public YouTube or Instagram URL."],
+  });
+}
+
 export function formatCliError(error: unknown): { message: string; exitCode: number } {
   if (error instanceof CliError) {
     const lines = [`[${error.code}] ${error.message}`];
