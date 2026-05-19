@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import type { ResolvedSource } from "../../src/intake/types.ts";
 import { transcribeFromResolvedSource } from "../../src/transcription/service.ts";
 import type { ProviderRegistry } from "../../src/transcription/providers/index.ts";

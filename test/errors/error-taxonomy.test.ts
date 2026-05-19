@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { ERROR_CATALOG } from "../../src/errors/catalog.ts";

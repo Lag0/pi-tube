@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { resolveInstagramSource } from "../../src/intake/adapters/instagram.ts";
 import { resolveInstagramWithYtDlp } from "../../src/intake/tools/yt-dlp.ts";
 import {

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { buildOutputArtifact } from "../../src/output/build-artifact.ts";
 import { renderJson } from "../../src/output/json.ts";
 import type { TranscriptionExecutionResult } from "../../src/transcription/types.ts";

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { createGroqProvider } from "../../src/transcription/providers/groq.ts";
 import type { TranscriptionRequest } from "../../src/transcription/types.ts";
 
