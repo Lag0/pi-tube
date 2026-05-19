@@ -1,3 +1,4 @@
+import { Command, CommanderError } from "commander";
 import {
   APP_VERSION,
   COMMAND_IDENTITY,
@@ -37,11 +38,68 @@ function renderHelp(topic: HelpTopic, color: boolean): string {
   return renderHelpDocument(helpDocument, { color });
 }
 
+function createProgram(): Command {
+  return new Command()
+    .name(COMMAND_IDENTITY)
+    .description("Deterministic media transcription workflows for humans and automation.")
+    .exitOverride()
+    .configureOutput({
+      writeOut: () => undefined,
+      writeErr: () => undefined,
+    })
+    .allowExcessArguments(true)
+    .allowUnknownOption(false)
+    .helpOption(false)
+    .addHelpCommand(false)
+    .argument("[positionals...]", "command or media input")
+    .option("--json", "Output deterministic JSON format.")
+    .option("--provider <provider>", "Select transcription provider (deepgram or groq).")
+    .option("--language <code>", "Optional language preference.")
+    .option("--timestamps", "Include timestamp blocks in transcript output.")
+    .option("--no-color", "Disable ANSI colors in help output.")
+    .option("-g, --global", "Use global setup target.")
+    .option("-a, --agent <name>", "Select setup agent target.")
+    .option("-y, --yes", "Run setup non-interactively.")
+    .option("--no-prompt", "Run setup non-interactively.")
+    .option("--non-interactive", "Run setup non-interactively.");
+}
+
+function isHelpRequest(argv: string[]): boolean {
+  return argv.length === 0 || argv.includes("--help") || argv.includes("-h") || argv[0] === "help";
+}
+
+function isVersionRequest(argv: string[]): boolean {
+  return argv.length === 1 && (argv[0] === "--version" || argv[0] === "-v");
+}
+
+function commanderErrorToCliError(error: CommanderError): CliError {
+  return new CliError(error.message, {
+    code: "CLI_CONTRACT_VIOLATION",
+    exitCode: error.exitCode === 0 ? 0 : 2,
+    guidance: [`Run \`${COMMAND_IDENTITY} --help\` to view supported options.`],
+  });
+}
+
 function parse(argv: string[]): ParsedArgs {
-  if (argv.length === 0) {
+  if (isHelpRequest(argv)) {
+    const noColor = argv.includes("--no-color");
+    const positionals = argv.filter((arg) => !["--help", "-h", "--no-color"].includes(arg));
     return {
       showHelp: true,
       showVersion: false,
+      json: false,
+      timestamps: false,
+      noColor,
+      setupGlobal: false,
+      setupNonInteractive: false,
+      positionals,
+    };
+  }
+
+  if (isVersionRequest(argv)) {
+    return {
+      showHelp: false,
+      showVersion: true,
       json: false,
       timestamps: false,
       noColor: false,
@@ -51,127 +109,41 @@ function parse(argv: string[]): ParsedArgs {
     };
   }
 
-  let showHelp = false;
-  let showVersion = false;
-  let json = false;
-  let timestamps = false;
-  let noColor = false;
-  let provider: string | undefined;
-  let language: string | undefined;
-  let setupGlobal = false;
-  let setupNonInteractive = false;
-  let setupAgent: string | undefined;
-  const positionals: string[] = [];
-
-  for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index] ?? "";
-
-    if (arg === "--help" || arg === "-h") {
-      showHelp = true;
-      continue;
+  const program = createProgram();
+  try {
+    program.parse(argv, { from: "user" });
+  } catch (error) {
+    if (error instanceof CommanderError) {
+      throw commanderErrorToCliError(error);
     }
-
-    if (arg === "--version" || arg === "-v") {
-      showVersion = true;
-      continue;
-    }
-
-    if (arg === "--json") {
-      json = true;
-      continue;
-    }
-
-    if (arg === "--timestamps") {
-      timestamps = true;
-      continue;
-    }
-
-    if (arg === "--no-color") {
-      noColor = true;
-      continue;
-    }
-
-    if (arg === "--global" || arg === "-g") {
-      setupGlobal = true;
-      continue;
-    }
-
-    if (arg === "--yes" || arg === "-y" || arg === "--no-prompt" || arg === "--non-interactive") {
-      setupNonInteractive = true;
-      continue;
-    }
-
-    if (arg === "--agent" || arg === "-a" || arg.startsWith("--agent=")) {
-      const value =
-        arg === "--agent" || arg === "-a" ? argv[index + 1] : arg.slice("--agent=".length).trim();
-      if (!value || value.startsWith("-")) {
-        throw new CliError("`--agent` requires a value.", {
-          code: "CLI_CONTRACT_VIOLATION",
-          exitCode: 2,
-        });
-      }
-      setupAgent = value;
-      if (arg === "--agent" || arg === "-a") {
-        index += 1;
-      }
-      continue;
-    }
-
-    if (arg === "--provider" || arg.startsWith("--provider=")) {
-      const value =
-        arg === "--provider" ? argv[index + 1] : arg.slice("--provider=".length).trim();
-      if (!value || value.startsWith("-")) {
-        throw new CliError("`--provider` requires a value (`deepgram` or `groq`).", {
-          code: "CLI_CONTRACT_VIOLATION",
-          exitCode: 2,
-        });
-      }
-      provider = value;
-      if (arg === "--provider") {
-        index += 1;
-      }
-      continue;
-    }
-
-    if (arg === "--language" || arg.startsWith("--language=")) {
-      const value =
-        arg === "--language" ? argv[index + 1] : arg.slice("--language=".length).trim();
-      if (!value || value.startsWith("-")) {
-        throw new CliError("`--language` requires a language code value.", {
-          code: "CLI_CONTRACT_VIOLATION",
-          exitCode: 2,
-        });
-      }
-      language = value;
-      if (arg === "--language") {
-        index += 1;
-      }
-      continue;
-    }
-
-    if (arg.startsWith("-")) {
-      throw new CliError(`Unsupported option: \`${arg}\`.`, {
-        code: "CLI_CONTRACT_VIOLATION",
-        exitCode: 2,
-        guidance: [`Run \`${COMMAND_IDENTITY} --help\` to view supported options.`],
-      });
-    }
-
-    positionals.push(arg);
+    throw error;
   }
 
+  const options = program.opts<{
+    json?: boolean;
+    provider?: string;
+    language?: string;
+    timestamps?: boolean;
+    color?: boolean;
+    global?: boolean;
+    agent?: string;
+    yes?: boolean;
+    prompt?: boolean;
+    nonInteractive?: boolean;
+  }>();
+
   return {
-    showHelp,
-    showVersion,
-    json,
-    timestamps,
-    noColor,
-    provider,
-    language,
-    setupGlobal,
-    setupNonInteractive,
-    setupAgent,
-    positionals,
+    showHelp: false,
+    showVersion: false,
+    json: Boolean(options.json),
+    timestamps: Boolean(options.timestamps),
+    noColor: options.color === false,
+    provider: options.provider,
+    language: options.language,
+    setupGlobal: Boolean(options.global),
+    setupNonInteractive: Boolean(options.yes || options.prompt === false || options.nonInteractive),
+    setupAgent: options.agent,
+    positionals: program.args.map(String),
   };
 }
 
