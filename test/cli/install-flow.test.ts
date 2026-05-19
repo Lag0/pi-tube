@@ -51,11 +51,11 @@ describe("Install and run contract", () => {
     expect(pkg.scripts?.["verify:fixtures"]).toBe("bun run --bun scripts/verify-fixtures.ts");
     expect(pkg.scripts?.["publish-beta"]).toContain("npm publish");
     expect(pkg.scripts?.["publish-prod"]).toContain("npm publish");
-    expect(ciWorkflow).toContain("run: bun test");
+    expect(ciWorkflow).toContain("run: bun run test");
     expect(ciWorkflow).toContain("run: bun run verify:fixtures");
     expect(publishWorkflow).toContain("name: Publish to npm");
     expect(publishWorkflow).toContain("npm publish --provenance --access public");
-    expect(releaseChecklist).toContain("bun test");
+    expect(releaseChecklist).toContain("bun run test");
     expect(releaseChecklist).toContain("bun run verify:fixtures");
     expect(releaseChecklist).toContain("test/errors/error-taxonomy.test.ts");
     expect(releaseChecklist).toContain("test/cli/error-exit-codes.test.ts");
