@@ -13,7 +13,8 @@
   "scripts": {
     "pi-tube": "bun run --bun bin/pi-tube.ts",
     "start": "bun run --bun bin/pi-tube.ts",
-    "test": "bun test",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "verify:fixtures": "bun run --bun scripts/verify-fixtures.ts",
     "publish-beta": "npm publish --tag beta --access public",
     "publish-prod": "npm publish --access public"
@@ -34,10 +35,12 @@
   "homepage": "https://github.com/Lag0/pi-tube",
   "devDependencies": {
     "@types/bun": "latest",
-    "typescript": "^5.9.2"
+    "typescript": "^5.9.2",
+    "vitest": "^4.1.6"
   },
   "dependencies": {
     "@deepgram/sdk": "^4.11.3",
+    "commander": "^14.0.3",
     "groq-sdk": "^0.37.0"
   }
 }
