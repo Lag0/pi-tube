@@ -52,6 +52,7 @@ function createProgram(): Command {
     .helpOption(false)
     .addHelpCommand(false)
     .argument("[positionals...]", "command or media input")
+    .option("-v, --version", "Show version.")
     .option("--json", "Output deterministic JSON format.")
     .option("--provider <provider>", "Select transcription provider (deepgram or groq).")
     .option("--language <code>", "Optional language preference.")
@@ -66,10 +67,6 @@ function createProgram(): Command {
 
 function isHelpRequest(argv: string[]): boolean {
   return argv.length === 0 || argv.includes("--help") || argv.includes("-h") || argv[0] === "help";
-}
-
-function isVersionRequest(argv: string[]): boolean {
-  return argv.length === 1 && (argv[0] === "--version" || argv[0] === "-v");
 }
 
 function commanderErrorToCliError(error: CommanderError): CliError {
@@ -96,19 +93,6 @@ function parse(argv: string[]): ParsedArgs {
     };
   }
 
-  if (isVersionRequest(argv)) {
-    return {
-      showHelp: false,
-      showVersion: true,
-      json: false,
-      timestamps: false,
-      noColor: false,
-      setupGlobal: false,
-      setupNonInteractive: false,
-      positionals: [],
-    };
-  }
-
   const program = createProgram();
   try {
     program.parse(argv, { from: "user" });
@@ -120,6 +104,7 @@ function parse(argv: string[]): ParsedArgs {
   }
 
   const options = program.opts<{
+    version?: boolean;
     json?: boolean;
     provider?: string;
     language?: string;
@@ -134,7 +119,7 @@ function parse(argv: string[]): ParsedArgs {
 
   return {
     showHelp: false,
-    showVersion: false,
+    showVersion: Boolean(options.version),
     json: Boolean(options.json),
     timestamps: Boolean(options.timestamps),
     noColor: options.color === false,

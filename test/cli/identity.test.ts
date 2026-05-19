@@ -19,6 +19,15 @@ describe("CLI identity and placeholders", () => {
     expect(result.stdout.toString().trim()).toBe(`pi-tube ${pkg.version}`);
   });
 
+  test("keeps version flag compatible with other global flags", () => {
+    const pkg = JSON.parse(readFileSync("package.json", "utf8")) as { version: string };
+    const result = runCli(["--version", "--json"]);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout.toString().trim()).toBe(`pi-tube ${pkg.version}`);
+    expect(result.stderr.toString().trim()).toBe("");
+  });
+
   test("returns deterministic non-zero guidance for deferred command paths", () => {
     const result = runCli(["youtube", "https://youtube.com/watch?v=abc"]);
     const stderr = result.stderr.toString();
