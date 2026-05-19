@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import type { TranscriptionExecutionResult } from "../../src/transcription/types.ts";
 import { buildOutputArtifact } from "../../src/output/build-artifact.ts";
 import { OUTPUT_SCHEMA_VERSION } from "../../src/output/contract.ts";

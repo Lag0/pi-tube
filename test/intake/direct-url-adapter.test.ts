@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { resolveDirectUrlSource } from "../../src/intake/adapters/direct-url.ts";
 
 describe("direct URL adapter", () => {

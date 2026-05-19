@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 
 function runCli(args: string[]) {
   return Bun.spawnSync({
