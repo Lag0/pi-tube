@@ -157,7 +157,7 @@ function resolveHelpTopic(positionals: string[]): HelpTopic {
       return "root";
     }
 
-    if (second === "config" || second === "setup" || second === "provider-status") {
+    if (second === "config" || second === "setup" || second === "provider-status" || second === "download") {
       return second;
     }
 
@@ -165,12 +165,12 @@ function resolveHelpTopic(positionals: string[]): HelpTopic {
       code: "CLI_CONTRACT_VIOLATION",
       exitCode: 2,
       guidance: [
-        `Supported help topics: ${COMMAND_IDENTITY} help, ${COMMAND_IDENTITY} help config, ${COMMAND_IDENTITY} help setup, ${COMMAND_IDENTITY} help provider-status.`,
+        `Supported help topics: ${COMMAND_IDENTITY} help, ${COMMAND_IDENTITY} help config, ${COMMAND_IDENTITY} help setup, ${COMMAND_IDENTITY} help provider-status, ${COMMAND_IDENTITY} help download.`,
       ],
     });
   }
 
-  if (first === "config" || first === "setup" || first === "provider-status") {
+  if (first === "config" || first === "setup" || first === "provider-status" || first === "download") {
     return first;
   }
 

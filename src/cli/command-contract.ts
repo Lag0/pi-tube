@@ -7,7 +7,7 @@ const PACKAGE_JSON_URL = new URL("../../package.json", import.meta.url);
 const PACKAGE_JSON = JSON.parse(readFileSync(PACKAGE_JSON_URL, "utf8")) as { version?: string };
 export const APP_VERSION = typeof PACKAGE_JSON.version === "string" ? PACKAGE_JSON.version : "0.0.0";
 
-export type HelpTopic = "root" | "config" | "setup" | "provider-status";
+export type HelpTopic = "root" | "config" | "setup" | "provider-status" | "download";
 
 const ROOT_HELP_DOCUMENT: HelpDocument = {
   title: `${COMMAND_IDENTITY} CLI`,
@@ -16,6 +16,7 @@ const ROOT_HELP_DOCUMENT: HelpDocument = {
     `${COMMAND_IDENTITY} <input> [--provider <deepgram|groq>] [--language <code>] [--timestamps] [--json]`,
     `${COMMAND_IDENTITY} help [command]`,
     `${COMMAND_IDENTITY} setup <install|skills|mcp> [--global] [--agent <name>] [--yes|--no-prompt]`,
+    `${COMMAND_IDENTITY} download <url> [--audio] [--output <dir>]`,
     `${COMMAND_IDENTITY} config <set|get|list> [args] [--json]`,
     `${COMMAND_IDENTITY} provider-status [--json]`,
   ],
@@ -26,6 +27,15 @@ const ROOT_HELP_DOCUMENT: HelpDocument = {
         {
           term: `${COMMAND_IDENTITY} <input>`,
           description: "Baseline v1 contract (Markdown default, JSON optional)",
+        },
+      ],
+    },
+    {
+      title: "Download",
+      rows: [
+        {
+          term: `${COMMAND_IDENTITY} download <url>`,
+          description: "Download YouTube/Instagram media (video+audio by default)",
         },
       ],
     },
@@ -77,6 +87,8 @@ const ROOT_HELP_DOCUMENT: HelpDocument = {
     { term: "--provider <deepgram|groq>", description: "Select transcription provider (default: deepgram)." },
     { term: "--language <code>", description: "Optional language preference." },
     { term: "--timestamps", description: "Include timestamp blocks in transcript output." },
+    { term: "--audio", description: "Download audio only with `download`." },
+    { term: "--output <dir>", description: "Output directory for `download` (default: ./downloads)." },
     { term: "--no-color", description: "Disable ANSI colors in help output." },
   ],
   examples: [
@@ -89,6 +101,9 @@ const ROOT_HELP_DOCUMENT: HelpDocument = {
     `${COMMAND_IDENTITY} "https://instagram.com/reel/abc123"`,
     `${COMMAND_IDENTITY} "./recording.mp3"`,
     `${COMMAND_IDENTITY} --json "https://youtube.com/watch?v=dQw4w9WgXcQ"`,
+    `${COMMAND_IDENTITY} download "https://youtube.com/watch?v=dQw4w9WgXcQ"`,
+    `${COMMAND_IDENTITY} download "https://instagram.com/reel/abc123" --audio`,
+    `${COMMAND_IDENTITY} download "https://youtube.com/watch?v=dQw4w9WgXcQ" --output ./downloads`,
     `${COMMAND_IDENTITY} setup install`,
     `${COMMAND_IDENTITY} setup skills`,
     `${COMMAND_IDENTITY} setup skills --global`,
@@ -112,6 +127,7 @@ const ROOT_HELP_DOCUMENT: HelpDocument = {
     "Successful runs now return deterministic Markdown with YAML frontmatter + fixed summary format.",
     "Baseline runs persist output files to `~/.pi-tube/YYYY-MM-DD-<title-or-file>.{md|json}`.",
     "Stdout prints `[OUTPUT_FILE]` and `[OUTPUT_FILE_URI]` so terminals can open the artifact directly.",
+    "`download` saves durable media files to `./downloads` by default and prints `[DOWNLOAD_FILE]` plus `[DOWNLOAD_FILE_URI]`.",
     "Use `--json` to emit deterministic schema-versioned JSON from the same canonical artifact.",
     "Provider/language precedence is CLI flags > config defaults > env defaults.",
     "Use `setup install` for npm install commands and `setup skills` to install the repo skill bundle.",
@@ -122,6 +138,38 @@ const ROOT_HELP_DOCUMENT: HelpDocument = {
     "Instagram URLs requiring authentication fail with `INSTAGRAM_AUTH_REQUIRED`.",
     "Provider failures map to stable `TRANSCRIPTION_PROVIDER_*` error codes.",
     "Use `pi-tube --help` to track the stable command contract between phases.",
+  ],
+};
+
+const DOWNLOAD_HELP_DOCUMENT: HelpDocument = {
+  title: `${COMMAND_IDENTITY} download`,
+  summary: "Download public YouTube or Instagram media with yt-dlp.",
+  usage: [
+    `${COMMAND_IDENTITY} download <url> [--audio] [--output <dir>]`,
+  ],
+  commandGroups: [
+    {
+      title: "Behavior",
+      rows: [
+        { term: "download <url>", description: "Download video with audio by default." },
+        { term: "download <url> --audio", description: "Download audio only as mp3." },
+      ],
+    },
+  ],
+  options: [
+    { term: "--audio", description: "Download audio only instead of video." },
+    { term: "--output <dir>", description: "Output directory (default: ./downloads)." },
+    { term: "--no-color", description: "Disable ANSI colors in help output." },
+  ],
+  examples: [
+    `${COMMAND_IDENTITY} download "https://youtube.com/watch?v=dQw4w9WgXcQ"`,
+    `${COMMAND_IDENTITY} download "https://youtube.com/watch?v=dQw4w9WgXcQ" --audio`,
+    `${COMMAND_IDENTITY} download "https://instagram.com/reel/abc123" --output ./media`,
+  ],
+  notes: [
+    "Requires `yt-dlp` on PATH.",
+    "Instagram downloads support public URLs only.",
+    "Successful downloads print `[DOWNLOAD_FILE]` and `[DOWNLOAD_FILE_URI]`.",
   ],
 };
 
@@ -241,6 +289,10 @@ export function getHelpDocument(topic: HelpTopic): HelpDocument {
 
   if (topic === "provider-status") {
     return PROVIDER_STATUS_HELP_DOCUMENT;
+  }
+
+  if (topic === "download") {
+    return DOWNLOAD_HELP_DOCUMENT;
   }
 
   return ROOT_HELP_DOCUMENT;

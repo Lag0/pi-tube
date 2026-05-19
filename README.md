@@ -70,6 +70,7 @@ Implemented now:
 - `pi-tube config provider set <deepgram|groq>`
 - `pi-tube config provider env <deepgram|groq> <ENV_VAR>`
 - `pi-tube config language set <code>`
+- `pi-tube download <url> [--audio] [--output <dir>]`
 - `pi-tube provider-status`
 - `pi-tube --json provider-status`
 - `pi-tube --help`
@@ -91,6 +92,9 @@ pi-tube "https://instagram.com/reel/abc123"         # active (public URLs only)
 pi-tube "https://cdn.example.com/audio/demo.wav"    # active
 pi-tube "./recording.mp3"                           # active
 pi-tube --json "https://youtube.com/watch?v=dQw4w9WgXcQ"  # active JSON output
+pi-tube download "https://youtube.com/watch?v=dQw4w9WgXcQ"          # download video+audio to ./downloads
+pi-tube download "https://youtube.com/watch?v=dQw4w9WgXcQ" --audio  # download audio-only mp3
+pi-tube download "https://instagram.com/reel/abc123" --output ./media
 pi-tube setup install                                      # npm install/setup guidance
 pi-tube setup skills                                       # interactive default (human flow)
 pi-tube setup skills --global                              # interactive global scope
@@ -106,6 +110,24 @@ pi-tube config list
 pi-tube provider-status                                   # active provider readiness
 pi-tube --json provider-status                            # active readiness JSON
 ```
+
+## Download Media
+
+Use `download` to save durable media files instead of transcribing them immediately:
+
+```bash
+pi-tube download "https://youtube.com/watch?v=dQw4w9WgXcQ"
+pi-tube download "https://youtube.com/watch?v=dQw4w9WgXcQ" --audio
+pi-tube download "https://instagram.com/reel/abc123" --output ./media
+```
+
+Defaults:
+
+- Video with audio is downloaded by default.
+- `--audio` downloads audio-only as mp3.
+- Files are saved to `./downloads` unless `--output <dir>` is provided.
+- Successful runs print `[DOWNLOAD_FILE]` and `[DOWNLOAD_FILE_URI]`.
+- Requires `yt-dlp` on PATH; Instagram supports public URLs only.
 
 ## Config Keys and Precedence
 
