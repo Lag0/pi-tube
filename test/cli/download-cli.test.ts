@@ -68,6 +68,17 @@ describe("download command", () => {
     expect(result.stderr.toString()).toContain("download` does not support");
   });
 
+  test("maps missing yt-dlp with setup guidance", () => {
+    const result = runCli(["download", "https://www.youtube.com/watch?v=abc123"], {
+      PI_TUBE_TEST_DOWNLOAD_ERROR: "not_found",
+    });
+    const stderr = result.stderr.toString();
+
+    expect(result.exitCode).toBe(2);
+    expect(stderr).toContain("[YTDLP_NOT_FOUND]");
+    expect(stderr).toContain("pi-tube setup yt-dlp");
+  });
+
   test("maps download failures", () => {
     const result = runCli(["download", "https://www.youtube.com/watch?v=abc123"], {
       PI_TUBE_TEST_DOWNLOAD_ERROR: "failed",

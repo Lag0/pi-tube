@@ -15,7 +15,7 @@ const ROOT_HELP_DOCUMENT: HelpDocument = {
   usage: [
     `${COMMAND_IDENTITY} <input> [--provider <deepgram|groq>] [--language <code>] [--timestamps] [--json]`,
     `${COMMAND_IDENTITY} help [command]`,
-    `${COMMAND_IDENTITY} setup <install|skills|mcp> [--global] [--agent <name>] [--yes|--no-prompt]`,
+    `${COMMAND_IDENTITY} setup <install|skills|yt-dlp|mcp> [--global] [--agent <name>] [--yes|--no-prompt]`,
     `${COMMAND_IDENTITY} download <url> [--audio] [--output <dir>]`,
     `${COMMAND_IDENTITY} config <set|get|list> [args] [--json]`,
     `${COMMAND_IDENTITY} provider-status [--json]`,
@@ -43,7 +43,7 @@ const ROOT_HELP_DOCUMENT: HelpDocument = {
       title: "Setup",
       rows: [
         {
-          term: `${COMMAND_IDENTITY} setup <install|skills|mcp>`,
+          term: `${COMMAND_IDENTITY} setup <install|skills|yt-dlp|mcp>`,
           description: "Setup/install helpers for npm + skills",
         },
       ],
@@ -109,6 +109,7 @@ const ROOT_HELP_DOCUMENT: HelpDocument = {
     `${COMMAND_IDENTITY} setup skills --global`,
     `${COMMAND_IDENTITY} setup skills --agent codex`,
     `${COMMAND_IDENTITY} setup skills --global --yes`,
+    `${COMMAND_IDENTITY} setup yt-dlp`,
     `${COMMAND_IDENTITY} "https://youtube.com/watch?v=dQw4w9WgXcQ"  # writes ~/.pi-tube/YYYY-MM-DD-*.md`,
     `${COMMAND_IDENTITY} config provider set groq`,
     `${COMMAND_IDENTITY} config provider env groq GROQ_API_KEY`,
@@ -238,6 +239,7 @@ const SETUP_HELP_DOCUMENT: HelpDocument = {
       rows: [
         { term: "install", description: "Show package install guidance." },
         { term: "skills", description: "Execute the skills installer command." },
+        { term: "yt-dlp", description: "Show or run yt-dlp installation guidance." },
         { term: "mcp", description: "Reserved for follow-up MCP bootstrap release." },
       ],
     },
@@ -255,6 +257,7 @@ const SETUP_HELP_DOCUMENT: HelpDocument = {
     `${COMMAND_IDENTITY} setup skills --global`,
     `${COMMAND_IDENTITY} setup skills --agent codex`,
     `${COMMAND_IDENTITY} setup skills --global --yes`,
+    `${COMMAND_IDENTITY} setup yt-dlp`,
   ],
   notes: [
     "Interactive setup remains the default for humans.",

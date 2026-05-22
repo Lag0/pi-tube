@@ -102,12 +102,14 @@ export function createUnsupportedUrlNotDirectMediaError(input: string): CliError
 }
 
 export function createYtDlpNotFoundError(): CliError {
-  return new CliError("`yt-dlp` is required to process YouTube URLs but was not found.", {
+  return new CliError("`yt-dlp` is required to process YouTube/Instagram URLs but was not found.", {
     code: "YTDLP_NOT_FOUND",
     exitCode: 2,
     guidance: [
       "Install yt-dlp and ensure it is available on PATH.",
-      "Then retry the same `pi-tube <youtube-url>` command.",
+      "macOS/Homebrew: `brew install yt-dlp`.",
+      "Python/pipx: `pipx install yt-dlp`.",
+      "Or run `pi-tube setup yt-dlp` for setup guidance.",
     ],
   });
 }

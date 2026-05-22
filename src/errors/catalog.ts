@@ -34,7 +34,7 @@ export const ERROR_CATALOG = {
   },
   YTDLP_NOT_FOUND: {
     exitCode: 2,
-    guidance: ["Install yt-dlp and ensure it is available on PATH."],
+    guidance: ["Install yt-dlp and ensure it is available on PATH, or run `pi-tube setup yt-dlp` for guidance."],
   },
   YOUTUBE_EXTRACT_FAILED: {
     exitCode: 2,

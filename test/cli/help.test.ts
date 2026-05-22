@@ -23,7 +23,7 @@ describe("CLI help contract", () => {
       "pi-tube <input> [--provider <deepgram|groq>] [--language <code>] [--timestamps] [--json]",
     );
     expect(clean).toContain(
-      "pi-tube setup <install|skills|mcp> [--global] [--agent <name>]",
+      "pi-tube setup <install|skills|yt-dlp|mcp> [--global] [--agent <name>]",
     );
     expect(clean).toContain("pi-tube config <set|get|list> [args] [--json]");
     expect(clean).toContain("pi-tube provider-status [--json]");
@@ -46,7 +46,7 @@ describe("CLI help contract", () => {
     expect(notes).toBeGreaterThan(examples);
 
     expect(clean).toContain("Markdown default, JSON optional");
-    expect(clean).toContain("setup <install|skills|mcp>");
+    expect(clean).toContain("setup <install|skills|yt-dlp|mcp>");
     expect(clean).toContain("config <set|get|list>");
     expect(clean).toContain("provider-status");
     expect(clean).toContain("defaults.provider");

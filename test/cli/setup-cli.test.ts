@@ -81,6 +81,27 @@ describe("setup command", () => {
     expect(stdout).toContain("--yes");
   });
 
+  test("prints yt-dlp installation guidance", () => {
+    const result = runCli(["setup", "yt-dlp"]);
+    const stdout = result.stdout.toString();
+
+    expect(result.exitCode).toBe(0);
+    expect(stdout).toContain("[SETUP_YTDLP]");
+    expect(stdout).toContain("brew install yt-dlp");
+    expect(stdout).toContain("pipx install yt-dlp");
+    expect(stdout).toContain("yt-dlp --version");
+  });
+
+  test("prints dry-run yt-dlp install command with --yes", () => {
+    const result = runCli(["setup", "yt-dlp", "--yes"], {
+      PI_TUBE_TEST_SETUP_DRY_RUN: "1",
+    });
+    const stdout = result.stdout.toString();
+
+    expect(result.exitCode).toBe(0);
+    expect(stdout).toContain("Running: brew install yt-dlp");
+  });
+
   test("returns deterministic guidance for setup mcp placeholder", () => {
     const result = runCli(["setup", "mcp"]);
     const stderr = result.stderr.toString();
