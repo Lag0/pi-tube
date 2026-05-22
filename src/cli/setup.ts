@@ -65,13 +65,12 @@ function handleSetupInstall(): string {
   return lines.join("\n");
 }
 
-function handleSetupYtDlp(options: SetupOptions): string | null {
-  if (options.nonInteractive) {
-    runCommand("brew", ["install", "yt-dlp"], options);
-    return null;
-  }
+function getPlatform(options: SetupOptions): NodeJS.Platform | string {
+  return options.env?.PI_TUBE_TEST_PLATFORM ?? process.env.PI_TUBE_TEST_PLATFORM ?? process.platform;
+}
 
-  const lines = [
+function createYtDlpSetupLines(): string[] {
+  return [
     "[SETUP_YTDLP]",
     "yt-dlp is required for YouTube/Instagram download and transcription intake.",
     "",
@@ -84,9 +83,30 @@ function handleSetupYtDlp(options: SetupOptions): string | null {
     "Verify installation:",
     "yt-dlp --version",
     "",
-    "To run the Homebrew install command from pi-tube:",
+    "To run the Homebrew install command from pi-tube on macOS:",
     "pi-tube setup yt-dlp --yes",
   ];
+}
+
+function handleSetupYtDlp(options: SetupOptions): string | null {
+  if (options.nonInteractive) {
+    if (getPlatform(options) !== "darwin") {
+      throw new CliError("Automatic yt-dlp install is only supported on macOS with Homebrew.", {
+        code: "SETUP_COMMAND_FAILED",
+        guidance: [
+          "Install yt-dlp manually for your platform.",
+          "macOS/Homebrew: `brew install yt-dlp`.",
+          "Python/pipx: `pipx install yt-dlp`.",
+          "Then verify with `yt-dlp --version`.",
+        ],
+      });
+    }
+
+    runCommand("brew", ["install", "yt-dlp"], options);
+    return null;
+  }
+
+  const lines = createYtDlpSetupLines();
 
   return lines.join("\n");
 }
