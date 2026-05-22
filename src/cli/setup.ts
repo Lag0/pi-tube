@@ -65,6 +65,52 @@ function handleSetupInstall(): string {
   return lines.join("\n");
 }
 
+function getPlatform(options: SetupOptions): NodeJS.Platform | string {
+  return options.env?.PI_TUBE_TEST_PLATFORM ?? process.env.PI_TUBE_TEST_PLATFORM ?? process.platform;
+}
+
+function createYtDlpSetupLines(): string[] {
+  return [
+    "[SETUP_YTDLP]",
+    "yt-dlp is required for YouTube/Instagram download and transcription intake.",
+    "",
+    "Recommended macOS install:",
+    "brew install yt-dlp",
+    "",
+    "Python/pipx alternative:",
+    "pipx install yt-dlp",
+    "",
+    "Verify installation:",
+    "yt-dlp --version",
+    "",
+    "To run the Homebrew install command from pi-tube on macOS:",
+    "pi-tube setup yt-dlp --yes",
+  ];
+}
+
+function handleSetupYtDlp(options: SetupOptions): string | null {
+  if (options.nonInteractive) {
+    if (getPlatform(options) !== "darwin") {
+      throw new CliError("Automatic yt-dlp install is only supported on macOS with Homebrew.", {
+        code: "SETUP_COMMAND_FAILED",
+        guidance: [
+          "Install yt-dlp manually for your platform.",
+          "macOS/Homebrew: `brew install yt-dlp`.",
+          "Python/pipx: `pipx install yt-dlp`.",
+          "Then verify with `yt-dlp --version`.",
+        ],
+      });
+    }
+
+    runCommand("brew", ["install", "yt-dlp"], options);
+    return null;
+  }
+
+  const lines = createYtDlpSetupLines();
+
+  return lines.join("\n");
+}
+
 function handleSetupSkills(options: SetupOptions): null {
   const args = ["-y", SKILLS_NPX_PACKAGE, "add", SKILL_SOURCE];
   if (options.nonInteractive) {
@@ -86,11 +132,12 @@ export function handleSetupCommand(
   options: SetupOptions = {},
 ): string | null {
   if (!subcommand) {
-    throw new CliError("Missing `setup` subcommand. Use `install`, `skills`, or `mcp`.", {
+    throw new CliError("Missing `setup` subcommand. Use `install`, `skills`, `yt-dlp`, or `mcp`.", {
       code: "CLI_CONTRACT_VIOLATION",
       guidance: [
         "Use `pi-tube setup install` for npm install commands.",
         "Use `pi-tube setup skills` to install skill files into your agent tooling.",
+        "Use `pi-tube setup yt-dlp` for yt-dlp installation guidance.",
       ],
     });
   }
@@ -103,6 +150,10 @@ export function handleSetupCommand(
     return handleSetupSkills(options);
   }
 
+  if (subcommand === "yt-dlp") {
+    return handleSetupYtDlp(options);
+  }
+
   if (subcommand === "mcp") {
     throw new CliPlannedFeatureError("`setup mcp`", "a follow-up release", [
       "MCP installer bootstrap is not shipped in this package yet.",
@@ -112,6 +163,6 @@ export function handleSetupCommand(
 
   throw new CliError(`Unsupported setup subcommand: \`${subcommand}\`.`, {
     code: "CLI_CONTRACT_VIOLATION",
-    guidance: ["Use one of: install, skills, mcp."],
+    guidance: ["Use one of: install, skills, yt-dlp, mcp."],
   });
 }

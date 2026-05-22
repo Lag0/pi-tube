@@ -34,7 +34,7 @@ export const ERROR_CATALOG = {
   },
   YTDLP_NOT_FOUND: {
     exitCode: 2,
-    guidance: ["Install yt-dlp and ensure it is available on PATH."],
+    guidance: ["Install yt-dlp and ensure it is available on PATH, or run `pi-tube setup yt-dlp` for guidance."],
   },
   YOUTUBE_EXTRACT_FAILED: {
     exitCode: 2,
@@ -63,6 +63,10 @@ export const ERROR_CATALOG = {
   LOCAL_FILE_UNSUPPORTED_EXTENSION: {
     exitCode: 2,
     guidance: ["Use a supported audio/video file extension."],
+  },
+  DOWNLOAD_FAILED: {
+    exitCode: 2,
+    guidance: ["Retry with a valid public YouTube or Instagram URL."],
   },
   TRANSCRIPTION_PROVIDER_INVALID: {
     exitCode: 2,

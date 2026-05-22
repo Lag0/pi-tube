@@ -102,12 +102,14 @@ export function createUnsupportedUrlNotDirectMediaError(input: string): CliError
 }
 
 export function createYtDlpNotFoundError(): CliError {
-  return new CliError("`yt-dlp` is required to process YouTube URLs but was not found.", {
+  return new CliError("`yt-dlp` is required to process YouTube/Instagram URLs but was not found.", {
     code: "YTDLP_NOT_FOUND",
     exitCode: 2,
     guidance: [
       "Install yt-dlp and ensure it is available on PATH.",
-      "Then retry the same `pi-tube <youtube-url>` command.",
+      "macOS/Homebrew: `brew install yt-dlp`.",
+      "Python/pipx: `pipx install yt-dlp`.",
+      "Or run `pi-tube setup yt-dlp` for setup guidance.",
     ],
   });
 }
@@ -173,6 +175,15 @@ export function createUnsupportedLocalFileExtensionError(filePath: string): CliE
     guidance: [
       "Use a supported audio/video format (for example .mp3, .wav, .m4a, .mp4, .mov).",
     ],
+  });
+}
+
+export function createDownloadFailedError(detail?: string): CliError {
+  const suffix = detail ? ` (${detail})` : "";
+  return new CliError(`Failed to download media via yt-dlp${suffix}.`, {
+    code: "DOWNLOAD_FAILED",
+    exitCode: 2,
+    guidance: ["Retry with a valid public YouTube or Instagram URL."],
   });
 }
 
