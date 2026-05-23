@@ -368,6 +368,7 @@ export async function runCli(argv: string[]): Promise<number> {
         return 0;
       case "legacy":
         throwLegacyCommandGuidance(action.command, Boolean(action.rootOptions.json));
+        return 0;
       case "deferred":
         handleDeferredCommand(action.command, Boolean(action.rootOptions.json));
         return 0;
