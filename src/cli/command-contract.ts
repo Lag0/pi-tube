@@ -87,8 +87,6 @@ const ROOT_HELP_DOCUMENT: HelpDocument = {
     { term: "--provider <deepgram|groq>", description: "Select transcription provider (default: deepgram)." },
     { term: "--language <code>", description: "Optional language preference." },
     { term: "--timestamps", description: "Include timestamp blocks in transcript output." },
-    { term: "--audio", description: "Download audio only with `download`." },
-    { term: "--output <dir>", description: "Output directory for `download` (default: ./downloads)." },
     { term: "--no-color", description: "Disable ANSI colors in help output." },
   ],
   examples: [
