@@ -289,7 +289,9 @@ function promptForApiKey(provider: string | undefined): string | undefined {
 function runAuthAction(action: Extract<CliAction, { kind: "auth" }>): number {
   switch (action.action) {
     case "login": {
-      const apiKey = action.options.key ?? process.env.PI_TUBE_TEST_AUTH_KEY ?? promptForApiKey(action.provider);
+      const apiKey = action.provider
+        ? action.options.key ?? process.env.PI_TUBE_TEST_AUTH_KEY ?? promptForApiKey(action.provider)
+        : undefined;
       console.log(handleAuthLogin({ provider: action.provider, apiKey, options: { env: process.env } }));
       return 0;
     }
