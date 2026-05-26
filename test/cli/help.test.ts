@@ -13,25 +13,22 @@ function stripAnsi(value: string): string {
 }
 
 describe("CLI help contract", () => {
-  test("uses section order and labels active/deferred capabilities", () => {
+  test("uses v2 command groups and section order", () => {
     const result = runCli(["--help"]);
     const stdout = result.stdout.toString();
     const clean = stripAnsi(stdout);
 
     expect(result.exitCode).toBe(0);
-    expect(clean).toContain(
-      "pi-tube <input> [--provider <deepgram|groq>] [--language <code>] [--timestamps] [--json]",
-    );
-    expect(clean).toContain(
-      "pi-tube setup <install|skills|yt-dlp|mcp> [--global] [--agent <name>]",
-    );
-    expect(clean).toContain("pi-tube config <set|get|list> [args] [--json]");
-    expect(clean).toContain("pi-tube provider-status [--json]");
+    expect(clean).toContain("pi-tube transcribe <input> [--provider <deepgram|groq>]");
+    expect(clean).toContain("pi-tube download <url> [--audio] [--output <dir>]");
+    expect(clean).toContain("pi-tube auth <login|status|logout> [provider]");
+    expect(clean).toContain("pi-tube defaults <provider|language|show> [value]");
     expect(clean).toContain("Core");
+    expect(clean).toContain("Account");
+    expect(clean).toContain("Defaults");
     expect(clean).toContain("Setup");
-    expect(clean).toContain("Config");
-    expect(clean).toContain("Provider");
-    expect(clean).toContain("Compatibility");
+    expect(clean).not.toContain("provider-status");
+    expect(clean).not.toContain("Deferred command");
 
     const usage = clean.indexOf("Usage");
     const commands = clean.indexOf("Commands");
@@ -44,24 +41,7 @@ describe("CLI help contract", () => {
     expect(options).toBeGreaterThan(commands);
     expect(examples).toBeGreaterThan(options);
     expect(notes).toBeGreaterThan(examples);
-
-    expect(clean).toContain("Markdown default, JSON optional");
-    expect(clean).toContain("setup <install|skills|yt-dlp|mcp>");
-    expect(clean).toContain("config <set|get|list>");
-    expect(clean).toContain("provider-status");
-    expect(clean).toContain("defaults.provider");
-    expect(clean).toContain("Deferred command (use `pi-tube <input>`)");
-    expect(clean).toContain("INSTAGRAM_AUTH_REQUIRED");
-    expect(clean).toContain("--provider deepgram|groq");
-    expect(clean).toContain("--timestamps");
-    expect(clean).toContain("CLI flags > config defaults > env defaults");
-    expect(clean).toContain("TRANSCRIPTION_PROVIDER_*");
     expect(stdout).toContain("\u001b[");
-
-    const exampleLines = clean
-      .split("\n")
-      .filter((line) => line.trim().startsWith("pi-tube "));
-    expect(exampleLines.length).toBeGreaterThanOrEqual(4);
   });
 
   test("supports no-color fallback for readable help output", () => {
@@ -73,39 +53,33 @@ describe("CLI help contract", () => {
     expect(stdout).toContain("Usage");
     expect(stdout).toContain("Global options");
     expect(stdout).toContain("--no-color");
-    expect(stdout).toContain("pi-tube help [command]");
-    expect(stdout).toContain("pi-tube config provider set groq");
+    expect(stdout).toContain("pi-tube auth login groq");
+    expect(stdout).toContain("pi-tube transcribe");
   });
 
   test("supports help command and scoped subcommand help", () => {
     const helpCommand = runCli(["help"]);
-    const configScoped = runCli(["config", "--help"]);
-    const configHelpCommand = runCli(["help", "config"]);
+    const transcribeScoped = runCli(["transcribe", "--help"]);
+    const authHelpCommand = runCli(["help", "auth"]);
     const setupScoped = runCli(["setup", "--help"]);
 
     const rootHelp = stripAnsi(helpCommand.stdout.toString());
-    const configHelp = stripAnsi(configScoped.stdout.toString());
-    const configHelpViaHelpCommand = stripAnsi(configHelpCommand.stdout.toString());
+    const transcribeHelp = stripAnsi(transcribeScoped.stdout.toString());
+    const authHelp = stripAnsi(authHelpCommand.stdout.toString());
     const setupHelp = stripAnsi(setupScoped.stdout.toString());
 
     expect(helpCommand.exitCode).toBe(0);
-    expect(configScoped.exitCode).toBe(0);
-    expect(configHelpCommand.exitCode).toBe(0);
+    expect(transcribeScoped.exitCode).toBe(0);
+    expect(authHelpCommand.exitCode).toBe(0);
     expect(setupScoped.exitCode).toBe(0);
 
     expect(rootHelp).toContain("pi-tube CLI");
-    expect(configHelp).toContain("pi-tube config");
-    expect(configHelp).toContain("provider set <deepgram|groq>");
-    expect(configHelp).toContain("language set <code>");
-    expect(configHelp).toContain("set <key> <value>");
-    expect(configHelp).toContain("Legacy `config set/get/list` commands remain supported");
-    expect(configHelp).toContain("Supported keys:");
-    expect(configHelp).not.toContain("Deferred command");
-    expect(configHelpViaHelpCommand).toContain("pi-tube config");
+    expect(transcribeHelp).toContain("pi-tube transcribe");
+    expect(transcribeHelp).toContain("--provider <deepgram|groq>");
+    expect(authHelp).toContain("pi-tube auth");
+    expect(authHelp).toContain("auth login <deepgram|groq>");
     expect(setupHelp).toContain("pi-tube setup");
     expect(setupHelp).toContain("setup skills [--global] [--agent <name>] [--yes|--no-prompt]");
-    expect(setupHelp).toContain("Interactive setup remains the default for humans.");
-    expect(setupHelp).toContain("--yes, -y");
     expect(setupHelp).not.toContain("provider-status [--json]");
   });
 });

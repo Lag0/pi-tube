@@ -7,35 +7,34 @@ import {
 } from "./command-contract.ts";
 import { renderHelpDocument, type HelpDocument } from "./help-renderer.ts";
 import {
+  handleAuthLogin,
+  handleAuthLogout,
+  handleAuthStatus,
   handleBaselineInput,
   handleConfigCommand,
-  handleDeferredCommand,
+  handleDefaultsLanguage,
+  handleDefaultsProvider,
+  handleDefaultsShow,
   handleDownloadCommand,
-  handleProviderStatus,
   persistBaselineIntakeResult,
 } from "./handlers.ts";
 import { handleSetupCommand } from "./setup.ts";
 import { CliError, formatCliError } from "../errors/cli-errors.ts";
-import { isLegacyCommand, throwLegacyCommandGuidance } from "../legacy/compatibility.ts";
 import { createProgressReporter } from "./progress.ts";
 
 type CliAction =
   | { kind: "root"; input?: string; extraPositionals: string[]; options: RootOptions }
   | { kind: "version" }
   | { kind: "help"; positionals: string[]; noColor: boolean }
+  | { kind: "transcribe"; input?: string; extraPositionals: string[]; options: TranscribeOptions; rootOptions: RootOptions }
   | { kind: "download"; input?: string; extraPositionals: string[]; options: DownloadOptions; rootOptions: RootOptions }
+  | { kind: "auth"; action?: string; provider?: string; options: AuthOptions; rootOptions: RootOptions }
+  | { kind: "defaults"; action?: string; value?: string; rootOptions: RootOptions }
   | { kind: "setup"; subcommand?: string; options: SetupCommandOptions; rootOptions: RootOptions }
-  | { kind: "config"; args: string[]; options: JsonCommandOptions; rootOptions: RootOptions }
-  | { kind: "provider-status"; extraPositionals: string[]; options: JsonCommandOptions; rootOptions: RootOptions }
-  | { kind: "deferred"; command: string; rootOptions: RootOptions }
-  | { kind: "legacy"; command: string; rootOptions: RootOptions };
+  | { kind: "config"; args: string[]; options: JsonCommandOptions; rootOptions: RootOptions };
 
 interface RootOptions {
   version?: boolean;
-  json?: boolean;
-  provider?: string;
-  language?: string;
-  timestamps?: boolean;
   color?: boolean;
 }
 
@@ -43,9 +42,19 @@ interface JsonCommandOptions {
   json?: boolean;
 }
 
+interface TranscribeOptions extends JsonCommandOptions {
+  provider?: string;
+  language?: string;
+  timestamps?: boolean;
+}
+
 interface DownloadOptions {
   audio?: boolean;
   output?: string;
+}
+
+interface AuthOptions {
+  key?: string;
 }
 
 interface SetupCommandOptions {
@@ -76,25 +85,22 @@ function resolveHelpTopic(positionals: string[]): HelpTopic {
       });
     }
 
-    if (!second) {
-      return "root";
-    }
-
-    if (second === "config" || second === "setup" || second === "provider-status" || second === "download") {
-      return second;
+    if (!second) return "root";
+    if (["transcribe", "download", "auth", "defaults", "setup"].includes(second)) {
+      return second as HelpTopic;
     }
 
     throw new CliError(`Unsupported help topic: \`${second}\`.`, {
       code: "CLI_CONTRACT_VIOLATION",
       exitCode: 2,
       guidance: [
-        `Supported help topics: ${COMMAND_IDENTITY} help, ${COMMAND_IDENTITY} help config, ${COMMAND_IDENTITY} help setup, ${COMMAND_IDENTITY} help provider-status, ${COMMAND_IDENTITY} help download.`,
+        `Supported help topics: ${COMMAND_IDENTITY} help, ${COMMAND_IDENTITY} help transcribe, ${COMMAND_IDENTITY} help download, ${COMMAND_IDENTITY} help auth, ${COMMAND_IDENTITY} help defaults, ${COMMAND_IDENTITY} help setup.`,
       ],
     });
   }
 
-  if (first === "config" || first === "setup" || first === "provider-status" || first === "download") {
-    return first;
+  if (["transcribe", "download", "auth", "defaults", "setup"].includes(first ?? "")) {
+    return first as HelpTopic;
   }
 
   return "root";
@@ -111,7 +117,7 @@ function commanderErrorToCliError(error: CommanderError): CliError {
 function createProgram(setAction: (action: CliAction) => void): Command {
   const program = new Command()
     .name(COMMAND_IDENTITY)
-    .description("Deterministic media transcription workflows for humans and automation.")
+    .description("Transcribe and download public media with provider-based AI transcription.")
     .exitOverride()
     .configureOutput({
       writeOut: () => undefined,
@@ -121,13 +127,9 @@ function createProgram(setAction: (action: CliAction) => void): Command {
     .allowUnknownOption(false)
     .helpOption(false)
     .addHelpCommand(false)
-    .argument("[input]", "media input")
-    .argument("[extraPositionals...]", "extra media inputs")
+    .argument("[input]", "deprecated implicit transcribe input")
+    .argument("[extraPositionals...]", "extra inputs")
     .option("-v, --version", "Show version.")
-    .option("--json", "Output deterministic JSON format.")
-    .option("--provider <provider>", "Select transcription provider (deepgram or groq).")
-    .option("--language <code>", "Optional language preference.")
-    .option("--timestamps", "Include timestamp blocks in transcript output.")
     .option("--no-color", "Disable ANSI colors in help output.")
     .action((input: string | undefined, extraPositionals: string[]) => {
       const options = program.opts<RootOptions>();
@@ -135,13 +137,20 @@ function createProgram(setAction: (action: CliAction) => void): Command {
         setAction({ kind: "version" });
         return;
       }
-
-      if (input && isLegacyCommand(input)) {
-        setAction({ kind: "legacy", command: input, rootOptions: options });
-        return;
-      }
-
       setAction({ kind: "root", input, extraPositionals, options });
+    });
+
+  program
+    .command("transcribe")
+    .description("Transcribe a URL or local media file.")
+    .argument("[input]", "URL or local media file")
+    .argument("[extraPositionals...]", "extra inputs")
+    .option("--provider <provider>", "Select transcription provider (deepgram or groq).")
+    .option("--language <code>", "Optional language preference.")
+    .option("--timestamps", "Include timestamp blocks in transcript output.")
+    .option("--json", "Output deterministic JSON format.")
+    .action((input: string | undefined, extraPositionals: string[], options: TranscribeOptions) => {
+      setAction({ kind: "transcribe", input, extraPositionals, options, rootOptions: program.opts<RootOptions>() });
     });
 
   program
@@ -156,9 +165,28 @@ function createProgram(setAction: (action: CliAction) => void): Command {
     });
 
   program
+    .command("auth")
+    .description("Manage provider API keys.")
+    .argument("[action]", "login, status, or logout")
+    .argument("[provider]", "deepgram or groq")
+    .option("--key <api_key>", "API key for non-interactive login.")
+    .action((action: string | undefined, provider: string | undefined, options: AuthOptions) => {
+      setAction({ kind: "auth", action, provider, options, rootOptions: program.opts<RootOptions>() });
+    });
+
+  program
+    .command("defaults")
+    .description("Manage default provider and language.")
+    .argument("[action]", "provider, language, or show")
+    .argument("[value]", "provider id or language code")
+    .action((action: string | undefined, value: string | undefined) => {
+      setAction({ kind: "defaults", action, value, rootOptions: program.opts<RootOptions>() });
+    });
+
+  program
     .command("setup")
     .description("Install and bootstrap helper workflows.")
-    .argument("[subcommand]", "install, skills, yt-dlp, or mcp")
+    .argument("[subcommand]", "skills, yt-dlp, or mcp")
     .option("-g, --global", "Use global setup target.")
     .option("-a, --agent <name>", "Select setup agent target.")
     .option("-y, --yes", "Run setup non-interactively.")
@@ -168,33 +196,15 @@ function createProgram(setAction: (action: CliAction) => void): Command {
       setAction({ kind: "setup", subcommand, options, rootOptions: program.opts<RootOptions>() });
     });
 
+  // Hidden legacy escape hatch for existing scripts. Not documented in root help.
   program
     .command("config")
-    .description("Read and write deterministic configuration.")
-    .argument("[args...]", "config action and arguments")
+    .description("Legacy raw configuration command.")
+    .argument("[args...]", "legacy config action and arguments")
     .option("--json", "Emit deterministic JSON output.")
     .action((args: string[], options: JsonCommandOptions) => {
       setAction({ kind: "config", args, options, rootOptions: program.opts<RootOptions>() });
     });
-
-  program
-    .command("provider-status")
-    .description("Read deterministic provider readiness.")
-    .argument("[extraPositionals...]", "unexpected arguments")
-    .option("--json", "Emit provider readiness as JSON.")
-    .action((extraPositionals: string[], options: JsonCommandOptions) => {
-      setAction({ kind: "provider-status", extraPositionals, options, rootOptions: program.opts<RootOptions>() });
-    });
-
-  for (const command of ["youtube", "instagram"]) {
-    program
-      .command(command)
-      .description("Deferred compatibility command.")
-      .argument("[args...]", "deferred command arguments")
-      .action(() => {
-        setAction({ kind: "deferred", command, rootOptions: program.opts<RootOptions>() });
-      });
-  }
 
   return program;
 }
@@ -214,32 +224,41 @@ function parseAction(argv: string[]): CliAction {
   try {
     program.parse(argv, { from: "user" });
   } catch (error) {
-    if (error instanceof CommanderError) {
-      throw commanderErrorToCliError(error);
-    }
+    if (error instanceof CommanderError) throw commanderErrorToCliError(error);
     throw error;
   }
 
   return action ?? { kind: "root", input: undefined, extraPositionals: [], options: program.opts<RootOptions>() };
 }
 
-function hasTranscriptionOnlyOptions(options: RootOptions): boolean {
-  return Boolean(options.provider || options.language || options.timestamps);
-}
+async function runTranscribeAction(action: Extract<CliAction, { kind: "transcribe" }>): Promise<number> {
+  const progress = createProgressReporter({ color: action.rootOptions.color !== false });
+  const startTime = Date.now();
 
-function resolveJsonOption(commandOptions: JsonCommandOptions, rootOptions: RootOptions): boolean {
-  return Boolean(commandOptions.json || rootOptions.json);
+  try {
+    const result = await handleBaselineInput({
+      input: action.input ?? "",
+      json: Boolean(action.options.json),
+      extraPositionals: action.extraPositionals,
+      provider: action.options.provider,
+      language: action.options.language,
+      timestamps: Boolean(action.options.timestamps),
+      onProgress: (step) => progress.update(step),
+    });
+
+    progress.update({ label: "Saving output..." });
+    const persisted = persistBaselineIntakeResult(result, { env: process.env, cwd: process.cwd() });
+    progress.succeed(persisted.outputPath, Date.now() - startTime);
+    console.log(`[OUTPUT_FILE] ${persisted.outputPath}`);
+    console.log(`[OUTPUT_FILE_URI] ${persisted.outputUri}`);
+    return 0;
+  } catch (error) {
+    progress.fail("Failed");
+    throw error;
+  }
 }
 
 async function runDownloadAction(action: Extract<CliAction, { kind: "download" }>): Promise<number> {
-  if (hasTranscriptionOnlyOptions(action.rootOptions) || action.rootOptions.json) {
-    throw new CliError("`download` does not support `--provider`, `--language`, `--timestamps`, or `--json`.", {
-      code: "CLI_CONTRACT_VIOLATION",
-      exitCode: 2,
-      guidance: ["Use `pi-tube download <url> [--audio] [--output <dir>]`."],
-    });
-  }
-
   const progress = createProgressReporter({ color: action.rootOptions.color !== false });
   const startTime = Date.now();
   try {
@@ -262,95 +281,82 @@ async function runDownloadAction(action: Extract<CliAction, { kind: "download" }
   }
 }
 
-function runSetupAction(action: Extract<CliAction, { kind: "setup" }>): number {
-  if (hasTranscriptionOnlyOptions(action.rootOptions) || action.rootOptions.json) {
-    throw new CliError("`setup` does not support `--provider`, `--language`, `--timestamps`, or `--json`.", {
-      code: "CLI_CONTRACT_VIOLATION",
-      exitCode: 2,
-    });
-  }
+function promptForApiKey(provider: string | undefined): string | undefined {
+  if (typeof prompt !== "function") return undefined;
+  return prompt(`Paste ${provider ?? "provider"} API key:`)?.trim();
+}
 
+function runAuthAction(action: Extract<CliAction, { kind: "auth" }>): number {
+  switch (action.action) {
+    case "login": {
+      const apiKey = action.options.key ?? process.env.PI_TUBE_TEST_AUTH_KEY ?? promptForApiKey(action.provider);
+      console.log(handleAuthLogin({ provider: action.provider, apiKey, options: { env: process.env } }));
+      return 0;
+    }
+    case "status":
+      console.log(handleAuthStatus({ env: process.env, options: { env: process.env } }));
+      return 0;
+    case "logout":
+      console.log(handleAuthLogout({ provider: action.provider, options: { env: process.env } }));
+      return 0;
+    default:
+      throw new CliError("Missing or unsupported auth action.", {
+        code: "CLI_CONTRACT_VIOLATION",
+        exitCode: 2,
+        guidance: ["Use one of: `pi-tube auth login <provider>`, `pi-tube auth status`, `pi-tube auth logout <provider>`."],
+      });
+  }
+}
+
+function runDefaultsAction(action: Extract<CliAction, { kind: "defaults" }>): number {
+  switch (action.action) {
+    case "provider":
+      console.log(handleDefaultsProvider({ provider: action.value, options: { env: process.env } }));
+      return 0;
+    case "language":
+      console.log(handleDefaultsLanguage({ language: action.value, options: { env: process.env } }));
+      return 0;
+    case "show":
+      console.log(handleDefaultsShow({ options: { env: process.env } }));
+      return 0;
+    default:
+      throw new CliError("Missing or unsupported defaults action.", {
+        code: "CLI_CONTRACT_VIOLATION",
+        exitCode: 2,
+        guidance: ["Use one of: `pi-tube defaults provider <provider>`, `pi-tube defaults language <code>`, `pi-tube defaults show`."],
+      });
+  }
+}
+
+function runSetupAction(action: Extract<CliAction, { kind: "setup" }>): number {
   const output = handleSetupCommand(action.subcommand, {
     global: action.options.global,
     nonInteractive: Boolean(action.options.yes || action.options.prompt === false || action.options.nonInteractive),
     agent: action.options.agent,
   });
-  if (output) {
-    console.log(output);
-  }
+  if (output) console.log(output);
   return 0;
 }
 
 function runConfigAction(action: Extract<CliAction, { kind: "config" }>): number {
-  if (hasTranscriptionOnlyOptions(action.rootOptions)) {
-    throw new CliError("`config` does not support `--provider`, `--language`, or `--timestamps`.", {
-      code: "CLI_CONTRACT_VIOLATION",
-      exitCode: 2,
-      guidance: ["Use `pi-tube config <set|get|list> ...` without provider/language/timestamp flags."],
-    });
-  }
-
-  console.log(handleConfigCommand({ args: action.args, json: resolveJsonOption(action.options, action.rootOptions) }));
+  console.log(handleConfigCommand({ args: action.args, json: Boolean(action.options.json), options: { env: process.env } }));
   return 0;
 }
 
-function runProviderStatusAction(action: Extract<CliAction, { kind: "provider-status" }>): number {
-  if (action.extraPositionals.length > 0) {
-    throw new CliError("`provider-status` does not accept positional arguments.", {
+function runRootAction(action: Extract<CliAction, { kind: "root" }>): number {
+  if (action.input) {
+    throw new CliError("Implicit transcription is no longer supported.", {
       code: "CLI_CONTRACT_VIOLATION",
       exitCode: 2,
-      guidance: ["Run `pi-tube provider-status` or `pi-tube --json provider-status`."],
-    });
-  }
-  if (hasTranscriptionOnlyOptions(action.rootOptions)) {
-    throw new CliError("`provider-status` does not support `--provider`, `--language`, or `--timestamps`.", {
-      code: "CLI_CONTRACT_VIOLATION",
-      exitCode: 2,
-      guidance: ["Use `pi-tube provider-status` for readiness inspection."],
+      guidance: ["Use `pi-tube transcribe <input>` instead."],
     });
   }
 
-  console.log(handleProviderStatus({ json: resolveJsonOption(action.options, action.rootOptions) }));
-  return 0;
-}
-
-async function runRootAction(action: Extract<CliAction, { kind: "root" }>): Promise<number> {
-  if (!action.input) {
-    throw new CliError("Missing required input.", {
-      code: "CLI_CONTRACT_VIOLATION",
-      exitCode: 2,
-      guidance: [`Run \`${COMMAND_IDENTITY} --help\` for usage.`],
-    });
-  }
-
-  const progress = createProgressReporter({ color: action.options.color !== false });
-  const startTime = Date.now();
-
-  try {
-    const result = await handleBaselineInput({
-      input: action.input,
-      json: Boolean(action.options.json),
-      extraPositionals: action.extraPositionals,
-      provider: action.options.provider,
-      language: action.options.language,
-      timestamps: Boolean(action.options.timestamps),
-      onProgress: (step) => progress.update(step),
-    });
-
-    progress.update({ label: "Saving output..." });
-    const persisted = persistBaselineIntakeResult(result, {
-      env: process.env,
-      cwd: process.cwd(),
-    });
-
-    progress.succeed(persisted.outputPath, Date.now() - startTime);
-    console.log(`[OUTPUT_FILE] ${persisted.outputPath}`);
-    console.log(`[OUTPUT_FILE_URI] ${persisted.outputUri}`);
-    return 0;
-  } catch (error) {
-    progress.fail("Failed");
-    throw error;
-  }
+  throw new CliError("Missing command.", {
+    code: "CLI_CONTRACT_VIOLATION",
+    exitCode: 2,
+    guidance: ["Use `pi-tube --help` for usage."],
+  });
 }
 
 export async function runCli(argv: string[]): Promise<number> {
@@ -366,22 +372,20 @@ export async function runCli(argv: string[]): Promise<number> {
       case "version":
         console.log(`${COMMAND_IDENTITY} ${APP_VERSION}`);
         return 0;
-      case "legacy":
-        throwLegacyCommandGuidance(action.command, Boolean(action.rootOptions.json));
-        return 0;
-      case "deferred":
-        handleDeferredCommand(action.command, Boolean(action.rootOptions.json));
-        return 0;
+      case "transcribe":
+        return await runTranscribeAction(action);
       case "download":
         return await runDownloadAction(action);
+      case "auth":
+        return runAuthAction(action);
+      case "defaults":
+        return runDefaultsAction(action);
       case "setup":
         return runSetupAction(action);
       case "config":
         return runConfigAction(action);
-      case "provider-status":
-        return runProviderStatusAction(action);
       case "root":
-        return await runRootAction(action);
+        return runRootAction(action);
     }
   } catch (error) {
     const formatted = formatCliError(error);

@@ -19,22 +19,22 @@ describe("CLI identity and placeholders", () => {
     expect(result.stdout.toString().trim()).toBe(`pi-tube ${pkg.version}`);
   });
 
-  test("keeps version flag compatible with other global flags", () => {
+  test("keeps version flag compatible with color flag", () => {
     const pkg = JSON.parse(readFileSync("package.json", "utf8")) as { version: string };
-    const result = runCli(["--version", "--json"]);
+    const result = runCli(["--version", "--no-color"]);
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout.toString().trim()).toBe(`pi-tube ${pkg.version}`);
     expect(result.stderr.toString().trim()).toBe("");
   });
 
-  test("returns deterministic non-zero guidance for deferred command paths", () => {
+  test("returns migration guidance for implicit transcription", () => {
     const result = runCli(["youtube", "https://youtube.com/watch?v=abc"]);
     const stderr = result.stderr.toString();
 
     expect(result.exitCode).toBe(2);
-    expect(stderr).toContain("[CLI_NOT_IMPLEMENTED]");
-    expect(stderr).toContain("Current implemented contract: `pi-tube <input>`.");
-    expect(stderr).toContain("pi-tube --help");
+    expect(stderr).toContain("[CLI_CONTRACT_VIOLATION]");
+    expect(stderr).toContain("Implicit transcription is no longer supported");
+    expect(stderr).toContain("pi-tube transcribe <input>");
   });
 });

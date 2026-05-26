@@ -191,8 +191,8 @@ export async function transcribeFromResolvedSource(
       code: "TRANSCRIPTION_PROVIDER_NOT_CONFIGURED",
       exitCode: 2,
       guidance: [
-        "Configure at least one provider credential (`pi-tube config provider env <provider> <ENV_VAR>`).",
-        "Run `pi-tube provider-status` to inspect missing credentials.",
+        "Configure at least one provider credential (`pi-tube auth login <provider>`).",
+        "Run `pi-tube auth status` to inspect missing credentials.",
       ],
     });
   }

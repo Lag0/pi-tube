@@ -1,4 +1,4 @@
-import { CliError, CliPlannedFeatureError } from "../errors/cli-errors.ts";
+import { CliError } from "../errors/cli-errors.ts";
 import { downloadMedia } from "../download/service.ts";
 import type { DownloadResult } from "../download/types.ts";
 import { resolveSource } from "../intake/resolver.ts";
@@ -9,27 +9,19 @@ import { persistOutputArtifact, type PersistedOutputArtifact } from "./persist-o
 import {
   getConfigValue,
   isConfigProviderId,
+  readConfig,
   listConfigValues,
   resolveConfigPath,
   setConfigValue,
+  writeConfig,
   type ConfigStoreOptions,
 } from "../config/store.ts";
 import { CONFIG_KEYS, type ConfigKey } from "../config/types.ts";
-import {
-  getDefaultProviderRegistry,
-  TRANSCRIPTION_PROVIDER_DEFINITIONS,
-  type ProviderRegistry,
-} from "../transcription/providers/index.ts";
 import {
   transcribeFromResolvedSource,
   type TranscriptionServiceOptions,
 } from "../transcription/service.ts";
 import type { TranscriptionExecutionResult } from "../transcription/types.ts";
-
-const DEFERRED_COMMAND_PHASE: Record<string, string> = {
-  youtube: "Phase 2",
-  instagram: "Phase 3",
-};
 
 export interface ProgressStep {
   label: string;
@@ -59,23 +51,39 @@ interface PersistBaselineIntakeOptions {
   now?: Date;
 }
 
-export interface ProviderStatusInput {
-  json: boolean;
-  env?: Record<string, string | undefined>;
-  providers?: ProviderRegistry;
-}
-
-interface ProviderStatusEntry {
-  id: string;
-  registered: boolean;
-  configured: boolean;
-  required_env: string[];
-  missing_env: string[];
-}
-
 interface ConfigCommandInput {
   args: string[];
   json: boolean;
+  options?: ConfigStoreOptions;
+}
+
+export interface AuthLoginInput {
+  provider?: string;
+  apiKey?: string;
+  options?: ConfigStoreOptions;
+}
+
+export interface AuthLogoutInput {
+  provider?: string;
+  options?: ConfigStoreOptions;
+}
+
+export interface AuthStatusInput {
+  env?: Record<string, string | undefined>;
+  options?: ConfigStoreOptions;
+}
+
+export interface DefaultsProviderInput {
+  provider?: string;
+  options?: ConfigStoreOptions;
+}
+
+export interface DefaultsLanguageInput {
+  language?: string;
+  options?: ConfigStoreOptions;
+}
+
+export interface DefaultsShowInput {
   options?: ConfigStoreOptions;
 }
 
@@ -87,25 +95,6 @@ export interface DownloadCommandInput {
   env?: Record<string, string | undefined>;
   cwd?: string;
   onProgress?: (step: ProgressStep) => void;
-}
-
-export function isDeferredCommand(command: string): boolean {
-  return command in DEFERRED_COMMAND_PHASE;
-}
-
-export function handleDeferredCommand(command: string, json: boolean): never {
-  const phase = DEFERRED_COMMAND_PHASE[command] ?? "a future phase";
-  const guidance = [
-    "Current implemented contract: `pi-tube <input>`.",
-    "Core source intake runs through this baseline input path in Phase 2.",
-    "Use `pi-tube --help` for the latest command roadmap.",
-  ];
-
-  if (json) {
-    guidance.push("Use `pi-tube --json <input>` with baseline input mode for deterministic JSON output.");
-  }
-
-  throw new CliPlannedFeatureError(`\`${command}\` command`, phase, guidance);
 }
 
 export async function handleBaselineInput({
@@ -123,7 +112,7 @@ export async function handleBaselineInput({
       code: "CLI_CONTRACT_VIOLATION",
       exitCode: 2,
       guidance: [
-        "Use exactly one positional input: `pi-tube <input>`.",
+        "Use exactly one positional input: `pi-tube transcribe <input>`.",
         "Run `pi-tube --help` for examples.",
       ],
     });
@@ -157,6 +146,109 @@ export function formatBaselineIntakeResult(result: BaselineIntakeResult): string
     includeTimestamps: result.timestamps,
   });
   return result.json ? renderJson(artifact) : renderMarkdown(artifact);
+}
+
+function maskSecretForStatus(value: string | undefined): string {
+  if (!value) return "-";
+  if (value.length <= 8) return "***";
+  return `${value.slice(0, 4)}***${value.slice(-4)}`;
+}
+
+function defaultProviderEnv(provider: "deepgram" | "groq"): "DEEPGRAM_API_KEY" | "GROQ_API_KEY" {
+  return provider === "deepgram" ? "DEEPGRAM_API_KEY" : "GROQ_API_KEY";
+}
+
+function requireAuthProvider(provider: string | undefined): "deepgram" | "groq" {
+  if (!provider) {
+    throw new CliError("Missing provider.", {
+      code: "CLI_CONTRACT_VIOLATION",
+      exitCode: 2,
+      guidance: ["Use `pi-tube auth login <deepgram|groq>` or `pi-tube auth logout <deepgram|groq>`."],
+    });
+  }
+  return requireConfigProviderId(provider);
+}
+
+export function handleAuthLogin({ provider, apiKey, options }: AuthLoginInput): string {
+  const providerId = requireAuthProvider(provider);
+  const normalizedApiKey = apiKey?.trim();
+  if (!normalizedApiKey) {
+    throw new CliError("Missing API key.", {
+      code: "CLI_CONTRACT_VIOLATION",
+      exitCode: 2,
+      guidance: ["Use `pi-tube auth login <provider> --key <api_key>` or run interactively."],
+    });
+  }
+
+  const key = `providers.${providerId}.api_key` as ConfigKey;
+  const { configPath } = withConfigValidation(() => setConfigValue(key, normalizedApiKey, options));
+  const config = readConfig(options);
+  config.providers[providerId].api_key_env = undefined;
+  writeConfig(config, options);
+
+  return `[AUTH_LOGIN] provider=${providerId} status=configured key=${maskSecretForStatus(normalizedApiKey)} config_path=${configPath}`;
+}
+
+export function handleAuthLogout({ provider, options }: AuthLogoutInput): string {
+  const providerId = requireAuthProvider(provider);
+  const config = readConfig(options);
+  config.providers[providerId].api_key = undefined;
+  config.providers[providerId].api_key_env = undefined;
+  const configPath = writeConfig(config, options);
+  return `[AUTH_LOGOUT] provider=${providerId} status=removed config_path=${configPath}`;
+}
+
+export function handleAuthStatus({ env = process.env, options }: AuthStatusInput): string {
+  const config = readConfig(options);
+  const configPath = resolveConfigPath(options);
+  const lines = ["[AUTH_STATUS]", `config_path=${configPath}`];
+  for (const providerId of ["deepgram", "groq"] as const) {
+    const configKey = config.providers[providerId].api_key;
+    const envName = defaultProviderEnv(providerId);
+    const envKey = env[envName]?.trim();
+    const configured = Boolean(configKey || envKey);
+    const source = configKey ? "config" : envKey ? envName : "-";
+    const masked = maskSecretForStatus(configKey ?? envKey);
+    lines.push(`${providerId} configured=${configured} source=${source} key=${masked}`);
+  }
+  return lines.join("\n");
+}
+
+export function handleDefaultsProvider({ provider, options }: DefaultsProviderInput): string {
+  if (!provider) {
+    throw new CliError("Missing default provider.", {
+      code: "CLI_CONTRACT_VIOLATION",
+      exitCode: 2,
+      guidance: ["Use `pi-tube defaults provider <deepgram|groq>`."],
+    });
+  }
+  const providerId = requireConfigProviderId(provider);
+  const { configPath } = withConfigValidation(() => setConfigValue("defaults.provider", providerId, options));
+  return `[DEFAULTS_SET] provider=${providerId} config_path=${configPath}`;
+}
+
+export function handleDefaultsLanguage({ language, options }: DefaultsLanguageInput): string {
+  const normalizedLanguage = language?.trim();
+  if (!normalizedLanguage) {
+    throw new CliError("Missing default language.", {
+      code: "CLI_CONTRACT_VIOLATION",
+      exitCode: 2,
+      guidance: ["Use `pi-tube defaults language <code>`."],
+    });
+  }
+  const { configPath, config } = withConfigValidation(() => setConfigValue("defaults.language", normalizedLanguage, options));
+  return `[DEFAULTS_SET] language=${config.defaults.language} config_path=${configPath}`;
+}
+
+export function handleDefaultsShow({ options }: DefaultsShowInput = {}): string {
+  const config = readConfig(options);
+  const configPath = resolveConfigPath(options);
+  return [
+    "[DEFAULTS_SHOW]",
+    `config_path=${configPath}`,
+    `provider=${config.defaults.provider ?? "(unset)"}`,
+    `language=${config.defaults.language ?? "(unset)"}`,
+  ].join("\n");
 }
 
 export async function handleDownloadCommand({
@@ -210,52 +302,6 @@ export function persistBaselineIntakeResult(
     cwd: options.cwd,
     now: options.now,
   });
-}
-
-function buildProviderStatusEntries({
-  env = process.env,
-  providers = getDefaultProviderRegistry(),
-}: Omit<ProviderStatusInput, "json">): ProviderStatusEntry[] {
-  return TRANSCRIPTION_PROVIDER_DEFINITIONS.map((definition) => {
-    const missingEnv = definition.requiredEnv.filter((key) => {
-      const value = env[key];
-      return typeof value !== "string" || value.trim().length === 0;
-    });
-
-    return {
-      id: definition.id,
-      registered: Boolean(providers[definition.id]),
-      configured: missingEnv.length === 0,
-      required_env: [...definition.requiredEnv],
-      missing_env: missingEnv,
-    };
-  });
-}
-
-function formatProviderStatusText(entries: ProviderStatusEntry[]): string {
-  const lines = ["[PROVIDER_STATUS]"];
-  for (const entry of entries) {
-    lines.push(
-      `${entry.id} registered=${entry.registered} configured=${entry.configured} required_env=${entry.required_env.join(",")} missing_env=${entry.missing_env.join(",") || "-"}`,
-    );
-  }
-  return lines.join("\n");
-}
-
-export function handleProviderStatus(input: ProviderStatusInput): string {
-  const entries = buildProviderStatusEntries(input);
-  if (input.json) {
-    return JSON.stringify(
-      {
-        command: "provider-status",
-        providers: entries,
-      },
-      null,
-      2,
-    );
-  }
-
-  return formatProviderStatusText(entries);
 }
 
 function requireConfigKey(key: string): ConfigKey {

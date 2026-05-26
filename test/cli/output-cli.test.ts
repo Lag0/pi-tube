@@ -23,7 +23,7 @@ const mediaUrl = "https://cdn.example.com/audio/demo.wav";
 
 describe("CLI output contract", () => {
   test("renders deterministic markdown output by default", () => {
-    const result = runCli([mediaUrl], {
+    const result = runCli(["transcribe", mediaUrl], {
       PI_TUBE_TEST_DEEPGRAM_RESPONSE: JSON.stringify({
         results: {
           channels: [{ detected_language: "en", alternatives: [{ transcript: "hello deepgram" }] }],
@@ -49,7 +49,7 @@ describe("CLI output contract", () => {
   });
 
   test("renders timestamped transcript lines when provider segments are available", () => {
-    const result = runCli(["--timestamps", mediaUrl], {
+    const result = runCli(["transcribe", mediaUrl, "--timestamps"], {
       PI_TUBE_TEST_DEEPGRAM_RESPONSE: JSON.stringify({
         results: {
           channels: [
@@ -79,7 +79,7 @@ describe("CLI output contract", () => {
   });
 
   test("keeps timestamp blocks disabled by default", () => {
-    const result = runCli([mediaUrl], {
+    const result = runCli(["transcribe", mediaUrl], {
       PI_TUBE_TEST_DEEPGRAM_RESPONSE: JSON.stringify({
         results: {
           channels: [
@@ -108,7 +108,7 @@ describe("CLI output contract", () => {
   });
 
   test("returns deterministic schema-versioned JSON when --json is used", () => {
-    const result = runCli(["--json", mediaUrl], {
+    const result = runCli(["transcribe", mediaUrl, "--json"], {
       PI_TUBE_TEST_DEEPGRAM_RESPONSE: JSON.stringify({
         results: {
           channels: [{ alternatives: [{ transcript: "json response" }] }],
@@ -148,8 +148,8 @@ describe("CLI output contract", () => {
       }),
     };
 
-    const markdownResult = runCli(["--timestamps", mediaUrl], env);
-    const jsonResult = runCli(["--timestamps", "--json", mediaUrl], env);
+    const markdownResult = runCli(["transcribe", mediaUrl, "--timestamps"], env);
+    const jsonResult = runCli(["transcribe", mediaUrl, "--timestamps", "--json"], env);
 
     expect(markdownResult.exitCode).toBe(0);
     expect(jsonResult.exitCode).toBe(0);
@@ -169,7 +169,7 @@ describe("CLI output contract", () => {
   });
 
   test("supports documented provider + language JSON workflow deterministically", () => {
-    const result = runCli(["--provider", "groq", "--language", "pt", "--json", mediaUrl], {
+    const result = runCli(["transcribe", mediaUrl, "--provider", "groq", "--language", "pt", "--json"], {
       PI_TUBE_TEST_GROQ_RESPONSE: JSON.stringify({
         text: "ola groq",
         language: "pt",

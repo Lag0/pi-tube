@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import type { TranscriptionProviderId } from "../transcription/types.ts";
 import {
@@ -121,8 +121,19 @@ export function readConfig(options: ConfigStoreOptions = {}): PiTubeConfig {
 
 export function writeConfig(config: PiTubeConfig, options: ConfigStoreOptions = {}): string {
   const configPath = resolveConfigPath(options);
-  mkdirSync(path.dirname(configPath), { recursive: true });
-  writeFileSync(configPath, toStableString(config), "utf8");
+  const configDir = path.dirname(configPath);
+  mkdirSync(configDir, { recursive: true, mode: 0o700 });
+  try {
+    chmodSync(configDir, 0o700);
+  } catch {
+    // Best-effort hardening: config writes should still work on filesystems that reject chmod.
+  }
+  writeFileSync(configPath, toStableString(config), { encoding: "utf8", mode: 0o600 });
+  try {
+    chmodSync(configPath, 0o600);
+  } catch {
+    // Best-effort hardening: keep config usable even when chmod is unsupported.
+  }
   return configPath;
 }
 

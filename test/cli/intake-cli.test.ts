@@ -29,7 +29,7 @@ function runCli(args: string[], env: Record<string, string> = {}) {
 
 describe("CLI intake integration", () => {
   test("resolves YouTube URL through baseline intake path", () => {
-    const result = runCli(["https://www.youtube.com/watch?v=abc123"], {
+    const result = runCli(["transcribe", "https://www.youtube.com/watch?v=abc123"], {
       PI_TUBE_TEST_YTDLP_JSON: JSON.stringify({
         url: "https://cdn.example.com/youtube/video.mp4",
         title: "YouTube Mock",
@@ -44,7 +44,7 @@ describe("CLI intake integration", () => {
   });
 
   test("maps missing yt-dlp dependency to deterministic code", () => {
-    const result = runCli(["https://www.youtube.com/watch?v=abc123"], {
+    const result = runCli(["transcribe", "https://www.youtube.com/watch?v=abc123"], {
       PI_TUBE_TEST_YTDLP_ERROR: "not_found",
     });
     const stderr = result.stderr.toString();
@@ -54,7 +54,7 @@ describe("CLI intake integration", () => {
   });
 
   test("maps YouTube extraction failures to deterministic code", () => {
-    const result = runCli(["https://www.youtube.com/watch?v=abc123"], {
+    const result = runCli(["transcribe", "https://www.youtube.com/watch?v=abc123"], {
       PI_TUBE_TEST_YTDLP_ERROR: "extract_failed",
     });
     const stderr = result.stderr.toString();
@@ -64,7 +64,7 @@ describe("CLI intake integration", () => {
   });
 
   test("resolves direct media URL through baseline intake path", () => {
-    const result = runCli(["https://cdn.example.com/audio/demo.wav"]);
+    const result = runCli(["transcribe", "https://cdn.example.com/audio/demo.wav"]);
     const stdout = readOutputFileFromStdout(result.stdout.toString());
 
     expect(result.exitCode).toBe(0);
@@ -73,7 +73,7 @@ describe("CLI intake integration", () => {
   });
 
   test("resolves Instagram public URL through baseline intake path", () => {
-    const result = runCli(["https://www.instagram.com/reel/abc123"], {
+    const result = runCli(["transcribe", "https://www.instagram.com/reel/abc123"], {
       PI_TUBE_TEST_INSTAGRAM_YTDLP_JSON: JSON.stringify({
         url: "https://cdn.example.com/instagram/reel.mp4",
         title: "Instagram Mock",
@@ -87,7 +87,7 @@ describe("CLI intake integration", () => {
   });
 
   test("fails unsupported non-direct URL with deterministic code", () => {
-    const result = runCli(["https://example.com/blog-post"]);
+    const result = runCli(["transcribe", "https://example.com/blog-post"]);
     const stderr = result.stderr.toString();
 
     expect(result.exitCode).toBe(2);
@@ -95,7 +95,7 @@ describe("CLI intake integration", () => {
   });
 
   test("fails auth-required Instagram URL with deterministic code and guidance", () => {
-    const result = runCli(["https://www.instagram.com/reel/private123"], {
+    const result = runCli(["transcribe", "https://www.instagram.com/reel/private123"], {
       PI_TUBE_TEST_INSTAGRAM_YTDLP_ERROR: "auth_required",
     });
     const stderr = result.stderr.toString();
@@ -106,7 +106,7 @@ describe("CLI intake integration", () => {
   });
 
   test("maps Instagram extraction failures to deterministic code", () => {
-    const result = runCli(["https://www.instagram.com/reel/abc123"], {
+    const result = runCli(["transcribe", "https://www.instagram.com/reel/abc123"], {
       PI_TUBE_TEST_INSTAGRAM_YTDLP_ERROR: "extract_failed",
     });
     const stderr = result.stderr.toString();
@@ -121,7 +121,7 @@ describe("CLI intake integration", () => {
 
     try {
       writeFileSync(filePath, "audio-data");
-      const result = runCli([filePath]);
+      const result = runCli(["transcribe", filePath]);
       const stdout = readOutputFileFromStdout(result.stdout.toString());
 
       expect(result.exitCode).toBe(0);

@@ -27,7 +27,7 @@ describe("No-Python runtime regression guard", () => {
     expect(combined).not.toMatch(/\bpython\b/i);
     expect(combined).not.toMatch(/\bpip\b/i);
     expect(combined).not.toMatch(/\btyper\b/i);
-    expect(combined).toContain("pi-tube <input>");
+    expect(combined).toContain("pi-tube transcribe <input>");
   });
 
   test("runtime bootstrap modules do not shell toward Python tooling", () => {
