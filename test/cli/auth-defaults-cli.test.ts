@@ -23,6 +23,15 @@ function runCli(args: string[], env: Record<string, string> = {}) {
 }
 
 describe("auth and defaults commands", () => {
+  test("validates auth login provider before prompting for an API key", () => withConfig((env) => {
+    const login = runCli(["auth", "login"], env);
+
+    expect(login.exitCode).toBe(2);
+    expect(login.stdout.toString()).not.toContain("Paste provider API key");
+    expect(login.stderr.toString()).toContain("[CLI_CONTRACT_VIOLATION] Missing provider.");
+    expect(login.stderr.toString()).toContain("pi-tube auth login <deepgram|groq>");
+  }));
+
   test("logs in with a provider API key, masks status, and logs out", () => withConfig((env, configPath) => {
     const login = runCli(["auth", "login", "groq", "--key", "gsk_test_secret_1234"], env);
     expect(login.exitCode).toBe(0);
