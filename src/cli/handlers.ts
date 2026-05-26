@@ -112,8 +112,7 @@ export async function handleBaselineInput({
       code: "CLI_CONTRACT_VIOLATION",
       exitCode: 2,
       guidance: [
-        "Use exactly one positional input: `pi-tube transcribe <input>`.",
-        "Run `pi-tube --help` for examples.",
+        "Use one of: `pi-tube transcribe <input>`, `pi-tube transcribe <input> --provider <deepgram|groq>`, `pi-tube transcribe <input> --json`.",
       ],
     });
   }
@@ -163,7 +162,7 @@ function requireAuthProvider(provider: string | undefined): "deepgram" | "groq" 
     throw new CliError("Missing provider.", {
       code: "CLI_CONTRACT_VIOLATION",
       exitCode: 2,
-      guidance: ["Use `pi-tube auth login <deepgram|groq>` or `pi-tube auth logout <deepgram|groq>`."],
+      guidance: ["Use one of: `pi-tube auth login <deepgram|groq>`, `pi-tube auth status`, `pi-tube auth logout <deepgram|groq>`."],
     });
   }
   return requireConfigProviderId(provider);
@@ -176,7 +175,7 @@ export function handleAuthLogin({ provider, apiKey, options }: AuthLoginInput): 
     throw new CliError("Missing API key.", {
       code: "CLI_CONTRACT_VIOLATION",
       exitCode: 2,
-      guidance: ["Use `pi-tube auth login <provider> --key <api_key>` or run interactively."],
+      guidance: ["Use one of: `pi-tube auth login <deepgram|groq>`, `pi-tube auth login <deepgram|groq> --key <api_key>`."],
     });
   }
 
@@ -219,7 +218,7 @@ export function handleDefaultsProvider({ provider, options }: DefaultsProviderIn
     throw new CliError("Missing default provider.", {
       code: "CLI_CONTRACT_VIOLATION",
       exitCode: 2,
-      guidance: ["Use `pi-tube defaults provider <deepgram|groq>`."],
+      guidance: ["Use one of: `pi-tube defaults provider <deepgram|groq>`, `pi-tube defaults language <code>`, `pi-tube defaults show`."],
     });
   }
   const providerId = requireConfigProviderId(provider);
@@ -233,7 +232,7 @@ export function handleDefaultsLanguage({ language, options }: DefaultsLanguageIn
     throw new CliError("Missing default language.", {
       code: "CLI_CONTRACT_VIOLATION",
       exitCode: 2,
-      guidance: ["Use `pi-tube defaults language <code>`."],
+      guidance: ["Use one of: `pi-tube defaults provider <deepgram|groq>`, `pi-tube defaults language <code>`, `pi-tube defaults show`."],
     });
   }
   const { configPath, config } = withConfigValidation(() => setConfigValue("defaults.language", normalizedLanguage, options));
@@ -264,7 +263,7 @@ export async function handleDownloadCommand({
     throw new CliError("`download` expects a YouTube or Instagram URL.", {
       code: "CLI_CONTRACT_VIOLATION",
       exitCode: 2,
-      guidance: ["Use `pi-tube download <url> [--audio] [--output <dir>]`."],
+      guidance: ["Use one of: `pi-tube download <url>`, `pi-tube download <url> --audio`, `pi-tube download <url> --output <dir>`."],
     });
   }
 
@@ -272,7 +271,7 @@ export async function handleDownloadCommand({
     throw new CliError("`download` accepts exactly one URL input.", {
       code: "CLI_CONTRACT_VIOLATION",
       exitCode: 2,
-      guidance: ["Use `pi-tube download <url> [--audio] [--output <dir>]`."],
+      guidance: ["Use one of: `pi-tube download <url>`, `pi-tube download <url> --audio`, `pi-tube download <url> --output <dir>`."],
     });
   }
 
