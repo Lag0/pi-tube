@@ -1,30 +1,22 @@
 # pi-tube
 
-`pi-tube` is a Bun + TypeScript CLI for turning media inputs into structured artifacts.
+`pi-tube` is a Bun + TypeScript CLI for transcribing and downloading public media.
 
-Current delivery status: Phase 7 CLI UX overhaul is active (scoped help, friendly config aliases, and setup automation parity).
+Current delivery status: v2 CLI redesign with explicit `transcribe`, `download`, `auth`, and `defaults` commands.
 
-## Install (macOS/Linux)
-
-### npm install (published package)
+## Install
 
 ```bash
 npm install -g @syxs/pi-tube
 ```
 
-Or without global install:
+Or run without global install:
 
 ```bash
 npx -y @syxs/pi-tube --help
 ```
 
-### Quick install
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/Lag0/pi-tube/main/install.sh | bash
-```
-
-### Local dev install
+Local development:
 
 ```bash
 git clone https://github.com/Lag0/pi-tube.git
@@ -32,88 +24,55 @@ cd pi-tube
 bun install
 ```
 
-## Run
+## Quick Start
 
 ```bash
-pi-tube --help
-pi-tube help config
-pi-tube --version
-pi-tube <input>
-pi-tube setup install
-pi-tube setup skills
+pi-tube auth login groq --key gsk_...
+pi-tube defaults provider groq
+pi-tube transcribe "https://youtube.com/watch?v=dQw4w9WgXcQ"
+pi-tube download "https://youtube.com/watch?v=dQw4w9WgXcQ"
 ```
-
-## Help Contract (Phase 5)
-
-The top-level help is intentionally fixed in this order:
-
-1. Usage
-2. Commands
-3. Global options
-4. Examples
-5. Notes
 
 ## Command Surface
 
-Implemented now:
+Core:
 
-- `pi-tube <input>`
-- `pi-tube --json <input>`
-- `pi-tube --provider <deepgram|groq> <input>`
-- `pi-tube --language <code> <input>`
-- `pi-tube --timestamps <input>` (optional timestamp blocks, default off)
-- `pi-tube setup install`
-- `pi-tube setup skills [--global] [--agent <name>] [--yes|--no-prompt]`
-- `pi-tube config set <key> <value>`
-- `pi-tube config get <key>`
-- `pi-tube config list`
-- `pi-tube config provider set <deepgram|groq>`
-- `pi-tube config provider env <deepgram|groq> <ENV_VAR>`
-- `pi-tube config language set <code>`
+- `pi-tube transcribe <input> [--provider <deepgram|groq>] [--language <code>] [--timestamps] [--json]`
 - `pi-tube download <url> [--audio] [--output <dir>]`
-- `pi-tube provider-status`
-- `pi-tube --json provider-status`
-- `pi-tube --help`
-- `pi-tube --version`
 
-Deferred command aliases (non-zero guidance, use baseline input path):
+Authentication:
 
-- `pi-tube youtube <url>` (use `pi-tube <input>`)
-- `pi-tube instagram <url>` (use `pi-tube <input>`)
+- `pi-tube auth login <deepgram|groq> --key <api_key>`
+- `pi-tube auth status`
+- `pi-tube auth logout <deepgram|groq>`
 
-## Examples
+Defaults:
+
+- `pi-tube defaults provider <deepgram|groq>`
+- `pi-tube defaults language <code>`
+- `pi-tube defaults show`
+
+Setup:
+
+- `pi-tube setup yt-dlp`
+- `pi-tube setup skills [--global] [--agent <name>] [--yes|--no-prompt]`
+
+## Transcribe
 
 ```bash
-pi-tube "https://youtube.com/watch?v=dQw4w9WgXcQ"   # active
-pi-tube --provider deepgram "https://youtube.com/watch?v=dQw4w9WgXcQ"  # active
-pi-tube --provider groq --language pt "./recording.mp3"                # active
-pi-tube --timestamps "https://youtube.com/watch?v=dQw4w9WgXcQ"         # include timestamp blocks
-pi-tube "https://instagram.com/reel/abc123"         # active (public URLs only)
-pi-tube "https://cdn.example.com/audio/demo.wav"    # active
-pi-tube "./recording.mp3"                           # active
-pi-tube --json "https://youtube.com/watch?v=dQw4w9WgXcQ"  # active JSON output
-pi-tube download "https://youtube.com/watch?v=dQw4w9WgXcQ"          # download video+audio to ./downloads
-pi-tube download "https://youtube.com/watch?v=dQw4w9WgXcQ" --audio  # download audio-only mp3
-pi-tube download "https://instagram.com/reel/abc123" --output ./media
-pi-tube setup install                                      # npm install/setup guidance
-pi-tube setup skills                                       # interactive default (human flow)
-pi-tube setup skills --global                              # interactive global scope
-pi-tube setup skills --agent codex                         # install for a specific agent
-pi-tube setup skills --global --yes                        # non-interactive automation path
-pi-tube setup skills --global --no-prompt                  # alias for non-interactive mode
-pi-tube config set defaults.provider groq                 # active config flow
-pi-tube config set providers.groq.api_key_env GROQ_API_KEY
-pi-tube config provider set groq                          # friendly provider alias
-pi-tube config provider env groq GROQ_API_KEY             # friendly env alias
-pi-tube config language set pt-BR                         # friendly language alias
-pi-tube config list
-pi-tube provider-status                                   # active provider readiness
-pi-tube --json provider-status                            # active readiness JSON
+pi-tube transcribe "https://youtube.com/watch?v=dQw4w9WgXcQ"
+pi-tube transcribe "./recording.mp3" --provider groq --language pt-BR
+pi-tube transcribe "./recording.mp3" --timestamps --json
+```
+
+Successful runs write deterministic Markdown or JSON artifacts and print:
+
+```text
+[OUTPUT_FILE] /path/to/artifact.md
+[OUTPUT_FILE_URI] file:///path/to/artifact.md
 ```
 
 ## Download Media
-
-Use `download` to save durable media files instead of transcribing them immediately:
 
 ```bash
 pi-tube download "https://youtube.com/watch?v=dQw4w9WgXcQ"
@@ -123,62 +82,55 @@ pi-tube download "https://instagram.com/reel/abc123" --output ./media
 
 Defaults:
 
-- Video with audio is downloaded by default.
-- `--audio` downloads audio-only as mp3.
-- Files are saved to `./downloads` unless `--output <dir>` is provided.
-- Successful runs print `[DOWNLOAD_FILE]` and `[DOWNLOAD_FILE_URI]`.
-- Requires `yt-dlp` on PATH; Instagram supports public URLs only.
+- video with audio is downloaded by default
+- `--audio` downloads audio-only as mp3
+- files are saved to `./downloads` unless `--output <dir>` is provided
+- successful runs print `[DOWNLOAD_FILE]` and `[DOWNLOAD_FILE_URI]`
+- requires `yt-dlp` on PATH; use `pi-tube setup yt-dlp` for guidance
 
-## Config Keys and Precedence
+## Auth and Defaults
 
-Supported configuration keys:
+Provider API keys are saved in `~/.pi-tube/config.json` with restricted file permissions. Command output always masks keys.
 
-- `defaults.provider` (`deepgram` or `groq`)
-- `defaults.language` (language code)
-- `providers.deepgram.api_key`
-- `providers.deepgram.api_key_env`
-- `providers.groq.api_key`
-- `providers.groq.api_key_env`
+```bash
+pi-tube auth login groq --key gsk_...
+pi-tube auth status
+pi-tube auth logout groq
+```
 
-Friendly aliases (mapped to the same canonical keys):
+Environment variables remain automatic fallbacks and do not require configuration:
 
-- `pi-tube config provider set <deepgram|groq>` → `defaults.provider`
-- `pi-tube config provider env <provider> <ENV_VAR>` → `providers.<provider>.api_key_env`
-- `pi-tube config provider key <provider> <api_key>` → `providers.<provider>.api_key`
-- `pi-tube config language set <code>` → `defaults.language`
+- `DEEPGRAM_API_KEY`
+- `GROQ_API_KEY`
 
-Legacy `config set/get/list` dot-path commands remain supported for existing scripts.
+Defaults avoid repeating common transcription flags:
 
-Default config file path:
+```bash
+pi-tube defaults provider groq
+pi-tube defaults language pt-BR
+pi-tube defaults show
+```
 
-- `~/.pi-tube/config.json` (override with `PI_TUBE_CONFIG_PATH`)
+## Legacy Raw Config
 
-Resolution precedence:
+The old raw config command is kept as an undocumented compatibility escape hatch for scripts:
 
-- Provider: CLI `--provider` > config `defaults.provider` > `PI_TUBE_TRANSCRIPTION_PROVIDER` > `deepgram`
-- Language: CLI `--language` > config `defaults.language` > `PI_TUBE_TRANSCRIPTION_LANGUAGE`
-- API key: config `providers.<id>.api_key` > env referenced by `providers.<id>.api_key_env` > default provider env (`DEEPGRAM_API_KEY`/`GROQ_API_KEY`)
+```bash
+pi-tube config list
+pi-tube config get defaults.provider
+pi-tube config set defaults.provider groq
+```
+
+Prefer `auth` and `defaults` for human workflows.
 
 ## Agent Workflows
 
-- Default output is deterministic Markdown with YAML frontmatter, extractive summary, and transcript sections.
-- Baseline runs write artifacts to `~/.pi-tube/YYYY-MM-DD-<title-or-file>.{md|json}` by default.
-- Stdout prints `[OUTPUT_FILE]` and `[OUTPUT_FILE_URI]` so you can click/open the generated file from terminal output.
-- Timestamp blocks are disabled by default to reduce artifact size/context; use `--timestamps` when needed.
-- `--json` emits a deterministic schema-versioned contract from the same canonical artifact model.
-- `provider-status` reports registered providers and missing required env vars in deterministic text or JSON.
+- Timestamp blocks are disabled by default; use `transcribe --timestamps` when needed.
+- `transcribe --json` emits a deterministic schema-versioned contract from the same canonical artifact model.
+- Temporary media downloads for YouTube/Instagram transcription use `~/.pi-tube/tmp` and are deleted after each run.
 - `setup skills` installs the repository skill bundle (`skills/pi-tube`) into supported agent tooling.
-- `setup skills` follows Firecrawl-style behavior: interactive default, optional `--global` and `--agent`.
-- Use `setup skills --global --yes` (or `--no-prompt`) for non-interactive AI/automation setup.
-- Temporary media downloads for YouTube/Instagram transcription use `~/.pi-tube/tmp` and are deleted after each run (success or error).
 
 ## Release Hardening
-
-Before tagging a release, run the mandatory checks in [docs/release-checklist.md](docs/release-checklist.md).
-
-npm publish automation is defined in `.github/workflows/publish.yml` with provenance and version-exists checks.
-
-## Instagram Public-Only Policy
 
 Before tagging a release, run the mandatory checks in [docs/release-checklist.md](docs/release-checklist.md).
 
@@ -192,9 +144,7 @@ npm publish automation is defined in `.github/workflows/publish.yml` with proven
 
 ## Runtime Policy
 
-The primary runtime path is Bun + TypeScript. Python runtime is not required for the v1 default path.
-
-Legacy command patterns are still recognized for compatibility messaging only and do not route back to Python behavior.
+The primary runtime path is Bun + TypeScript. Python runtime is not required.
 
 ## Provider Error Contract
 

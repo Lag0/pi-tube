@@ -159,7 +159,7 @@ describe("config command integration", () => {
     try {
       const env = { PI_TUBE_CONFIG_PATH: configPath };
 
-      const providerSet = runCli(["--json", "config", "provider", "set", "deepgram"], env);
+      const providerSet = runCli(["config", "provider", "set", "deepgram", "--json"], env);
       expect(providerSet.exitCode).toBe(0);
       const providerPayload = JSON.parse(providerSet.stdout.toString()) as {
         action: string;
@@ -170,7 +170,7 @@ describe("config command integration", () => {
       expect(providerPayload.key).toBe("defaults.provider");
       expect(providerPayload.value).toBe("deepgram");
 
-      const languageSet = runCli(["--json", "config", "language", "set", "en"], env);
+      const languageSet = runCli(["config", "language", "set", "en", "--json"], env);
       expect(languageSet.exitCode).toBe(0);
       const languagePayload = JSON.parse(languageSet.stdout.toString()) as {
         action: string;
@@ -199,7 +199,7 @@ describe("config command integration", () => {
       expect(getResult.exitCode).toBe(0);
       expect(getResult.stdout.toString()).toContain("[CONFIG_GET] key=defaults.provider value=groq");
 
-      const listResult = runCli(["--json", "config", "list"], env);
+      const listResult = runCli(["config", "list", "--json"], env);
       expect(listResult.exitCode).toBe(0);
       const payload = JSON.parse(listResult.stdout.toString()) as {
         command: string;
@@ -224,7 +224,7 @@ describe("config command integration", () => {
       expect(runCli(["config", "set", "defaults.provider", "groq"], env).exitCode).toBe(0);
       expect(runCli(["config", "set", "defaults.language", "pt-BR"], env).exitCode).toBe(0);
 
-      const runResult = runCli([mediaUrl], {
+      const runResult = runCli(["transcribe", mediaUrl], {
         ...env,
         PI_TUBE_TRANSCRIPTION_PROVIDER: "deepgram",
         PI_TUBE_TRANSCRIPTION_LANGUAGE: "en",

@@ -33,7 +33,7 @@ const mediaUrl = "https://cdn.example.com/audio/demo.wav";
 
 describe("CLI transcription integration", () => {
   test("executes deepgram provider and renders deterministic markdown output", () => {
-    const result = runCli(["--provider", "deepgram", mediaUrl], {
+    const result = runCli(["transcribe", mediaUrl, "--provider", "deepgram"], {
       PI_TUBE_TEST_DEEPGRAM_RESPONSE: JSON.stringify({
         results: {
           channels: [
@@ -56,7 +56,7 @@ describe("CLI transcription integration", () => {
   });
 
   test("supports groq provider switching and language preference", () => {
-    const result = runCli(["--provider", "groq", "--language", "pt-BR", mediaUrl], {
+    const result = runCli(["transcribe", mediaUrl, "--provider", "groq", "--language", "pt-BR"], {
       PI_TUBE_TEST_GROQ_RESPONSE: JSON.stringify({ text: "ola groq", language: "pt" }),
     });
 
@@ -68,7 +68,7 @@ describe("CLI transcription integration", () => {
   });
 
   test("uses env provider fallback when --provider is omitted", () => {
-    const result = runCli([mediaUrl], {
+    const result = runCli(["transcribe", mediaUrl], {
       PI_TUBE_TRANSCRIPTION_PROVIDER: "groq",
       PI_TUBE_TEST_GROQ_RESPONSE: JSON.stringify({ text: "env groq", language: "es" }),
     });
@@ -80,7 +80,7 @@ describe("CLI transcription integration", () => {
   });
 
   test("prioritizes --provider over env provider fallback", () => {
-    const result = runCli(["--provider", "deepgram", mediaUrl], {
+    const result = runCli(["transcribe", mediaUrl, "--provider", "deepgram"], {
       PI_TUBE_TRANSCRIPTION_PROVIDER: "groq",
       PI_TUBE_TEST_DEEPGRAM_RESPONSE: JSON.stringify({
         results: { channels: [{ alternatives: [{ transcript: "cli wins" }] }] },
@@ -95,7 +95,7 @@ describe("CLI transcription integration", () => {
   });
 
   test("maps provider auth failure to stable code with non-zero exit", () => {
-    const result = runCli(["--provider", "deepgram", mediaUrl], {
+    const result = runCli(["transcribe", mediaUrl, "--provider", "deepgram"], {
       PI_TUBE_TEST_DEEPGRAM_ERROR: "auth",
     });
 
@@ -104,7 +104,7 @@ describe("CLI transcription integration", () => {
   });
 
   test("maps provider rate-limit failure to stable code with non-zero exit", () => {
-    const result = runCli(["--provider", "groq", mediaUrl], {
+    const result = runCli(["transcribe", mediaUrl, "--provider", "groq"], {
       PI_TUBE_TEST_GROQ_ERROR: "rate_limit",
     });
 
@@ -113,7 +113,7 @@ describe("CLI transcription integration", () => {
   });
 
   test("maps generic provider failure to stable code with non-zero exit", () => {
-    const result = runCli(["--provider", "deepgram", mediaUrl], {
+    const result = runCli(["transcribe", mediaUrl, "--provider", "deepgram"], {
       PI_TUBE_TEST_DEEPGRAM_ERROR: "failed",
     });
 
@@ -122,7 +122,7 @@ describe("CLI transcription integration", () => {
   });
 
   test("maps provider unavailable failure to stable code with non-zero exit", () => {
-    const result = runCli(["--provider", "groq", mediaUrl], {
+    const result = runCli(["transcribe", mediaUrl, "--provider", "groq"], {
       PI_TUBE_TEST_GROQ_ERROR: "unavailable",
     });
 
@@ -131,7 +131,7 @@ describe("CLI transcription integration", () => {
   });
 
   test("maps provider invalid response to stable code with non-zero exit", () => {
-    const result = runCli(["--provider", "groq", mediaUrl], {
+    const result = runCli(["transcribe", mediaUrl, "--provider", "groq"], {
       PI_TUBE_TEST_GROQ_RESPONSE: JSON.stringify({ text: "" }),
     });
 
@@ -140,18 +140,18 @@ describe("CLI transcription integration", () => {
   });
 
   test("fails fast when no provider credentials are configured", () => {
-    const result = runCli([mediaUrl], {
+    const result = runCli(["transcribe", mediaUrl], {
       DEEPGRAM_API_KEY: "",
       GROQ_API_KEY: "",
     });
 
     expect(result.exitCode).toBe(2);
     expect(result.stderr.toString()).toContain("[TRANSCRIPTION_PROVIDER_NOT_CONFIGURED]");
-    expect(result.stderr.toString()).toContain("provider-status");
+    expect(result.stderr.toString()).toContain("auth status");
   });
 
   test("falls back to alternate provider when primary fails", () => {
-    const result = runCli(["--provider", "deepgram", mediaUrl], {
+    const result = runCli(["transcribe", mediaUrl, "--provider", "deepgram"], {
       PI_TUBE_TEST_DEEPGRAM_ERROR: "failed",
       PI_TUBE_TEST_GROQ_RESPONSE: JSON.stringify({ text: "fallback groq", language: "en" }),
     });

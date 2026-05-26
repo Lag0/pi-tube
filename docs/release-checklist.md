@@ -18,9 +18,9 @@ bun run verify:fixtures
 
 ```bash
 pi-tube --help
-pi-tube provider-status
-pi-tube --json provider-status
-pi-tube --provider deepgram "https://cdn.example.com/audio/demo.wav"
+pi-tube auth status
+pi-tube defaults show
+pi-tube transcribe "https://cdn.example.com/audio/demo.wav" --provider deepgram
 ```
 
 ## 4. Error-Contract Sanity Checks

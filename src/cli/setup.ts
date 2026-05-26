@@ -56,7 +56,7 @@ function handleSetupInstall(): string {
     `npx -y ${NPM_PACKAGE_NAME} --help`,
     "",
     "After install, configure defaults:",
-    "pi-tube config set defaults.provider deepgram",
+    "pi-tube defaults provider deepgram",
     "",
     "Then install the Codex skill bundle:",
     "pi-tube setup skills",

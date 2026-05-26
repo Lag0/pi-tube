@@ -25,7 +25,7 @@ const mediaUrl = "https://cdn.example.com/audio/demo.wav";
 
 describe("CLI error exits and formatting", () => {
   test("returns zero on success", () => {
-    const result = runCli([mediaUrl], {
+    const result = runCli(["transcribe", mediaUrl], {
       PI_TUBE_TEST_DEEPGRAM_RESPONSE: JSON.stringify({
         results: { channels: [{ alternatives: [{ transcript: "ok" }] }] },
       }),
@@ -36,7 +36,7 @@ describe("CLI error exits and formatting", () => {
   });
 
   test("returns deterministic contract error for unsupported flags", () => {
-    const result = runCli(["--bad-flag", mediaUrl]);
+    const result = runCli(["transcribe", mediaUrl, "--bad-flag"]);
     const stderr = result.stderr.toString();
 
     expect(result.exitCode).toBe(2);
@@ -45,7 +45,7 @@ describe("CLI error exits and formatting", () => {
   });
 
   test("returns deterministic intake error code and guidance formatting", () => {
-    const result = runCli(["https://example.com/blog"]);
+    const result = runCli(["transcribe", "https://example.com/blog"]);
     const stderr = result.stderr.toString();
     const lines = stderr.trim().split("\n");
 
@@ -57,7 +57,7 @@ describe("CLI error exits and formatting", () => {
   });
 
   test("returns deterministic provider auth failure code", () => {
-    const result = runCli(["--provider", "deepgram", mediaUrl], {
+    const result = runCli(["transcribe", mediaUrl, "--provider", "deepgram"], {
       PI_TUBE_TEST_DEEPGRAM_ERROR: "auth",
     });
 
@@ -66,7 +66,7 @@ describe("CLI error exits and formatting", () => {
   });
 
   test("keeps unexpected failures distinguishable with exit code 1", () => {
-    const result = runCli([mediaUrl], {
+    const result = runCli(["transcribe", mediaUrl], {
       PI_TUBE_TEST_DEEPGRAM_RESPONSE: "{bad-json",
     });
 
@@ -90,7 +90,7 @@ describe("CLI error exits and formatting", () => {
   });
 
   test("keeps setup automation flags scoped to setup command", () => {
-    const misplacedSetupFlag = runCli(["--yes", mediaUrl]);
+    const misplacedSetupFlag = runCli(["transcribe", mediaUrl, "--yes"]);
 
     expect(misplacedSetupFlag.exitCode).toBe(2);
     expect(misplacedSetupFlag.stderr.toString()).toContain("[CLI_CONTRACT_VIOLATION]");

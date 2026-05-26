@@ -15,13 +15,13 @@ describe("Install and run contract", () => {
 
     expect(readme).toContain("pi-tube --help");
     expect(readme).toContain("Bun");
-    expect(readme).toContain("pi-tube --json");
-    expect(readme).toContain("provider-status");
+    expect(readme).toContain("pi-tube transcribe");
+    expect(readme).toContain("pi-tube auth login groq");
     expect(readme).toContain("npm install -g @syxs/pi-tube");
     expect(readme).toContain("pi-tube setup skills");
-    expect(readme).toContain("pi-tube setup skills --global --yes");
-    expect(readme).toContain("config set defaults.provider");
-    expect(readme).toContain("Config Keys and Precedence");
+    expect(readme).toContain("pi-tube setup skills [--global]");
+    expect(readme).toContain("pi-tube defaults provider");
+    expect(readme).toContain("Auth and Defaults");
   });
 
   test("canonical help command returns required sections", () => {
@@ -34,9 +34,9 @@ describe("Install and run contract", () => {
     expect(output).toContain("Global options");
     expect(output).toContain("Examples");
     expect(output).toContain("Notes");
-    expect(output).toContain("pi-tube help [command]");
-    expect(output).toContain("pi-tube config provider set groq");
-    expect(output).toContain("pi-tube setup <install|skills|yt-dlp|mcp> [--global] [--agent <name>] [--yes|--no-prompt]");
+    expect(output).toContain("pi-tube transcribe <input>");
+    expect(output).toContain("pi-tube auth login <provider>");
+    expect(output).toContain("pi-tube setup <skills|yt-dlp|mcp> [--global] [--agent <name>] [--yes|--no-prompt]");
   });
 
   test("CI and release-gate docs stay aligned with executable commands", () => {

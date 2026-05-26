@@ -65,7 +65,7 @@ describe("download command", () => {
 
     expect(result.exitCode).toBe(2);
     expect(result.stderr.toString()).toContain("[CLI_CONTRACT_VIOLATION]");
-    expect(result.stderr.toString()).toContain("download` does not support");
+    expect(result.stderr.toString()).toContain("unknown option '--provider'");
   });
 
   test("maps missing yt-dlp with setup guidance", () => {
