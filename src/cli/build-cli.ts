@@ -106,11 +106,28 @@ function resolveHelpTopic(positionals: string[]): HelpTopic {
   return "root";
 }
 
-function commanderErrorToCliError(error: CommanderError): CliError {
+function guidanceForCommand(command: string | undefined): string[] {
+  switch (command) {
+    case "transcribe":
+      return ["Use one of: `pi-tube transcribe <input>`, `pi-tube transcribe <input> --provider <deepgram|groq>`, `pi-tube transcribe <input> --json`."];
+    case "download":
+      return ["Use one of: `pi-tube download <url>`, `pi-tube download <url> --audio`, `pi-tube download <url> --output <dir>`."];
+    case "auth":
+      return ["Use one of: `pi-tube auth login <deepgram|groq>`, `pi-tube auth status`, `pi-tube auth logout <deepgram|groq>`."];
+    case "defaults":
+      return ["Use one of: `pi-tube defaults provider <deepgram|groq>`, `pi-tube defaults language <code>`, `pi-tube defaults show`."];
+    case "setup":
+      return ["Use one of: `pi-tube setup yt-dlp`, `pi-tube setup skills`, `pi-tube setup mcp`."];
+    default:
+      return ["Use one of: `pi-tube transcribe <input>`, `pi-tube download <url>`, `pi-tube auth status`, `pi-tube defaults show`, `pi-tube setup yt-dlp`."];
+  }
+}
+
+function commanderErrorToCliError(error: CommanderError, argv: string[]): CliError {
   return new CliError(error.message, {
     code: "CLI_CONTRACT_VIOLATION",
     exitCode: error.exitCode === 0 ? 0 : 2,
-    guidance: [`Run \`${COMMAND_IDENTITY} --help\` to view supported options.`],
+    guidance: guidanceForCommand(argv[0]),
   });
 }
 
@@ -224,7 +241,7 @@ function parseAction(argv: string[]): CliAction {
   try {
     program.parse(argv, { from: "user" });
   } catch (error) {
-    if (error instanceof CommanderError) throw commanderErrorToCliError(error);
+    if (error instanceof CommanderError) throw commanderErrorToCliError(error, argv);
     throw error;
   }
 
@@ -305,7 +322,7 @@ function runAuthAction(action: Extract<CliAction, { kind: "auth" }>): number {
       throw new CliError("Missing or unsupported auth action.", {
         code: "CLI_CONTRACT_VIOLATION",
         exitCode: 2,
-        guidance: ["Use one of: `pi-tube auth login <provider>`, `pi-tube auth status`, `pi-tube auth logout <provider>`."],
+        guidance: guidanceForCommand("auth"),
       });
   }
 }
@@ -325,7 +342,7 @@ function runDefaultsAction(action: Extract<CliAction, { kind: "defaults" }>): nu
       throw new CliError("Missing or unsupported defaults action.", {
         code: "CLI_CONTRACT_VIOLATION",
         exitCode: 2,
-        guidance: ["Use one of: `pi-tube defaults provider <provider>`, `pi-tube defaults language <code>`, `pi-tube defaults show`."],
+        guidance: guidanceForCommand("defaults"),
       });
   }
 }
@@ -350,14 +367,14 @@ function runRootAction(action: Extract<CliAction, { kind: "root" }>): number {
     throw new CliError("Implicit transcription is no longer supported.", {
       code: "CLI_CONTRACT_VIOLATION",
       exitCode: 2,
-      guidance: ["Use `pi-tube transcribe <input>` instead."],
+      guidance: guidanceForCommand(undefined),
     });
   }
 
   throw new CliError("Missing command.", {
     code: "CLI_CONTRACT_VIOLATION",
     exitCode: 2,
-    guidance: ["Use `pi-tube --help` for usage."],
+    guidance: guidanceForCommand(undefined),
   });
 }
 

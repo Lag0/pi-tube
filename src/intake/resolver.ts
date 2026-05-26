@@ -23,7 +23,7 @@ export async function resolveSource(input: string, deps: ResolverDeps = {}): Pro
     throw new CliError("Input cannot be empty.", {
       code: "CLI_CONTRACT_VIOLATION",
       exitCode: 2,
-      guidance: ["Use `pi-tube transcribe <input>`.", "Run `pi-tube --help` for examples."],
+      guidance: ["Use one of: `pi-tube transcribe <input>`, `pi-tube transcribe <input> --provider <deepgram|groq>`, `pi-tube transcribe <input> --json`."]
     });
   }
 

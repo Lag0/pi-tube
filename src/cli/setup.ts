@@ -132,13 +132,9 @@ export function handleSetupCommand(
   options: SetupOptions = {},
 ): string | null {
   if (!subcommand) {
-    throw new CliError("Missing `setup` subcommand. Use `install`, `skills`, `yt-dlp`, or `mcp`.", {
+    throw new CliError("Missing or unsupported setup action.", {
       code: "CLI_CONTRACT_VIOLATION",
-      guidance: [
-        "Use `pi-tube setup install` for npm install commands.",
-        "Use `pi-tube setup skills` to install skill files into your agent tooling.",
-        "Use `pi-tube setup yt-dlp` for yt-dlp installation guidance.",
-      ],
+      guidance: ["Use one of: `pi-tube setup yt-dlp`, `pi-tube setup skills`, `pi-tube setup mcp`."],
     });
   }
 
@@ -161,8 +157,8 @@ export function handleSetupCommand(
     ]);
   }
 
-  throw new CliError(`Unsupported setup subcommand: \`${subcommand}\`.`, {
+  throw new CliError(`Unsupported setup action: \`${subcommand}\`.`, {
     code: "CLI_CONTRACT_VIOLATION",
-    guidance: ["Use one of: install, skills, yt-dlp, mcp."],
+    guidance: ["Use one of: `pi-tube setup yt-dlp`, `pi-tube setup skills`, `pi-tube setup mcp`."],
   });
 }

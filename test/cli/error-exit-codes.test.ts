@@ -35,13 +35,52 @@ describe("CLI error exits and formatting", () => {
     expect(result.stderr.toString().trim()).toBe("");
   });
 
-  test("returns deterministic contract error for unsupported flags", () => {
+  test("returns command-specific guidance for unsupported flags", () => {
     const result = runCli(["transcribe", mediaUrl, "--bad-flag"]);
     const stderr = result.stderr.toString();
 
     expect(result.exitCode).toBe(2);
     expect(stderr).toContain("[CLI_CONTRACT_VIOLATION]");
-    expect(stderr).toContain("guidance: Run `pi-tube --help`");
+    expect(stderr).toContain("guidance: Use one of: `pi-tube transcribe <input>`, `pi-tube transcribe <input> --provider <deepgram|groq>`, `pi-tube transcribe <input> --json`.");
+  });
+
+  test("returns command-specific guidance for missing or unsupported command actions", () => {
+    const cases: Array<{ args: string[]; expected: string }> = [
+      {
+        args: ["sample-input"],
+        expected: "guidance: Use one of: `pi-tube transcribe <input>`, `pi-tube download <url>`, `pi-tube auth status`, `pi-tube defaults show`, `pi-tube setup yt-dlp`.",
+      },
+      {
+        args: ["auth"],
+        expected: "guidance: Use one of: `pi-tube auth login <deepgram|groq>`, `pi-tube auth status`, `pi-tube auth logout <deepgram|groq>`.",
+      },
+      {
+        args: ["auth", "login"],
+        expected: "guidance: Use one of: `pi-tube auth login <deepgram|groq>`, `pi-tube auth status`, `pi-tube auth logout <deepgram|groq>`.",
+      },
+      {
+        args: ["defaults"],
+        expected: "guidance: Use one of: `pi-tube defaults provider <deepgram|groq>`, `pi-tube defaults language <code>`, `pi-tube defaults show`.",
+      },
+      {
+        args: ["setup"],
+        expected: "guidance: Use one of: `pi-tube setup yt-dlp`, `pi-tube setup skills`, `pi-tube setup mcp`.",
+      },
+      {
+        args: ["download"],
+        expected: "guidance: Use one of: `pi-tube download <url>`, `pi-tube download <url> --audio`, `pi-tube download <url> --output <dir>`.",
+      },
+      {
+        args: ["transcribe"],
+        expected: "guidance: Use one of: `pi-tube transcribe <input>`, `pi-tube transcribe <input> --provider <deepgram|groq>`, `pi-tube transcribe <input> --json`.",
+      },
+    ];
+
+    for (const testCase of cases) {
+      const result = runCli(testCase.args);
+      expect(result.exitCode).toBe(2);
+      expect(result.stderr.toString()).toContain(testCase.expected);
+    }
   });
 
   test("returns deterministic intake error code and guidance formatting", () => {
