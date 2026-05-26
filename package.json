@@ -1,6 +1,6 @@
 {
   "name": "@syxs/pi-tube",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "Bun + TypeScript CLI foundation for deterministic media-intake workflows",
   "type": "module",
   "packageManager": "bun@1.3.3",

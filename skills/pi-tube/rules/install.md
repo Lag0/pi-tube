@@ -23,31 +23,32 @@ npx -y @syxs/pi-tube --help
 ```bash
 pi-tube --version
 pi-tube --help
-pi-tube help config
+pi-tube help transcribe
+pi-tube help auth
 pi-tube help setup
 ```
 
-## Configure credentials
+## Configure credentials and defaults
 
 ```bash
-pi-tube config provider set deepgram
-pi-tube config provider env deepgram DEEPGRAM_API_KEY
-pi-tube config provider env groq GROQ_API_KEY
-pi-tube provider-status
+pi-tube auth login <deepgram|groq>
+pi-tube auth status
+pi-tube defaults provider <deepgram|groq>
+pi-tube defaults language pt-BR
+pi-tube defaults show
 ```
 
-`config provider env` must receive env var names (not raw API keys).
-
-Legacy compatibility:
-
-```bash
-pi-tube config set providers.deepgram.api_key_env DEEPGRAM_API_KEY
-pi-tube config set providers.groq.api_key_env GROQ_API_KEY
-```
+`auth login` stores the raw API key locally in `~/.pi-tube/config.json` and masks it in output. `DEEPGRAM_API_KEY` and `GROQ_API_KEY` remain automatic fallbacks.
 
 ## Install skill files into agent environments
 
 ```bash
 pi-tube setup skills
 pi-tube setup skills --global --yes
+```
+
+## Optional downloader setup
+
+```bash
+pi-tube setup yt-dlp
 ```
