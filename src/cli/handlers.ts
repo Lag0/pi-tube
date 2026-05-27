@@ -16,7 +16,7 @@ import {
   writeConfig,
   type ConfigStoreOptions,
 } from "../config/store.ts";
-import { CONFIG_KEYS, type ConfigKey } from "../config/types.ts";
+import { CONFIG_KEYS, CONFIG_PROVIDER_IDS, type ConfigKey, type ConfigProviderId } from "../config/types.ts";
 import {
   transcribeFromResolvedSource,
   type TranscriptionServiceOptions,
@@ -112,7 +112,7 @@ export async function handleBaselineInput({
       code: "CLI_CONTRACT_VIOLATION",
       exitCode: 2,
       guidance: [
-        "Use one of: `pi-tube transcribe <input>`, `pi-tube transcribe <input> --provider <deepgram|groq>`, `pi-tube transcribe <input> --json`.",
+        "Use one of: `pi-tube transcribe <input>`, `pi-tube transcribe <input> --provider <deepgram|groq|elevenlabs>`, `pi-tube transcribe <input> --json`.",
       ],
     });
   }
@@ -153,16 +153,18 @@ function maskSecretForStatus(value: string | undefined): string {
   return `${value.slice(0, 4)}***${value.slice(-4)}`;
 }
 
-function defaultProviderEnv(provider: "deepgram" | "groq"): "DEEPGRAM_API_KEY" | "GROQ_API_KEY" {
-  return provider === "deepgram" ? "DEEPGRAM_API_KEY" : "GROQ_API_KEY";
+function defaultProviderEnvNames(provider: ConfigProviderId): string[] {
+  if (provider === "deepgram") return ["DEEPGRAM_API_KEY"];
+  if (provider === "groq") return ["GROQ_API_KEY"];
+  return ["ELEVENLABS_API_KEY", "ELEVEN_API_KEY"];
 }
 
-function requireAuthProvider(provider: string | undefined): "deepgram" | "groq" {
+function requireAuthProvider(provider: string | undefined): ConfigProviderId {
   if (!provider) {
     throw new CliError("Missing provider.", {
       code: "CLI_CONTRACT_VIOLATION",
       exitCode: 2,
-      guidance: ["Use one of: `pi-tube auth login <deepgram|groq>`, `pi-tube auth status`, `pi-tube auth logout <deepgram|groq>`."],
+      guidance: ["Use one of: `pi-tube auth login <deepgram|groq|elevenlabs>`, `pi-tube auth status`, `pi-tube auth logout <deepgram|groq|elevenlabs>`."],
     });
   }
   return requireConfigProviderId(provider);
@@ -175,7 +177,7 @@ export function handleAuthLogin({ provider, apiKey, options }: AuthLoginInput): 
     throw new CliError("Missing API key.", {
       code: "CLI_CONTRACT_VIOLATION",
       exitCode: 2,
-      guidance: ["Use one of: `pi-tube auth login <deepgram|groq>`, `pi-tube auth login <deepgram|groq> --key <api_key>`."],
+      guidance: ["Use one of: `pi-tube auth login <deepgram|groq|elevenlabs>`, `pi-tube auth login <deepgram|groq|elevenlabs> --key <api_key>`."],
     });
   }
 
@@ -201,13 +203,14 @@ export function handleAuthStatus({ env = process.env, options }: AuthStatusInput
   const config = readConfig(options);
   const configPath = resolveConfigPath(options);
   const lines = ["[AUTH_STATUS]", `config_path=${configPath}`];
-  for (const providerId of ["deepgram", "groq"] as const) {
+  for (const providerId of CONFIG_PROVIDER_IDS) {
     const configKey = config.providers[providerId].api_key;
-    const envName = defaultProviderEnv(providerId);
-    const envKey = env[envName]?.trim();
-    const configured = Boolean(configKey || envKey);
-    const source = configKey ? "config" : envKey ? envName : "-";
-    const masked = maskSecretForStatus(configKey ?? envKey);
+    const envEntry = defaultProviderEnvNames(providerId)
+      .map((envName) => ({ envName, value: env[envName]?.trim() }))
+      .find((entry) => entry.value);
+    const configured = Boolean(configKey || envEntry?.value);
+    const source = configKey ? "config" : envEntry?.value ? envEntry.envName : "-";
+    const masked = maskSecretForStatus(configKey ?? envEntry?.value);
     lines.push(`${providerId} configured=${configured} source=${source} key=${masked}`);
   }
   return lines.join("\n");
@@ -218,7 +221,7 @@ export function handleDefaultsProvider({ provider, options }: DefaultsProviderIn
     throw new CliError("Missing default provider.", {
       code: "CLI_CONTRACT_VIOLATION",
       exitCode: 2,
-      guidance: ["Use one of: `pi-tube defaults provider <deepgram|groq>`, `pi-tube defaults language <code>`, `pi-tube defaults show`."],
+      guidance: ["Use one of: `pi-tube defaults provider <deepgram|groq|elevenlabs>`, `pi-tube defaults language <code>`, `pi-tube defaults show`."],
     });
   }
   const providerId = requireConfigProviderId(provider);
@@ -232,7 +235,7 @@ export function handleDefaultsLanguage({ language, options }: DefaultsLanguageIn
     throw new CliError("Missing default language.", {
       code: "CLI_CONTRACT_VIOLATION",
       exitCode: 2,
-      guidance: ["Use one of: `pi-tube defaults provider <deepgram|groq>`, `pi-tube defaults language <code>`, `pi-tube defaults show`."],
+      guidance: ["Use one of: `pi-tube defaults provider <deepgram|groq|elevenlabs>`, `pi-tube defaults language <code>`, `pi-tube defaults show`."],
     });
   }
   const { configPath, config } = withConfigValidation(() => setConfigValue("defaults.language", normalizedLanguage, options));
@@ -378,7 +381,7 @@ function withConfigValidation<T>(operation: () => T): T {
   }
 }
 
-function requireConfigProviderId(input: string): "deepgram" | "groq" {
+function requireConfigProviderId(input: string): ConfigProviderId {
   const normalized = input.trim().toLowerCase();
   if (isConfigProviderId(normalized)) {
     return normalized;
@@ -387,7 +390,7 @@ function requireConfigProviderId(input: string): "deepgram" | "groq" {
   throw new CliError(`Unsupported provider: \`${input}\`.`, {
     code: "CLI_CONTRACT_VIOLATION",
     exitCode: 2,
-    guidance: ["Use one of: deepgram, groq."],
+    guidance: ["Use one of: deepgram, groq, elevenlabs."],
   });
 }
 
@@ -487,7 +490,7 @@ export function handleConfigCommand({
         "Use `pi-tube config list`.",
         "Use `pi-tube config get <key>`.",
         "Use `pi-tube config set <key> <value>`.",
-        "Use `pi-tube config provider set <deepgram|groq>`.",
+        "Use `pi-tube config provider set <deepgram|groq|elevenlabs>`.",
         "Use `pi-tube config language set <code>`.",
       ],
     });
@@ -561,7 +564,7 @@ export function handleConfigCommand({
         throw new CliError("`config provider set` expects exactly one provider.", {
           code: "CLI_CONTRACT_VIOLATION",
           exitCode: 2,
-          guidance: ["Use `pi-tube config provider set <deepgram|groq>`."],
+          guidance: ["Use `pi-tube config provider set <deepgram|groq|elevenlabs>`."],
         });
       }
 

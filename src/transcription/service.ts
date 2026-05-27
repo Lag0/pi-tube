@@ -35,8 +35,10 @@ const FALLBACK_ELIGIBLE_ERRORS = new Set([
   "TRANSCRIPTION_PROVIDER_INVALID_RESPONSE",
 ]);
 
+const PROVIDER_FALLBACK_ORDER: TranscriptionProviderId[] = ["deepgram", "groq", "elevenlabs"];
+
 function parseProviderId(value: string): TranscriptionProviderId {
-  if (value === "deepgram" || value === "groq") {
+  if (value === "deepgram" || value === "groq" || value === "elevenlabs") {
     return value;
   }
 
@@ -44,7 +46,7 @@ function parseProviderId(value: string): TranscriptionProviderId {
     code: "TRANSCRIPTION_PROVIDER_INVALID",
     exitCode: 2,
     guidance: [
-      "Use `deepgram` or `groq`.",
+      "Use one of: `deepgram`, `groq`, `elevenlabs`.",
       "Set provider through `--provider` or PI_TUBE_TRANSCRIPTION_PROVIDER.",
     ],
   });
@@ -97,13 +99,22 @@ function resolveProviderApiKey(
     }
   }
 
-  const defaultEnvKey = providerId === "deepgram" ? "DEEPGRAM_API_KEY" : "GROQ_API_KEY";
-  const fromDefaultEnv = env[defaultEnvKey]?.trim();
-  return fromDefaultEnv && fromDefaultEnv.length > 0 ? fromDefaultEnv : undefined;
+  const defaultEnvKeys = providerId === "deepgram"
+    ? ["DEEPGRAM_API_KEY"]
+    : providerId === "groq"
+      ? ["GROQ_API_KEY"]
+      : ["ELEVENLABS_API_KEY", "ELEVEN_API_KEY"];
+  for (const envKey of defaultEnvKeys) {
+    const fromDefaultEnv = env[envKey]?.trim();
+    if (fromDefaultEnv) {
+      return fromDefaultEnv;
+    }
+  }
+  return undefined;
 }
 
-function fallbackProviderFor(providerId: TranscriptionProviderId): TranscriptionProviderId {
-  return providerId === "deepgram" ? "groq" : "deepgram";
+function fallbackProvidersFor(providerId: TranscriptionProviderId): TranscriptionProviderId[] {
+  return PROVIDER_FALLBACK_ORDER.filter((candidate) => candidate !== providerId);
 }
 
 function hasProviderMockOverride(
@@ -114,7 +125,11 @@ function hasProviderMockOverride(
     return Boolean(env.PI_TUBE_TEST_DEEPGRAM_RESPONSE || env.PI_TUBE_TEST_DEEPGRAM_ERROR);
   }
 
-  return Boolean(env.PI_TUBE_TEST_GROQ_RESPONSE || env.PI_TUBE_TEST_GROQ_ERROR);
+  if (providerId === "groq") {
+    return Boolean(env.PI_TUBE_TEST_GROQ_RESPONSE || env.PI_TUBE_TEST_GROQ_ERROR);
+  }
+
+  return Boolean(env.PI_TUBE_TEST_ELEVENLABS_RESPONSE || env.PI_TUBE_TEST_ELEVENLABS_ERROR);
 }
 
 function hasProviderCandidate(
@@ -157,13 +172,13 @@ export async function transcribeFromResolvedSource(
   const env = options.env ?? process.env;
   const config = options.config ?? readConfig({ env });
   const selectedProviderId = selectTranscriptionProvider({ provider: options.provider, config, env });
-  const alternateProviderId = fallbackProviderFor(selectedProviderId);
   const requestedLanguage = normalizeLanguage(
     options.language ?? config.defaults.language ?? env[TRANSCRIPTION_LANGUAGE_ENV],
   );
   const credentialMap: Record<TranscriptionProviderId, string | undefined> = {
     deepgram: resolveProviderApiKey("deepgram", config, env),
     groq: resolveProviderApiKey("groq", config, env),
+    elevenlabs: resolveProviderApiKey("elevenlabs", config, env),
   };
   const registry =
     options.providers ??
@@ -171,6 +186,7 @@ export async function transcribeFromResolvedSource(
       credentials: {
         deepgram: { apiKey: credentialMap.deepgram },
         groq: { apiKey: credentialMap.groq },
+        elevenlabs: { apiKey: credentialMap.elevenlabs },
       },
     });
   const usingInjectedProviders = options.providers !== undefined;
@@ -183,10 +199,10 @@ export async function transcribeFromResolvedSource(
     );
   };
 
-  const selectedConfigured = providerConfigured(selectedProviderId);
-  const alternateConfigured = providerConfigured(alternateProviderId);
+  const candidates = [selectedProviderId, ...fallbackProvidersFor(selectedProviderId)]
+    .filter((providerId) => providerConfigured(providerId));
 
-  if (!selectedConfigured && !alternateConfigured) {
+  if (candidates.length === 0) {
     throw new CliError("No transcription provider is configured with credentials.", {
       code: "TRANSCRIPTION_PROVIDER_NOT_CONFIGURED",
       exitCode: 2,
@@ -197,18 +213,18 @@ export async function transcribeFromResolvedSource(
     });
   }
 
-  const primaryProviderId = selectedConfigured ? selectedProviderId : alternateProviderId;
-  const shouldTryAlternate =
-    alternateConfigured &&
-    alternateProviderId !== primaryProviderId;
-
-  try {
-    return await transcribeWithProvider(source, primaryProviderId, registry, requestedLanguage);
-  } catch (error) {
-    if (!shouldTryAlternate || !isFallbackEligibleError(error)) {
-      throw error;
+  let lastError: unknown;
+  for (const [index, providerId] of candidates.entries()) {
+    try {
+      return await transcribeWithProvider(source, providerId, registry, requestedLanguage);
+    } catch (error) {
+      lastError = error;
+      const hasNextCandidate = index < candidates.length - 1;
+      if (!hasNextCandidate || !isFallbackEligibleError(error)) {
+        throw error;
+      }
     }
-
-    return transcribeWithProvider(source, alternateProviderId, registry, requestedLanguage);
   }
+
+  throw lastError;
 }

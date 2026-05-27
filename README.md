@@ -37,18 +37,18 @@ pi-tube download "https://youtube.com/watch?v=dQw4w9WgXcQ"
 
 Core:
 
-- `pi-tube transcribe <input> [--provider <deepgram|groq>] [--language <code>] [--timestamps] [--json]`
+- `pi-tube transcribe <input> [--provider <deepgram|groq|elevenlabs>] [--language <code>] [--timestamps] [--json]`
 - `pi-tube download <url> [--audio] [--output <dir>]`
 
 Authentication:
 
-- `pi-tube auth login <deepgram|groq> --key <api_key>`
+- `pi-tube auth login <deepgram|groq|elevenlabs> --key <api_key>`
 - `pi-tube auth status`
-- `pi-tube auth logout <deepgram|groq>`
+- `pi-tube auth logout <deepgram|groq|elevenlabs>`
 
 Defaults:
 
-- `pi-tube defaults provider <deepgram|groq>`
+- `pi-tube defaults provider <deepgram|groq|elevenlabs>`
 - `pi-tube defaults language <code>`
 - `pi-tube defaults show`
 
@@ -61,7 +61,7 @@ Setup:
 
 ```bash
 pi-tube transcribe "https://youtube.com/watch?v=dQw4w9WgXcQ"
-pi-tube transcribe "./recording.mp3" --provider groq --language pt-BR
+pi-tube transcribe "./recording.mp3" --provider elevenlabs --language pt-BR
 pi-tube transcribe "./recording.mp3" --timestamps --json
 ```
 
@@ -93,20 +93,21 @@ Defaults:
 Provider API keys are saved in `~/.pi-tube/config.json` with restricted file permissions. Command output always masks keys.
 
 ```bash
-pi-tube auth login groq --key gsk_...
+pi-tube auth login elevenlabs --key sk_...
 pi-tube auth status
-pi-tube auth logout groq
+pi-tube auth logout elevenlabs
 ```
 
 Environment variables remain automatic fallbacks and do not require configuration:
 
 - `DEEPGRAM_API_KEY`
 - `GROQ_API_KEY`
+- `ELEVENLABS_API_KEY` (`ELEVEN_API_KEY` is also accepted)
 
 Defaults avoid repeating common transcription flags:
 
 ```bash
-pi-tube defaults provider groq
+pi-tube defaults provider elevenlabs
 pi-tube defaults language pt-BR
 pi-tube defaults show
 ```

@@ -13,7 +13,7 @@ const ROOT_HELP_DOCUMENT: HelpDocument = {
   title: `${COMMAND_IDENTITY} CLI`,
   summary: "Transcribe and download public media with provider-based AI transcription.",
   usage: [
-    `${COMMAND_IDENTITY} transcribe <input> [--provider <deepgram|groq>] [--language <code>] [--timestamps] [--json]`,
+    `${COMMAND_IDENTITY} transcribe <input> [--provider <deepgram|groq|elevenlabs>] [--language <code>] [--timestamps] [--json]`,
     `${COMMAND_IDENTITY} download <url> [--audio] [--output <dir>]`,
     `${COMMAND_IDENTITY} auth <login|status|logout> [provider]`,
     `${COMMAND_IDENTITY} defaults <provider|language|show> [value]`,
@@ -57,11 +57,11 @@ const ROOT_HELP_DOCUMENT: HelpDocument = {
     { term: "--no-color", description: "Disable ANSI colors in help output." },
   ],
   examples: [
-    `${COMMAND_IDENTITY} auth login groq`,
+    `${COMMAND_IDENTITY} auth login elevenlabs`,
     `${COMMAND_IDENTITY} auth status`,
-    `${COMMAND_IDENTITY} defaults provider groq`,
+    `${COMMAND_IDENTITY} defaults provider elevenlabs`,
     `${COMMAND_IDENTITY} defaults language pt-BR`,
-    `${COMMAND_IDENTITY} transcribe "https://youtube.com/watch?v=dQw4w9WgXcQ" --provider groq`,
+    `${COMMAND_IDENTITY} transcribe "https://youtube.com/watch?v=dQw4w9WgXcQ" --provider elevenlabs`,
     `${COMMAND_IDENTITY} transcribe "./recording.mp3" --timestamps`,
     `${COMMAND_IDENTITY} download "https://youtube.com/watch?v=dQw4w9WgXcQ"`,
     `${COMMAND_IDENTITY} download "https://instagram.com/reel/abc123" --audio`,
@@ -70,7 +70,7 @@ const ROOT_HELP_DOCUMENT: HelpDocument = {
   notes: [
     "Transcription is explicit in v2: use `pi-tube transcribe <input>`.",
     "Provider API keys are stored in `~/.pi-tube/config.json` with restricted file permissions.",
-    "Environment variables (`DEEPGRAM_API_KEY`, `GROQ_API_KEY`) remain automatic fallbacks.",
+    "Environment variables (`DEEPGRAM_API_KEY`, `GROQ_API_KEY`, `ELEVENLABS_API_KEY`) remain automatic fallbacks.",
     "Successful transcriptions print `[OUTPUT_FILE]` and `[OUTPUT_FILE_URI]`.",
     "Successful downloads print `[DOWNLOAD_FILE]` and `[DOWNLOAD_FILE_URI]`.",
   ],
@@ -79,16 +79,16 @@ const ROOT_HELP_DOCUMENT: HelpDocument = {
 const TRANSCRIBE_HELP_DOCUMENT: HelpDocument = {
   title: `${COMMAND_IDENTITY} transcribe`,
   summary: "Transcribe a URL or local media file.",
-  usage: [`${COMMAND_IDENTITY} transcribe <input> [--provider <deepgram|groq>] [--language <code>] [--timestamps] [--json]`],
+  usage: [`${COMMAND_IDENTITY} transcribe <input> [--provider <deepgram|groq|elevenlabs>] [--language <code>] [--timestamps] [--json]`],
   options: [
-    { term: "--provider <deepgram|groq>", description: "Select transcription provider." },
+    { term: "--provider <deepgram|groq|elevenlabs>", description: "Select transcription provider." },
     { term: "--language <code>", description: "Optional language preference." },
     { term: "--timestamps", description: "Include timestamp blocks in transcript output." },
     { term: "--json", description: "Output deterministic JSON format." },
   ],
   examples: [
     `${COMMAND_IDENTITY} transcribe "https://youtube.com/watch?v=dQw4w9WgXcQ"`,
-    `${COMMAND_IDENTITY} transcribe "./recording.mp3" --provider groq --language pt-BR`,
+    `${COMMAND_IDENTITY} transcribe "./recording.mp3" --provider elevenlabs --language pt-BR`,
     `${COMMAND_IDENTITY} transcribe "./recording.mp3" --timestamps --json`,
   ],
   notes: ["Use `defaults provider` and `defaults language` to avoid repeating common flags."],
@@ -114,17 +114,17 @@ const AUTH_HELP_DOCUMENT: HelpDocument = {
   title: `${COMMAND_IDENTITY} auth`,
   summary: "Manage transcription provider API keys.",
   usage: [
-    `${COMMAND_IDENTITY} auth login <deepgram|groq>`,
+    `${COMMAND_IDENTITY} auth login <deepgram|groq|elevenlabs>`,
     `${COMMAND_IDENTITY} auth status`,
-    `${COMMAND_IDENTITY} auth logout <deepgram|groq>`,
+    `${COMMAND_IDENTITY} auth logout <deepgram|groq|elevenlabs>`,
   ],
   options: [
     { term: "--key <api_key>", description: "Provide API key non-interactively." },
   ],
   examples: [
-    `${COMMAND_IDENTITY} auth login groq --key gsk_...`,
+    `${COMMAND_IDENTITY} auth login elevenlabs --key sk_...`,
     `${COMMAND_IDENTITY} auth status`,
-    `${COMMAND_IDENTITY} auth logout groq`,
+    `${COMMAND_IDENTITY} auth logout elevenlabs`,
   ],
   notes: [
     "Stored keys are masked in all command output.",
@@ -137,12 +137,12 @@ const DEFAULTS_HELP_DOCUMENT: HelpDocument = {
   title: `${COMMAND_IDENTITY} defaults`,
   summary: "Manage default transcription preferences.",
   usage: [
-    `${COMMAND_IDENTITY} defaults provider <deepgram|groq>`,
+    `${COMMAND_IDENTITY} defaults provider <deepgram|groq|elevenlabs>`,
     `${COMMAND_IDENTITY} defaults language <code>`,
     `${COMMAND_IDENTITY} defaults show`,
   ],
   examples: [
-    `${COMMAND_IDENTITY} defaults provider groq`,
+    `${COMMAND_IDENTITY} defaults provider elevenlabs`,
     `${COMMAND_IDENTITY} defaults language pt-BR`,
     `${COMMAND_IDENTITY} defaults show`,
   ],

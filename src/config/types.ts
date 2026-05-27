@@ -1,7 +1,7 @@
 import type { TranscriptionProviderId } from "../transcription/types.ts";
 
 export const CONFIG_VERSION = 1;
-export const CONFIG_PROVIDER_IDS = ["deepgram", "groq"] as const;
+export const CONFIG_PROVIDER_IDS = ["deepgram", "groq", "elevenlabs"] as const;
 export type ConfigProviderId = (typeof CONFIG_PROVIDER_IDS)[number];
 
 export interface ProviderCredentialConfig {
@@ -18,6 +18,7 @@ export interface PiTubeConfig {
   providers: {
     deepgram: ProviderCredentialConfig;
     groq: ProviderCredentialConfig;
+    elevenlabs: ProviderCredentialConfig;
   };
 }
 
@@ -28,6 +29,8 @@ export const CONFIG_KEYS = [
   "providers.deepgram.api_key_env",
   "providers.groq.api_key",
   "providers.groq.api_key_env",
+  "providers.elevenlabs.api_key",
+  "providers.elevenlabs.api_key_env",
 ] as const;
 
 export type ConfigKey = (typeof CONFIG_KEYS)[number];

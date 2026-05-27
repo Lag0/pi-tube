@@ -1,6 +1,6 @@
 import type { ResolvedSource } from "../intake/types.ts";
 
-export type TranscriptionProviderId = "deepgram" | "groq";
+export type TranscriptionProviderId = "deepgram" | "groq" | "elevenlabs";
 
 export interface TranscriptionSegment {
   startMs: number;

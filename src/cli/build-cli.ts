@@ -109,13 +109,13 @@ function resolveHelpTopic(positionals: string[]): HelpTopic {
 function guidanceForCommand(command: string | undefined): string[] {
   switch (command) {
     case "transcribe":
-      return ["Use one of: `pi-tube transcribe <input>`, `pi-tube transcribe <input> --provider <deepgram|groq>`, `pi-tube transcribe <input> --json`."];
+      return ["Use one of: `pi-tube transcribe <input>`, `pi-tube transcribe <input> --provider <deepgram|groq|elevenlabs>`, `pi-tube transcribe <input> --json`."];
     case "download":
       return ["Use one of: `pi-tube download <url>`, `pi-tube download <url> --audio`, `pi-tube download <url> --output <dir>`."];
     case "auth":
-      return ["Use one of: `pi-tube auth login <deepgram|groq>`, `pi-tube auth status`, `pi-tube auth logout <deepgram|groq>`."];
+      return ["Use one of: `pi-tube auth login <deepgram|groq|elevenlabs>`, `pi-tube auth status`, `pi-tube auth logout <deepgram|groq|elevenlabs>`."];
     case "defaults":
-      return ["Use one of: `pi-tube defaults provider <deepgram|groq>`, `pi-tube defaults language <code>`, `pi-tube defaults show`."];
+      return ["Use one of: `pi-tube defaults provider <deepgram|groq|elevenlabs>`, `pi-tube defaults language <code>`, `pi-tube defaults show`."];
     case "setup":
       return ["Use one of: `pi-tube setup yt-dlp`, `pi-tube setup skills`, `pi-tube setup mcp`."];
     default:

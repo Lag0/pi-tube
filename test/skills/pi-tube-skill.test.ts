@@ -12,9 +12,9 @@ describe("pi-tube skill docs", () => {
     const security = readSkillFile("skills/pi-tube/rules/security.md");
     const combined = [skill, install, security].join("\n");
 
-    expect(combined).toContain("pi-tube auth login <deepgram|groq>");
+    expect(combined).toContain("pi-tube auth login <deepgram|groq|elevenlabs>");
     expect(combined).toContain("pi-tube auth status");
-    expect(combined).toContain("pi-tube defaults provider <deepgram|groq>");
+    expect(combined).toContain("pi-tube defaults provider <deepgram|groq|elevenlabs>");
     expect(combined).toContain("pi-tube transcribe <input>");
     expect(combined).toContain("pi-tube download <url>");
     expect(combined).not.toContain("pi-tube provider-status");
