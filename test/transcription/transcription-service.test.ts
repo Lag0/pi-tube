@@ -39,6 +39,18 @@ function providers(): ProviderRegistry {
         };
       },
     },
+    elevenlabs: {
+      id: "elevenlabs",
+      async transcribe(request) {
+        return {
+          provider: "elevenlabs",
+          transcript: `elevenlabs:${request.requestedLanguage ?? "auto"}`,
+          requestedLanguage: request.requestedLanguage,
+          detectedLanguage: "es",
+          segments: [{ startMs: 0, endMs: 400, text: "hola" }],
+        };
+      },
+    },
   };
 }
 
@@ -52,6 +64,7 @@ function config(overrides: Partial<PiTubeConfig["defaults"]> = {}): PiTubeConfig
     providers: {
       deepgram: {},
       groq: {},
+      elevenlabs: {},
     },
   };
 }
@@ -70,11 +83,11 @@ describe("transcription service", () => {
 
   test("uses env provider fallback when CLI provider is omitted", async () => {
     const result = await transcribeFromResolvedSource(source, {
-      env: { PI_TUBE_TRANSCRIPTION_PROVIDER: "groq" },
+      env: { PI_TUBE_TRANSCRIPTION_PROVIDER: "elevenlabs" },
       providers: providers(),
     });
 
-    expect(result.provider).toBe("groq");
+    expect(result.provider).toBe("elevenlabs");
   });
 
   test("uses config provider fallback ahead of env when CLI provider is omitted", async () => {
@@ -176,6 +189,8 @@ describe("transcription service", () => {
         env: {
           DEEPGRAM_API_KEY: "",
           GROQ_API_KEY: "",
+          ELEVENLABS_API_KEY: "",
+          ELEVEN_API_KEY: "",
           PI_TUBE_CONFIG_PATH: ".tmp/non-existing-config.json",
         },
       }),

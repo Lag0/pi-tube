@@ -31,14 +31,14 @@ pi-tube help setup
 ## Configure credentials and defaults
 
 ```bash
-pi-tube auth login <deepgram|groq>
+pi-tube auth login <deepgram|groq|elevenlabs>
 pi-tube auth status
-pi-tube defaults provider <deepgram|groq>
+pi-tube defaults provider <deepgram|groq|elevenlabs>
 pi-tube defaults language pt-BR
 pi-tube defaults show
 ```
 
-`auth login` stores the raw API key locally in `~/.pi-tube/config.json` and masks it in output. `DEEPGRAM_API_KEY` and `GROQ_API_KEY` remain automatic fallbacks.
+`auth login` stores the raw API key locally in `~/.pi-tube/config.json` and masks it in output. `DEEPGRAM_API_KEY`, `GROQ_API_KEY`, and `ELEVENLABS_API_KEY` remain automatic fallbacks.
 
 ## Install skill files into agent environments
 

@@ -24,6 +24,8 @@ function runCli(args: string[], env: Record<string, string> = {}) {
       PI_TUBE_CONFIG_PATH: configPath,
       DEEPGRAM_API_KEY: "",
       GROQ_API_KEY: "",
+      ELEVENLABS_API_KEY: "",
+      ELEVEN_API_KEY: "",
       ...env,
     },
   });
@@ -65,6 +67,19 @@ describe("CLI transcription integration", () => {
     expect(stdout).toContain('provider: "groq"');
     expect(stdout).toContain('requested_language: "pt-br"');
     expect(stdout).toContain('detected_language: "pt"');
+  });
+
+  test("supports elevenlabs provider switching and language preference", () => {
+    const result = runCli(["transcribe", mediaUrl, "--provider", "elevenlabs", "--language", "es"], {
+      PI_TUBE_TEST_ELEVENLABS_RESPONSE: JSON.stringify({ text: "hola elevenlabs", language_code: "es" }),
+    });
+
+    const stdout = readOutputFileFromStdout(result.stdout.toString());
+    expect(result.exitCode).toBe(0);
+    expect(stdout).toContain('provider: "elevenlabs"');
+    expect(stdout).toContain('requested_language: "es"');
+    expect(stdout).toContain('detected_language: "es"');
+    expect(stdout).toContain("hola elevenlabs");
   });
 
   test("uses env provider fallback when --provider is omitted", () => {
@@ -143,6 +158,8 @@ describe("CLI transcription integration", () => {
     const result = runCli(["transcribe", mediaUrl], {
       DEEPGRAM_API_KEY: "",
       GROQ_API_KEY: "",
+      ELEVENLABS_API_KEY: "",
+      ELEVEN_API_KEY: "",
     });
 
     expect(result.exitCode).toBe(2);

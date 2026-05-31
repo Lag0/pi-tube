@@ -70,7 +70,7 @@ export const ERROR_CATALOG = {
   },
   TRANSCRIPTION_PROVIDER_INVALID: {
     exitCode: 2,
-    guidance: ["Use `deepgram` or `groq`."],
+    guidance: ["Use one of: `deepgram`, `groq`, `elevenlabs`."],
   },
   TRANSCRIPTION_PROVIDER_NOT_CONFIGURED: {
     exitCode: 2,

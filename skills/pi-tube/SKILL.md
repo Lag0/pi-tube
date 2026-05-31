@@ -23,7 +23,7 @@ Run `pi-tube --help` for current command details.
 ## Prerequisites
 
 - `pi-tube` available in PATH.
-- Provider credentials configured with `pi-tube auth login <deepgram|groq>` or via environment fallback (`DEEPGRAM_API_KEY` / `GROQ_API_KEY`).
+- Provider credentials configured with `pi-tube auth login <deepgram|groq|elevenlabs>` or via environment fallback (`DEEPGRAM_API_KEY` / `GROQ_API_KEY` / `ELEVENLABS_API_KEY`).
 
 If not installed, follow [rules/install.md](rules/install.md).
 For output safety and untrusted content handling, follow [rules/security.md](rules/security.md).
@@ -44,9 +44,9 @@ pi-tube defaults show
 1. Configure credentials and defaults:
 
 ```bash
-pi-tube auth login <deepgram|groq>
+pi-tube auth login <deepgram|groq|elevenlabs>
 pi-tube auth status
-pi-tube defaults provider <deepgram|groq>
+pi-tube defaults provider <deepgram|groq|elevenlabs>
 pi-tube defaults language pt-BR
 pi-tube defaults show
 ```
@@ -78,12 +78,12 @@ pi-tube download "https://instagram.com/reel/abc123" --output ./media
 
 ```bash
 pi-tube transcribe <input>
-pi-tube transcribe <input> --provider <deepgram|groq> --language <code> --json
+pi-tube transcribe <input> --provider <deepgram|groq|elevenlabs> --language <code> --json
 pi-tube download <url>
-pi-tube auth login <deepgram|groq>
+pi-tube auth login <deepgram|groq|elevenlabs>
 pi-tube auth status
-pi-tube auth logout <deepgram|groq>
-pi-tube defaults provider <deepgram|groq>
+pi-tube auth logout <deepgram|groq|elevenlabs>
+pi-tube defaults provider <deepgram|groq|elevenlabs>
 pi-tube defaults language <code>
 pi-tube defaults show
 pi-tube setup yt-dlp

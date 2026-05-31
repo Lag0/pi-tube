@@ -38,13 +38,24 @@ function makeRegistry(): ProviderRegistry {
         };
       },
     },
+    elevenlabs: {
+      id: "elevenlabs",
+      async transcribe(request) {
+        return {
+          provider: "elevenlabs",
+          transcript: `elevenlabs:${request.source.kind}`,
+          requestedLanguage: request.requestedLanguage,
+          detectedLanguage: "es",
+        };
+      },
+    },
   };
 }
 
 describe("transcription provider contract", () => {
   test("selects provider with deterministic precedence: CLI > env > default", () => {
-    expect(selectTranscriptionProvider({ provider: "groq", env: { PI_TUBE_TRANSCRIPTION_PROVIDER: "deepgram" } })).toBe("groq");
-    expect(selectTranscriptionProvider({ env: { PI_TUBE_TRANSCRIPTION_PROVIDER: "groq" } })).toBe("groq");
+    expect(selectTranscriptionProvider({ provider: "elevenlabs", env: { PI_TUBE_TRANSCRIPTION_PROVIDER: "deepgram" } })).toBe("elevenlabs");
+    expect(selectTranscriptionProvider({ env: { PI_TUBE_TRANSCRIPTION_PROVIDER: "elevenlabs" } })).toBe("elevenlabs");
     expect(selectTranscriptionProvider({})).toBe("deepgram");
   });
 

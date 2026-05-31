@@ -24,6 +24,7 @@ function baseConfig(): PiTubeConfig {
     providers: {
       deepgram: {},
       groq: {},
+      elevenlabs: {},
     },
   };
 }
@@ -61,6 +62,7 @@ function normalizeConfig(raw: unknown): PiTubeConfig {
     providers?: {
       deepgram?: { api_key?: unknown; api_key_env?: unknown };
       groq?: { api_key?: unknown; api_key_env?: unknown };
+      elevenlabs?: { api_key?: unknown; api_key_env?: unknown };
     };
   };
 
@@ -76,6 +78,8 @@ function normalizeConfig(raw: unknown): PiTubeConfig {
   );
   config.providers.groq.api_key = normalizeOptionalString(input.providers?.groq?.api_key);
   config.providers.groq.api_key_env = normalizeOptionalString(input.providers?.groq?.api_key_env);
+  config.providers.elevenlabs.api_key = normalizeOptionalString(input.providers?.elevenlabs?.api_key);
+  config.providers.elevenlabs.api_key_env = normalizeOptionalString(input.providers?.elevenlabs?.api_key_env);
 
   return config;
 }
@@ -151,7 +155,7 @@ function setProvider(value: string): TranscriptionProviderId {
     return normalized;
   }
 
-  throw new Error("`defaults.provider` must be `deepgram` or `groq`.");
+  throw new Error("`defaults.provider` must be `deepgram`, `groq`, or `elevenlabs`.");
 }
 
 function validateEnvVarName(value: string, key: ConfigKey): string {
@@ -195,6 +199,12 @@ export function setConfigValue(
     case "providers.groq.api_key_env":
       config.providers.groq.api_key_env = validateEnvVarName(trimmedValue, key);
       break;
+    case "providers.elevenlabs.api_key":
+      config.providers.elevenlabs.api_key = trimmedValue;
+      break;
+    case "providers.elevenlabs.api_key_env":
+      config.providers.elevenlabs.api_key_env = validateEnvVarName(trimmedValue, key);
+      break;
   }
 
   const configPath = writeConfig(config, options);
@@ -217,6 +227,10 @@ export function getConfigValue(key: string, options: ConfigStoreOptions = {}): u
       return config.providers.groq.api_key;
     case "providers.groq.api_key_env":
       return config.providers.groq.api_key_env;
+    case "providers.elevenlabs.api_key":
+      return config.providers.elevenlabs.api_key;
+    case "providers.elevenlabs.api_key_env":
+      return config.providers.elevenlabs.api_key_env;
   }
 }
 
@@ -232,5 +246,7 @@ export function listConfigValues(
     "providers.deepgram.api_key_env": config.providers.deepgram.api_key_env,
     "providers.groq.api_key": config.providers.groq.api_key,
     "providers.groq.api_key_env": config.providers.groq.api_key_env,
+    "providers.elevenlabs.api_key": config.providers.elevenlabs.api_key,
+    "providers.elevenlabs.api_key_env": config.providers.elevenlabs.api_key_env,
   };
 }

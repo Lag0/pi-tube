@@ -19,7 +19,7 @@ describe("CLI help contract", () => {
     const clean = stripAnsi(stdout);
 
     expect(result.exitCode).toBe(0);
-    expect(clean).toContain("pi-tube transcribe <input> [--provider <deepgram|groq>]");
+    expect(clean).toContain("pi-tube transcribe <input> [--provider <deepgram|groq|elevenlabs>]");
     expect(clean).toContain("pi-tube download <url> [--audio] [--output <dir>]");
     expect(clean).toContain("pi-tube auth <login|status|logout> [provider]");
     expect(clean).toContain("pi-tube defaults <provider|language|show> [value]");
@@ -53,7 +53,7 @@ describe("CLI help contract", () => {
     expect(stdout).toContain("Usage");
     expect(stdout).toContain("Global options");
     expect(stdout).toContain("--no-color");
-    expect(stdout).toContain("pi-tube auth login groq");
+    expect(stdout).toContain("pi-tube auth login elevenlabs");
     expect(stdout).toContain("pi-tube transcribe");
   });
 
@@ -75,9 +75,9 @@ describe("CLI help contract", () => {
 
     expect(rootHelp).toContain("pi-tube CLI");
     expect(transcribeHelp).toContain("pi-tube transcribe");
-    expect(transcribeHelp).toContain("--provider <deepgram|groq>");
+    expect(transcribeHelp).toContain("--provider <deepgram|groq|elevenlabs>");
     expect(authHelp).toContain("pi-tube auth");
-    expect(authHelp).toContain("auth login <deepgram|groq>");
+    expect(authHelp).toContain("auth login <deepgram|groq|elevenlabs>");
     expect(setupHelp).toContain("pi-tube setup");
     expect(setupHelp).toContain("setup skills [--global] [--agent <name>] [--yes|--no-prompt]");
     expect(setupHelp).not.toContain("provider-status [--json]");
