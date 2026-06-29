@@ -40,7 +40,9 @@ function formatTimestamp(milliseconds: number): string {
 
 function buildSourceMetadataLines(artifact: OutputArtifact): string[] {
   const links = artifact.source.description_links ?? [];
-  const hasMetadata = Boolean(artifact.source.published_at || artifact.source.description || links.length > 0);
+  const hasMetadata = Boolean(
+    artifact.source.title || artifact.source.published_at || artifact.source.description || links.length > 0,
+  );
 
   if (!hasMetadata) {
     return [];

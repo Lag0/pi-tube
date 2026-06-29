@@ -97,4 +97,24 @@ describe("markdown renderer", () => {
     expect(markdown).toContain("### Description Links\n- https://example.com/notes");
     expect(markdown.indexOf("## Source Metadata")).toBeLessThan(markdown.indexOf("## Summary"));
   });
+
+  test("renders a title-only YouTube source in the Source Metadata section", () => {
+    const artifact = buildOutputArtifact(
+      {
+        ...executionResult,
+        source: {
+          kind: "youtube",
+          originalInput: "https://youtube.com/watch?v=abc123",
+          normalizedUrl: "https://youtube.com/watch?v=abc123",
+          mediaUrl: "https://cdn.example.com/audio.m4a",
+          title: "Title Only Video",
+        },
+      },
+      { generatedAt: "2026-03-02T23:35:00.000Z" },
+    );
+    const markdown = renderMarkdown(artifact);
+
+    expect(markdown).toContain("## Source Metadata");
+    expect(markdown).toContain("- Title: Title Only Video");
+  });
 });

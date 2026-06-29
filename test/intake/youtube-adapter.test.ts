@@ -20,7 +20,7 @@ describe("yt-dlp boundary", () => {
           title: "Example",
           timestamp: 1_700_000_000,
           description:
-            "Links: https://example.com/first, https://example.com/second). Duplicate https://example.com/first",
+            "Links: https://example.com/first, https://example.com/second). See https://en.wikipedia.org/wiki/Mercury_(planet) too. Duplicate https://example.com/first",
         }),
         stderr: "",
       }),
@@ -28,13 +28,14 @@ describe("yt-dlp boundary", () => {
 
     expect(result.mediaUrl).toBe("https://cdn.example.com/video.mp4");
     expect(result.title).toBe("Example");
-    expect(result.publishedAt).toBe("2023-11-14T22:13:20.000Z");
+    expect(result.publishedAt).toBe("2023-11-14");
     expect(result.description).toBe(
-      "Links: https://example.com/first, https://example.com/second). Duplicate https://example.com/first",
+      "Links: https://example.com/first, https://example.com/second). See https://en.wikipedia.org/wiki/Mercury_(planet) too. Duplicate https://example.com/first",
     );
     expect(result.descriptionLinks).toEqual([
       "https://example.com/first",
       "https://example.com/second",
+      "https://en.wikipedia.org/wiki/Mercury_(planet)",
     ]);
   });
 

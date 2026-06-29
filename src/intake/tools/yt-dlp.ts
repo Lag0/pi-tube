@@ -118,22 +118,16 @@ function isString(value: unknown): value is string {
 }
 
 function normalizeTimestamp(value: unknown): string | undefined {
-  const seconds = typeof value === "number"
-    ? value
-    : typeof value === "string" && /^\d+$/.test(value.trim())
-      ? Number.parseInt(value.trim(), 10)
-      : undefined;
-
-  if (seconds === undefined || !Number.isFinite(seconds) || seconds <= 0) {
+  if (typeof value !== "number" || value <= 0) {
     return undefined;
   }
 
-  const date = new Date(seconds * 1000);
+  const date = new Date(value * 1000);
   if (Number.isNaN(date.getTime())) {
     return undefined;
   }
 
-  return date.toISOString();
+  return date.toISOString().slice(0, 10);
 }
 
 function normalizeUploadDate(value: unknown): string | undefined {
@@ -158,7 +152,15 @@ function normalizeUploadDate(value: unknown): string | undefined {
 }
 
 function trimLinkCandidate(value: string): string {
-  return value.replace(/[),.;:!?]+$/g, "");
+  let link = value.replace(/[.,;:!?]+$/g, "");
+
+  // Strip a trailing ")" only when it is unbalanced, so URLs that legitimately
+  // end in a parenthesis (e.g. "..._(planet)") are preserved.
+  while (link.endsWith(")") && (link.match(/\)/g) ?? []).length > (link.match(/\(/g) ?? []).length) {
+    link = link.slice(0, -1).replace(/[.,;:!?]+$/g, "");
+  }
+
+  return link;
 }
 
 function extractDescriptionLinks(description: string | undefined): string[] | undefined {
@@ -232,7 +234,7 @@ function pickPreferredMediaUrl(parsed: Record<string, unknown>): string | undefi
   return undefined;
 }
 
-function parseYtDlpOutput(stdout: string): YtDlpResult {
+function parseYtDlpOutput(stdout: string, withMetadata = false): YtDlpResult {
   let parsed: Record<string, unknown>;
 
   try {
@@ -248,9 +250,12 @@ function parseYtDlpOutput(stdout: string): YtDlpResult {
   }
 
   const title = typeof parsed.title === "string" ? parsed.title : undefined;
-  const description = typeof parsed.description === "string" && parsed.description.trim().length > 0
-    ? parsed.description
-    : undefined;
+
+  if (!withMetadata) {
+    return { mediaUrl, title };
+  }
+
+  const description = isString(parsed.description) ? parsed.description : undefined;
   const publishedAt = normalizeTimestamp(parsed.timestamp) ?? normalizeUploadDate(parsed.upload_date);
   const descriptionLinks = extractDescriptionLinks(description);
 
@@ -269,7 +274,7 @@ export async function resolveYouTubeWithYtDlp(
 ): Promise<YtDlpResult> {
   const mockJson = process.env.PI_TUBE_TEST_YTDLP_JSON;
   if (mockJson) {
-    return parseYtDlpOutput(mockJson);
+    return parseYtDlpOutput(mockJson, true);
   }
 
   const mockFailure = process.env.PI_TUBE_TEST_YTDLP_ERROR;
@@ -308,7 +313,7 @@ export async function resolveYouTubeWithYtDlp(
     throw createYouTubeExtractFailedError(detail);
   }
 
-  return parseYtDlpOutput(result.stdout);
+  return parseYtDlpOutput(result.stdout, true);
 }
 
 export async function resolveInstagramWithYtDlp(
