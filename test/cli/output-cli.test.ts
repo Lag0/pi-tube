@@ -38,7 +38,7 @@ describe("CLI output contract", () => {
     expect(stdout).toContain("[OUTPUT_FILE]");
     expect(stdout).toContain("[OUTPUT_FILE_URI]");
     expect(path.basename(outputPath)).toMatch(/^\d{4}-\d{2}-\d{2}-demo(-\d+)?\.md$/);
-    expect(fileContent).toContain("---\nschema_version: \"1.0.0\"");
+    expect(fileContent).toContain("---\nschema_version: \"1.1.0\"");
     expect(fileContent).toContain("source_kind: \"direct_url\"");
     expect(fileContent).toContain("provider: \"deepgram\"");
     expect(fileContent).toContain("## Summary");
@@ -123,7 +123,7 @@ describe("CLI output contract", () => {
       transcription: { provider: string };
       transcript: { full_text: string };
     };
-    expect(payload.schema_version).toBe("1.0.0");
+    expect(payload.schema_version).toBe("1.1.0");
     expect(payload.source.kind).toBe("direct_url");
     expect(payload.transcription.provider).toBe("deepgram");
     expect(payload.transcript.full_text).toBe("json response");
@@ -182,7 +182,7 @@ describe("CLI output contract", () => {
       transcription: { provider: string; requested_language: string | null; detected_language: string | null };
       transcript: { full_text: string };
     };
-    expect(payload.schema_version).toBe("1.0.0");
+    expect(payload.schema_version).toBe("1.1.0");
     expect(payload.transcription.provider).toBe("groq");
     expect(payload.transcription.requested_language).toBe("pt");
     expect(payload.transcription.detected_language).toBe("pt");

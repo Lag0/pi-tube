@@ -10,6 +10,9 @@ import {
 export interface YtDlpResult {
   mediaUrl: string;
   title?: string;
+  publishedAt?: string;
+  description?: string;
+  descriptionLinks?: string[];
 }
 
 export interface YtDlpExecutionResult {
@@ -114,6 +117,72 @@ function isString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
 
+function normalizeTimestamp(value: unknown): string | undefined {
+  const seconds = typeof value === "number"
+    ? value
+    : typeof value === "string" && /^\d+$/.test(value.trim())
+      ? Number.parseInt(value.trim(), 10)
+      : undefined;
+
+  if (seconds === undefined || !Number.isFinite(seconds) || seconds <= 0) {
+    return undefined;
+  }
+
+  const date = new Date(seconds * 1000);
+  if (Number.isNaN(date.getTime())) {
+    return undefined;
+  }
+
+  return date.toISOString();
+}
+
+function normalizeUploadDate(value: unknown): string | undefined {
+  if (typeof value !== "string" || !/^\d{8}$/.test(value)) {
+    return undefined;
+  }
+
+  const year = Number.parseInt(value.slice(0, 4), 10);
+  const month = Number.parseInt(value.slice(4, 6), 10);
+  const day = Number.parseInt(value.slice(6, 8), 10);
+  const date = new Date(Date.UTC(year, month - 1, day));
+
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    return undefined;
+  }
+
+  return `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}`;
+}
+
+function trimLinkCandidate(value: string): string {
+  return value.replace(/[),.;:!?]+$/g, "");
+}
+
+function extractDescriptionLinks(description: string | undefined): string[] | undefined {
+  if (!description) {
+    return undefined;
+  }
+
+  const matches = description.match(/https?:\/\/[^\s<>"']+/g) ?? [];
+  const seen = new Set<string>();
+  const links: string[] = [];
+
+  for (const match of matches) {
+    const link = trimLinkCandidate(match);
+    if (!link || seen.has(link)) {
+      continue;
+    }
+
+    seen.add(link);
+    links.push(link);
+  }
+
+  return links.length > 0 ? links : undefined;
+}
+
 function isLikelyImage(format: ParsedFormatLike): boolean {
   const ext = isString(format.ext) ? format.ext.toLowerCase() : "";
   const note = isString(format.format_note) ? format.format_note.toLowerCase() : "";
@@ -179,7 +248,13 @@ function parseYtDlpOutput(stdout: string): YtDlpResult {
   }
 
   const title = typeof parsed.title === "string" ? parsed.title : undefined;
-  return { mediaUrl, title };
+  const description = typeof parsed.description === "string" && parsed.description.trim().length > 0
+    ? parsed.description
+    : undefined;
+  const publishedAt = normalizeTimestamp(parsed.timestamp) ?? normalizeUploadDate(parsed.upload_date);
+  const descriptionLinks = extractDescriptionLinks(description);
+
+  return { mediaUrl, title, publishedAt, description, descriptionLinks };
 }
 
 function isInstagramAuthRequiredFailure(detail: string): boolean {

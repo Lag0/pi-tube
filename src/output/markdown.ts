@@ -38,6 +38,35 @@ function formatTimestamp(milliseconds: number): string {
   ).padStart(2, "0")}.${String(ms).padStart(3, "0")}`;
 }
 
+function buildSourceMetadataLines(artifact: OutputArtifact): string[] {
+  const links = artifact.source.description_links ?? [];
+  const hasMetadata = Boolean(artifact.source.published_at || artifact.source.description || links.length > 0);
+
+  if (!hasMetadata) {
+    return [];
+  }
+
+  const lines = ["", "## Source Metadata"];
+
+  if (artifact.source.title) {
+    lines.push(`- Title: ${artifact.source.title}`);
+  }
+
+  if (artifact.source.published_at) {
+    lines.push(`- Published at: ${artifact.source.published_at}`);
+  }
+
+  if (artifact.source.description) {
+    lines.push("", "### Description", artifact.source.description);
+  }
+
+  if (links.length > 0) {
+    lines.push("", "### Description Links", ...links.map((link) => `- ${link}`));
+  }
+
+  return lines;
+}
+
 export function renderMarkdown(artifact: OutputArtifact): string {
   const includeTranscriptHeader = artifact.summary.key_points.some((point) =>
     point.startsWith("Timestamp mode: on"),
@@ -58,6 +87,7 @@ export function renderMarkdown(artifact: OutputArtifact): string {
 
   const lines = [
     buildFrontmatter(artifact),
+    ...buildSourceMetadataLines(artifact),
     "",
     "## Summary",
     artifact.summary.paragraph,

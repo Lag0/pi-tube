@@ -24,7 +24,7 @@ describe("markdown renderer", () => {
     });
     const markdown = renderMarkdown(artifact);
 
-    expect(markdown).toContain("---\nschema_version: \"1.0.0\"");
+    expect(markdown).toContain("---\nschema_version: \"1.1.0\"");
     expect(markdown).toContain("generated_at: \"2026-03-02T23:30:00.000Z\"");
     expect(markdown).toContain("source_kind: \"direct_url\"");
     expect(markdown).toContain("source_reference: \"https://cdn.example.com/audio/demo.wav\"");
@@ -67,5 +67,34 @@ describe("markdown renderer", () => {
     expect(markdown).toContain("- [00:00:01.000 - 00:00:02.200] hello");
     expect(markdown).toContain("- [00:00:02.300 - 00:00:03.200] world");
     expect(markdown).toContain("### Full Text");
+  });
+
+  test("renders YouTube source metadata before summary", () => {
+    const artifact = buildOutputArtifact(
+      {
+        ...executionResult,
+        source: {
+          kind: "youtube",
+          originalInput: "https://youtube.com/watch?v=abc123",
+          normalizedUrl: "https://youtube.com/watch?v=abc123",
+          mediaUrl: "https://cdn.example.com/audio.m4a",
+          title: "Launch Video",
+          publishedAt: "2024-02-29",
+          description: "Launch notes\nhttps://example.com/notes",
+          descriptionLinks: ["https://example.com/notes"],
+        },
+      },
+      {
+        generatedAt: "2026-03-02T23:30:00.000Z",
+      },
+    );
+    const markdown = renderMarkdown(artifact);
+
+    expect(markdown).toContain("## Source Metadata\n");
+    expect(markdown).toContain("- Title: Launch Video");
+    expect(markdown).toContain("- Published at: 2024-02-29");
+    expect(markdown).toContain("### Description\nLaunch notes\nhttps://example.com/notes");
+    expect(markdown).toContain("### Description Links\n- https://example.com/notes");
+    expect(markdown.indexOf("## Source Metadata")).toBeLessThan(markdown.indexOf("## Summary"));
   });
 });
