@@ -31,5 +31,8 @@ export async function resolveYouTubeSource(
     normalizedUrl,
     mediaUrl: media.mediaUrl,
     title: media.title,
+    publishedAt: media.publishedAt,
+    description: media.description,
+    descriptionLinks: media.descriptionLinks,
   };
 }

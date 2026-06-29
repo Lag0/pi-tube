@@ -17,6 +17,20 @@ const baseResult: TranscriptionExecutionResult = {
   detectedLanguage: "pt",
 };
 
+const youtubeMetadataResult = {
+  ...baseResult,
+  source: {
+    kind: "youtube" as const,
+    originalInput: "https://youtube.com/watch?v=abc123",
+    normalizedUrl: "https://youtube.com/watch?v=abc123",
+    mediaUrl: "https://cdn.example.com/audio.m4a",
+    title: "Launch Video",
+    publishedAt: "2024-02-29",
+    description: "Launch notes: https://example.com/notes",
+    descriptionLinks: ["https://example.com/notes"],
+  },
+};
+
 describe("output contract", () => {
   test("builds canonical output artifact with deterministic top-level keys", () => {
     const artifact = buildOutputArtifact(baseResult, {
@@ -71,6 +85,20 @@ describe("output contract", () => {
       segments: undefined,
     });
     expect(artifact.summary.key_points[4]).toBe("Timestamp mode: off (use --timestamps)");
+  });
+
+  test("propagates YouTube metadata into canonical output source", () => {
+    const artifact = buildOutputArtifact(youtubeMetadataResult, {
+      generatedAt: "2026-03-02T23:00:00.000Z",
+    });
+
+    expect(artifact.source).toMatchObject({
+      kind: "youtube",
+      title: "Launch Video",
+      published_at: "2024-02-29",
+      description: "Launch notes: https://example.com/notes",
+      description_links: ["https://example.com/notes"],
+    });
   });
 
   test("compacts dense timestamp streams into readable chunks", () => {

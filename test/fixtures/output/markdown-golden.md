@@ -1,5 +1,5 @@
 ---
-schema_version: "1.0.0"
+schema_version: "1.1.0"
 generated_at: "2026-03-02T23:50:00.000Z"
 source_kind: "direct_url"
 source_reference: "https://cdn.example.com/audio/demo.wav"

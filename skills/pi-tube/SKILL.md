@@ -71,6 +71,7 @@ pi-tube download "https://instagram.com/reel/abc123" --output ./media
 
 - Default transcription output: deterministic markdown artifact.
 - `transcribe --json`: deterministic schema-versioned JSON contract.
+- YouTube sources include source metadata (`published_at`, `description`, `description_links`) under `source` in JSON and a `## Source Metadata` section in Markdown when present.
 - Successful transcriptions print `[OUTPUT_FILE]` and `[OUTPUT_FILE_URI]`.
 - Successful downloads print `[DOWNLOAD_FILE]` and `[DOWNLOAD_FILE_URI]`.
 

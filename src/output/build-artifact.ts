@@ -27,6 +27,16 @@ export interface BuildOutputArtifactOptions {
 function mapSource(source: ResolvedSource): OutputArtifactSource {
   switch (source.kind) {
     case "youtube":
+      return {
+        kind: source.kind,
+        original_input: source.originalInput,
+        normalized_url: source.normalizedUrl,
+        media_url: source.mediaUrl,
+        title: source.title,
+        published_at: source.publishedAt,
+        description: source.description,
+        description_links: source.descriptionLinks,
+      };
     case "instagram":
       return {
         kind: source.kind,

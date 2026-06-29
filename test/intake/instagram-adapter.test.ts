@@ -12,13 +12,22 @@ describe("instagram yt-dlp boundary", () => {
       "https://www.instagram.com/reel/abc123/",
       async () => ({
         exitCode: 0,
-        stdout: JSON.stringify({ url: "https://cdn.example.com/instagram/reel.mp4", title: "Instagram Reel" }),
+        stdout: JSON.stringify({
+          url: "https://cdn.example.com/instagram/reel.mp4",
+          title: "Instagram Reel",
+          timestamp: 1_700_000_000,
+          description: "Caption with https://example.com/link",
+        }),
         stderr: "",
       }),
     );
 
     expect(result.mediaUrl).toBe("https://cdn.example.com/instagram/reel.mp4");
     expect(result.title).toBe("Instagram Reel");
+    // Source metadata is a YouTube-only feature; Instagram must not compute it.
+    expect(result.publishedAt).toBeUndefined();
+    expect(result.description).toBeUndefined();
+    expect(result.descriptionLinks).toBeUndefined();
   });
 
   test("maps login-required yt-dlp failures to INSTAGRAM_AUTH_REQUIRED", async () => {

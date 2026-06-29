@@ -65,6 +65,8 @@ pi-tube transcribe "./recording.mp3" --provider elevenlabs --language pt-BR
 pi-tube transcribe "./recording.mp3" --timestamps --json
 ```
 
+Providers: `deepgram`, `groq` (Whisper), and `elevenlabs` (ElevenLabs Scribe speech-to-text).
+
 Successful runs write deterministic Markdown or JSON artifacts and print:
 
 ```text
@@ -128,6 +130,7 @@ Prefer `auth` and `defaults` for human workflows.
 
 - Timestamp blocks are disabled by default; use `transcribe --timestamps` when needed.
 - `transcribe --json` emits a deterministic schema-versioned contract from the same canonical artifact model.
+- YouTube sources carry extra source metadata for downstream reasoning: `published_at` (ISO date), `description` (full text), and `description_links` (ordered unique HTTP(S) links parsed from the description). JSON exposes them under `source` with deterministic `null`/empty-array defaults; Markdown renders a `## Source Metadata` section before `## Summary` only when at least one field is present.
 - Temporary media downloads for YouTube/Instagram transcription use `~/.pi-tube/tmp` and are deleted after each run.
 - `setup skills` installs the repository skill bundle (`skills/pi-tube`) into supported agent tooling.
 

@@ -11,6 +11,9 @@ export interface JsonOutputArtifact {
     absolute_path: string | null;
     extension: string | null;
     title: string | null;
+    published_at: string | null;
+    description: string | null;
+    description_links: string[];
   };
   transcription: {
     provider: string;
@@ -39,6 +42,9 @@ export function toJsonOutputArtifact(artifact: OutputArtifact): JsonOutputArtifa
       absolute_path: artifact.source.absolute_path ?? null,
       extension: artifact.source.extension ?? null,
       title: artifact.source.title ?? null,
+      published_at: artifact.source.published_at ?? null,
+      description: artifact.source.description ?? null,
+      description_links: artifact.source.description_links ? [...artifact.source.description_links] : [],
     },
     transcription: {
       provider: artifact.transcription.provider,

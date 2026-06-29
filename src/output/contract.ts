@@ -1,7 +1,7 @@
 import type { ResolvedSource } from "../intake/types.ts";
 import type { TranscriptionProviderId } from "../transcription/types.ts";
 
-export const OUTPUT_SCHEMA_VERSION = "1.0.0" as const;
+export const OUTPUT_SCHEMA_VERSION = "1.1.0" as const;
 
 export interface OutputArtifactSource {
   kind: ResolvedSource["kind"];
@@ -11,6 +11,9 @@ export interface OutputArtifactSource {
   absolute_path?: string;
   extension?: string;
   title?: string;
+  published_at?: string;
+  description?: string;
+  description_links?: string[];
 }
 
 export interface OutputArtifactTranscription {

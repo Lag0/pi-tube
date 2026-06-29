@@ -12,6 +12,9 @@ export type ResolvedSource =
       normalizedUrl: string;
       mediaUrl: string;
       title?: string;
+      publishedAt?: string;
+      description?: string;
+      descriptionLinks?: string[];
     }
   | {
       kind: "instagram";

@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.0.0",
+  "schema_version": "1.1.0",
   "generated_at": "2026-03-02T23:50:00.000Z",
   "source": {
     "kind": "direct_url",
@@ -8,7 +8,10 @@
     "media_url": "https://cdn.example.com/audio/demo.wav",
     "absolute_path": null,
     "extension": "wav",
-    "title": null
+    "title": null,
+    "published_at": null,
+    "description": null,
+    "description_links": []
   },
   "transcription": {
     "provider": "deepgram",

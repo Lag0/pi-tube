@@ -15,13 +15,44 @@ describe("yt-dlp boundary", () => {
       "https://youtube.com/watch?v=dQw4w9WgXcQ",
       async () => ({
         exitCode: 0,
-        stdout: JSON.stringify({ url: "https://cdn.example.com/video.mp4", title: "Example" }),
+        stdout: JSON.stringify({
+          url: "https://cdn.example.com/video.mp4",
+          title: "Example",
+          timestamp: 1_700_000_000,
+          description:
+            "Links: https://example.com/first, https://example.com/second). See https://en.wikipedia.org/wiki/Mercury_(planet) too. Duplicate https://example.com/first",
+        }),
         stderr: "",
       }),
     );
 
     expect(result.mediaUrl).toBe("https://cdn.example.com/video.mp4");
     expect(result.title).toBe("Example");
+    expect(result.publishedAt).toBe("2023-11-14");
+    expect(result.description).toBe(
+      "Links: https://example.com/first, https://example.com/second). See https://en.wikipedia.org/wiki/Mercury_(planet) too. Duplicate https://example.com/first",
+    );
+    expect(result.descriptionLinks).toEqual([
+      "https://example.com/first",
+      "https://example.com/second",
+      "https://en.wikipedia.org/wiki/Mercury_(planet)",
+    ]);
+  });
+
+  test("falls back to upload_date when yt-dlp timestamp is absent", async () => {
+    const result = await resolveYouTubeWithYtDlp(
+      "https://youtube.com/watch?v=dQw4w9WgXcQ",
+      async () => ({
+        exitCode: 0,
+        stdout: JSON.stringify({
+          url: "https://cdn.example.com/video.mp4",
+          upload_date: "20240229",
+        }),
+        stderr: "",
+      }),
+    );
+
+    expect(result.publishedAt).toBe("2024-02-29");
   });
 
   test("prefers playable audio URL when yt-dlp payload includes storyboard/image formats", async () => {
@@ -128,12 +159,24 @@ describe("youtube adapter", () => {
       resolveMedia: async () => ({
         mediaUrl: "https://cdn.example.com/video.mp4",
         title: "Demo Video",
+        publishedAt: "2024-02-29",
+        description: "Watch the launch at https://example.com/launch",
+        descriptionLinks: ["https://example.com/launch"],
+      } as Awaited<ReturnType<typeof resolveYouTubeWithYtDlp>> & {
+        publishedAt: string;
+        description: string;
+        descriptionLinks: string[];
       }),
     });
 
     expect(source.kind).toBe("youtube");
     expect(source.mediaUrl).toBe("https://cdn.example.com/video.mp4");
     expect(source.title).toBe("Demo Video");
+    expect(source).toMatchObject({
+      publishedAt: "2024-02-29",
+      description: "Watch the launch at https://example.com/launch",
+      descriptionLinks: ["https://example.com/launch"],
+    });
     expect(source.originalInput).toBe("https://youtube.com/watch?v=abc123");
   });
 

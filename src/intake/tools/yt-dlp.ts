@@ -10,6 +10,9 @@ import {
 export interface YtDlpResult {
   mediaUrl: string;
   title?: string;
+  publishedAt?: string;
+  description?: string;
+  descriptionLinks?: string[];
 }
 
 export interface YtDlpExecutionResult {
@@ -114,6 +117,74 @@ function isString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
 
+function normalizeTimestamp(value: unknown): string | undefined {
+  if (typeof value !== "number" || value <= 0) {
+    return undefined;
+  }
+
+  const date = new Date(value * 1000);
+  if (Number.isNaN(date.getTime())) {
+    return undefined;
+  }
+
+  return date.toISOString().slice(0, 10);
+}
+
+function normalizeUploadDate(value: unknown): string | undefined {
+  if (typeof value !== "string" || !/^\d{8}$/.test(value)) {
+    return undefined;
+  }
+
+  const year = Number.parseInt(value.slice(0, 4), 10);
+  const month = Number.parseInt(value.slice(4, 6), 10);
+  const day = Number.parseInt(value.slice(6, 8), 10);
+  const date = new Date(Date.UTC(year, month - 1, day));
+
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    return undefined;
+  }
+
+  return `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}`;
+}
+
+function trimLinkCandidate(value: string): string {
+  let link = value.replace(/[.,;:!?]+$/g, "");
+
+  // Strip a trailing ")" only when it is unbalanced, so URLs that legitimately
+  // end in a parenthesis (e.g. "..._(planet)") are preserved.
+  while (link.endsWith(")") && (link.match(/\)/g) ?? []).length > (link.match(/\(/g) ?? []).length) {
+    link = link.slice(0, -1).replace(/[.,;:!?]+$/g, "");
+  }
+
+  return link;
+}
+
+function extractDescriptionLinks(description: string | undefined): string[] | undefined {
+  if (!description) {
+    return undefined;
+  }
+
+  const matches = description.match(/https?:\/\/[^\s<>"']+/g) ?? [];
+  const seen = new Set<string>();
+  const links: string[] = [];
+
+  for (const match of matches) {
+    const link = trimLinkCandidate(match);
+    if (!link || seen.has(link)) {
+      continue;
+    }
+
+    seen.add(link);
+    links.push(link);
+  }
+
+  return links.length > 0 ? links : undefined;
+}
+
 function isLikelyImage(format: ParsedFormatLike): boolean {
   const ext = isString(format.ext) ? format.ext.toLowerCase() : "";
   const note = isString(format.format_note) ? format.format_note.toLowerCase() : "";
@@ -163,7 +234,7 @@ function pickPreferredMediaUrl(parsed: Record<string, unknown>): string | undefi
   return undefined;
 }
 
-function parseYtDlpOutput(stdout: string): YtDlpResult {
+function parseYtDlpOutput(stdout: string, withMetadata = false): YtDlpResult {
   let parsed: Record<string, unknown>;
 
   try {
@@ -179,7 +250,16 @@ function parseYtDlpOutput(stdout: string): YtDlpResult {
   }
 
   const title = typeof parsed.title === "string" ? parsed.title : undefined;
-  return { mediaUrl, title };
+
+  if (!withMetadata) {
+    return { mediaUrl, title };
+  }
+
+  const description = isString(parsed.description) ? parsed.description : undefined;
+  const publishedAt = normalizeTimestamp(parsed.timestamp) ?? normalizeUploadDate(parsed.upload_date);
+  const descriptionLinks = extractDescriptionLinks(description);
+
+  return { mediaUrl, title, publishedAt, description, descriptionLinks };
 }
 
 function isInstagramAuthRequiredFailure(detail: string): boolean {
@@ -194,7 +274,7 @@ export async function resolveYouTubeWithYtDlp(
 ): Promise<YtDlpResult> {
   const mockJson = process.env.PI_TUBE_TEST_YTDLP_JSON;
   if (mockJson) {
-    return parseYtDlpOutput(mockJson);
+    return parseYtDlpOutput(mockJson, true);
   }
 
   const mockFailure = process.env.PI_TUBE_TEST_YTDLP_ERROR;
@@ -233,7 +313,7 @@ export async function resolveYouTubeWithYtDlp(
     throw createYouTubeExtractFailedError(detail);
   }
 
-  return parseYtDlpOutput(result.stdout);
+  return parseYtDlpOutput(result.stdout, true);
 }
 
 export async function resolveInstagramWithYtDlp(

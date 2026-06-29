@@ -50,7 +50,7 @@ describe("output parity", () => {
       transcript: { full_text: string; segments: Array<{ start_ms: number; end_ms: number; text: string }> };
     };
 
-    expect(payload.schema_version).toBe("1.0.0");
+    expect(payload.schema_version).toBe("1.1.0");
     expect(markdown).toContain(`source_kind: "${payload.source.kind}"`);
     expect(markdown).toContain(`source_reference: "${payload.source.media_url}"`);
     expect(markdown).toContain(`provider: "${payload.transcription.provider}"`);
