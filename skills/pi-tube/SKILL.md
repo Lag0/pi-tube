@@ -72,8 +72,32 @@ pi-tube download "https://instagram.com/reel/abc123" --output ./media
 - Default transcription output: deterministic markdown artifact.
 - `transcribe --json`: deterministic schema-versioned JSON contract.
 - YouTube sources include source metadata (`published_at`, `description`, `description_links`) under `source` in JSON and a `## Source Metadata` section in Markdown when present.
-- Successful transcriptions print `[OUTPUT_FILE]` and `[OUTPUT_FILE_URI]`.
-- Successful downloads print `[DOWNLOAD_FILE]` and `[DOWNLOAD_FILE_URI]`.
+- Successful transcriptions print `[OUTPUT_FILE]` and `[OUTPUT_FILE_URI]`. Read the path from that line instead of rebuilding it: the file name lowercases the media id and turns `_` into `-`.
+- Existing output files are reused (smart skip). Delete the file to force a new transcription.
+
+## Provider Choice
+
+| Case | Provider |
+|------|----------|
+| Default: short videos, reels, single-speaker content | `groq` (Whisper) — fast and cheap |
+| Long (> ~20 min) or complex media: lives, calls, interviews, multiple speakers, heavy jargon or noise | `--provider elevenlabs` (Scribe v2) — best quality |
+
+- Always pass `--language` matching the audio. With a mismatched language (e.g. default `pt` on English audio) Whisper translates instead of transcribing.
+- Groq rejects files above 25MB; use ElevenLabs for long audio.
+- Fallback may switch providers silently: check `provider` in the output frontmatter/JSON.
+
+## Auth-Gated Sources
+
+The bundled yt-dlp call sends no cookies. When a source needs a session, download with yt-dlp first and transcribe the local file:
+
+```bash
+yt-dlp --cookies-from-browser chrome -f bestaudio -x --audio-format mp3 --write-info-json -o "./media/%(id)s.%(ext)s" "<url>"
+pi-tube transcribe "./media/<id>.mp3" --language en
+```
+
+- YouTube "Sign in to confirm you're not a bot" and Instagram "empty media response" both need a logged-in browser session.
+- Use the browser that actually holds the session. For browsers yt-dlp does not support natively (e.g. Arc), export only the needed domain's cookies to a temporary Netscape jar (`browser-cookie3`), pass `--cookies <jar>`, and delete the jar afterwards.
+- `--write-info-json` keeps channel, title, upload date and duration for note metadata.
 
 ## Key Commands
 

@@ -131,6 +131,36 @@ describe("deepgram provider", () => {
     expect(result.detectedLanguage).toBe("pt");
   });
 
+  test("enables smart_format so transcripts come back punctuated and capitalized", async () => {
+    let capturedSmartFormat: unknown = null;
+    const provider = createDeepgramProvider({
+      client: {
+        async transcribeUrl(_source, options) {
+          capturedSmartFormat = options?.smart_format;
+          return {
+            result: {
+              results: {
+                channels: [
+                  {
+                    alternatives: [{ transcript: "Hello from Deepgram." }],
+                  },
+                ],
+              },
+            },
+            error: null,
+          };
+        },
+        async transcribeFile() {
+          throw new Error("transcribeFile should not be called for direct_url");
+        },
+      },
+    });
+
+    await provider.transcribe(request);
+
+    expect(capturedSmartFormat).toBe(true);
+  });
+
   test("maps auth failures to TRANSCRIPTION_PROVIDER_AUTH", async () => {
     const provider = createDeepgramProvider({
       client: {
