@@ -225,6 +225,7 @@ export function createDeepgramProvider(options: DeepgramProviderOptions = {}): T
       try {
         const transcriptionOptions: Record<string, unknown> = {
           model,
+          smart_format: true,
         };
         if (request.requestedLanguage) {
           transcriptionOptions.language = request.requestedLanguage;

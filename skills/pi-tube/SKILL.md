@@ -81,7 +81,6 @@ pi-tube download "https://instagram.com/reel/abc123" --output ./media
 |------|----------|
 | Default: short videos, reels, single-speaker content | `groq` (Whisper) — fast and cheap |
 | Long (> ~20 min) or complex media: lives, calls, interviews, multiple speakers, heavy jargon or noise | `--provider elevenlabs` (Scribe v2) — best quality |
-| Avoid for now | `deepgram` — currently returns lowercase text without punctuation |
 
 - Always pass `--language` matching the audio. With a mismatched language (e.g. default `pt` on English audio) Whisper translates instead of transcribing.
 - Groq rejects files above 25MB; use ElevenLabs for long audio.
