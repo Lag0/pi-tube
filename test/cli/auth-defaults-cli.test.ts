@@ -2,6 +2,7 @@ import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, test } from "vitest";
+import { spawnCli } from "../helpers/spawn-cli.ts";
 
 function withConfig<T>(fn: (env: Record<string, string>, configPath: string, configDir: string) => T): T {
   const configDir = mkdtempSync(path.join(os.tmpdir(), "pi-tube-auth-defaults-"));
@@ -24,12 +25,7 @@ function withConfig<T>(fn: (env: Record<string, string>, configPath: string, con
 }
 
 function runCli(args: string[], env: Record<string, string> = {}) {
-  return Bun.spawnSync({
-    cmd: ["bun", "run", "--bun", "bin/pi-tube.ts", ...args],
-    stdout: "pipe",
-    stderr: "pipe",
-    env: { ...process.env, ...env },
-  });
+  return spawnCli(args, { ...env });
 }
 
 describe("auth and defaults commands", () => {

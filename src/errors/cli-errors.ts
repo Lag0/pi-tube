@@ -15,16 +15,6 @@ export class CliError extends Error {
   }
 }
 
-export class CliPlannedFeatureError extends CliError {
-  constructor(feature: string, phase: string, guidance: readonly string[] = []) {
-    super(`${feature} is coming soon in ${phase}.`, {
-      code: "NOT_IMPLEMENTED",
-      guidance,
-    });
-    this.name = "CliPlannedFeatureError";
-  }
-}
-
 export function createTranscriptionProviderNotConfiguredError(provider: string): CliError {
   return new CliError(`Provider \`${provider}\` is not configured yet.`, {
     code: "PROVIDER_NOT_CONFIGURED",

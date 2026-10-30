@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, describe, expect, test } from "vitest";
+import { spawnCli } from "../helpers/spawn-cli.ts";
 import { readOutputFileFromStdout } from "./output-file.ts";
 
 const outputDir = mkdtempSync(path.join(os.tmpdir(), "pi-tube-cli-transcription-"));
@@ -14,20 +15,14 @@ afterAll(() => {
 });
 
 function runCli(args: string[], env: Record<string, string> = {}) {
-  return Bun.spawnSync({
-    cmd: ["bun", "run", "--bun", "bin/pi-tube.ts", ...args],
-    stdout: "pipe",
-    stderr: "pipe",
-    env: {
-      ...process.env,
-      PI_TUBE_OUTPUT_DIR: outputDir,
-      PI_TUBE_CONFIG_PATH: configPath,
-      DEEPGRAM_API_KEY: "",
-      GROQ_API_KEY: "",
-      ELEVENLABS_API_KEY: "",
-      ELEVEN_API_KEY: "",
-      ...env,
-    },
+  return spawnCli(args, {
+    PI_TUBE_OUTPUT_DIR: outputDir,
+    PI_TUBE_CONFIG_PATH: configPath,
+    DEEPGRAM_API_KEY: "",
+    GROQ_API_KEY: "",
+    ELEVENLABS_API_KEY: "",
+    ELEVEN_API_KEY: "",
+    ...env,
   });
 }
 

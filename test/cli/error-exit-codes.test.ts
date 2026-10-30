@@ -2,23 +2,13 @@ import { mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, describe, expect, test } from "vitest";
+import { spawnCli } from "../helpers/spawn-cli.ts";
 
 const configDir = mkdtempSync(path.join(os.tmpdir(), "pi-tube-cli-error-config-"));
 const configPath = path.join(configDir, "config.json");
 
 function runCli(args: string[], env: Record<string, string> = {}) {
-  return Bun.spawnSync({
-    cmd: ["bun", "run", "--bun", "bin/pi-tube.ts", ...args],
-    stdout: "pipe",
-    stderr: "pipe",
-    env: {
-      ...process.env,
-      PI_TUBE_CONFIG_PATH: configPath,
-      DEEPGRAM_API_KEY: "",
-      GROQ_API_KEY: "",
-      ...env,
-    },
-  });
+  return spawnCli(args, { PI_TUBE_CONFIG_PATH: configPath, DEEPGRAM_API_KEY: "", GROQ_API_KEY: "", ...env });
 }
 
 const mediaUrl = "https://cdn.example.com/audio/demo.wav";

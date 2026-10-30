@@ -2,17 +2,13 @@ import { mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, test } from "vitest";
+import { spawnCli } from "../helpers/spawn-cli.ts";
 
 function runCli(args: string[], env: Record<string, string> = {}) {
   const configDir = mkdtempSync(path.join(os.tmpdir(), "pi-tube-auth-status-"));
   const configPath = path.join(configDir, "config.json");
   try {
-    return Bun.spawnSync({
-      cmd: ["bun", "run", "--bun", "bin/pi-tube.ts", ...args],
-      stdout: "pipe",
-      stderr: "pipe",
-      env: { ...process.env, PI_TUBE_CONFIG_PATH: configPath, ...env },
-    });
+    return spawnCli(args, { PI_TUBE_CONFIG_PATH: configPath, ...env });
   } finally {
     rmSync(configDir, { recursive: true, force: true });
   }

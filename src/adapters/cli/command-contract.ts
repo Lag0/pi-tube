@@ -3,7 +3,7 @@ import type { HelpDocument } from "./help-renderer.ts";
 
 export const COMMAND_IDENTITY = "pi-tube";
 
-const PACKAGE_JSON_URL = new URL("../../package.json", import.meta.url);
+const PACKAGE_JSON_URL = new URL("../../../package.json", import.meta.url);
 const PACKAGE_JSON = JSON.parse(readFileSync(PACKAGE_JSON_URL, "utf8")) as { version?: string };
 export const APP_VERSION = typeof PACKAGE_JSON.version === "string" ? PACKAGE_JSON.version : "0.0.0";
 

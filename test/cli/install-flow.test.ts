@@ -1,12 +1,9 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
+import { spawnCli } from "../helpers/spawn-cli.ts";
 
 function runCli(args: string[]) {
-  return Bun.spawnSync({
-    cmd: ["bun", "run", "--bun", "bin/pi-tube.ts", ...args],
-    stdout: "pipe",
-    stderr: "pipe",
-  });
+  return spawnCli(args);
 }
 
 describe("Install and run contract", () => {

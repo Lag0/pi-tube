@@ -1,21 +1,9 @@
 import { Command, CommanderError } from "commander";
-import { exitCodeFor, formatErrorForCli } from "../adapters/cli/error-output.ts";
-import { toPiTubeError } from "../core/domain/errors.ts";
-import { CliError } from "../errors/cli-errors.ts";
+import { createError, toPiTubeError } from "../../core/index.ts";
 import { APP_VERSION, COMMAND_IDENTITY, getHelpDocument, type HelpTopic } from "./command-contract.ts";
-import {
-  handleAuthLogin,
-  handleAuthLogout,
-  handleAuthStatus,
-  handleBaselineInput,
-  handleConfigCommand,
-  handleDefaultsLanguage,
-  handleDefaultsProvider,
-  handleDefaultsShow,
-  handleDownloadCommand,
-  persistBaselineIntakeResult,
-} from "./handlers.ts";
+import { CliFailure, exitCodeFor, formatErrorForCli } from "./error-output.ts";
 import { type HelpDocument, renderHelpDocument } from "./help-renderer.ts";
+import type { CliDeps } from "./io.ts";
 import { createProgressReporter } from "./progress.ts";
 import { handleSetupCommand } from "./setup.ts";
 
@@ -82,9 +70,7 @@ function resolveHelpTopic(positionals: string[]): HelpTopic {
 
   if (first === "help") {
     if (rest.length > 0) {
-      throw new CliError("`help` accepts at most one command name.", {
-        code: "INPUT_INVALID",
-      });
+      throw new CliFailure(createError("INPUT_INVALID", "`help` accepts at most one command name."));
     }
 
     if (!second) return "root";
@@ -92,12 +78,11 @@ function resolveHelpTopic(positionals: string[]): HelpTopic {
       return second as HelpTopic;
     }
 
-    throw new CliError(`Unsupported help topic: \`${second}\`.`, {
-      code: "INPUT_INVALID",
-      guidance: [
-        `Supported help topics: ${COMMAND_IDENTITY} help, ${COMMAND_IDENTITY} help transcribe, ${COMMAND_IDENTITY} help download, ${COMMAND_IDENTITY} help auth, ${COMMAND_IDENTITY} help defaults, ${COMMAND_IDENTITY} help setup.`,
-      ],
-    });
+    throw new CliFailure(
+      createError("INPUT_INVALID", `Unsupported help topic: \`${second}\`.`, {
+        hint: `Supported help topics: ${COMMAND_IDENTITY} help, ${COMMAND_IDENTITY} help transcribe, ${COMMAND_IDENTITY} help download, ${COMMAND_IDENTITY} help auth, ${COMMAND_IDENTITY} help defaults, ${COMMAND_IDENTITY} help setup.`,
+      }),
+    );
   }
 
   if (["transcribe", "download", "auth", "defaults", "setup"].includes(first ?? "")) {
@@ -107,38 +92,25 @@ function resolveHelpTopic(positionals: string[]): HelpTopic {
   return "root";
 }
 
-function guidanceForCommand(command: string | undefined): string[] {
+function hintForCommand(command: string | undefined): string {
   switch (command) {
     case "transcribe":
-      return [
-        "Use one of: `pi-tube transcribe <input>`, `pi-tube transcribe <input> --provider <deepgram|groq|elevenlabs>`, `pi-tube transcribe <input> --json`.",
-      ];
+      return "Use one of: `pi-tube transcribe <input>`, `pi-tube transcribe <input> --provider <deepgram|groq|elevenlabs>`, `pi-tube transcribe <input> --json`.";
     case "download":
-      return [
-        "Use one of: `pi-tube download <url>`, `pi-tube download <url> --audio`, `pi-tube download <url> --output <dir>`.",
-      ];
+      return "Use one of: `pi-tube download <url>`, `pi-tube download <url> --audio`, `pi-tube download <url> --output <dir>`.";
     case "auth":
-      return [
-        "Use one of: `pi-tube auth login <deepgram|groq|elevenlabs>`, `pi-tube auth status`, `pi-tube auth logout <deepgram|groq|elevenlabs>`.",
-      ];
+      return "Use one of: `pi-tube auth login <deepgram|groq|elevenlabs>`, `pi-tube auth status`, `pi-tube auth logout <deepgram|groq|elevenlabs>`.";
     case "defaults":
-      return [
-        "Use one of: `pi-tube defaults provider <deepgram|groq|elevenlabs>`, `pi-tube defaults language <code>`, `pi-tube defaults show`.",
-      ];
+      return "Use one of: `pi-tube defaults provider <deepgram|groq|elevenlabs>`, `pi-tube defaults language <code>`, `pi-tube defaults show`.";
     case "setup":
-      return ["Use one of: `pi-tube setup yt-dlp`, `pi-tube setup skills`, `pi-tube setup mcp`."];
+      return "Use one of: `pi-tube setup yt-dlp`, `pi-tube setup skills`, `pi-tube setup mcp`.";
     default:
-      return [
-        "Use one of: `pi-tube transcribe <input>`, `pi-tube download <url>`, `pi-tube auth status`, `pi-tube defaults show`, `pi-tube setup yt-dlp`.",
-      ];
+      return "Use one of: `pi-tube transcribe <input>`, `pi-tube download <url>`, `pi-tube auth status`, `pi-tube defaults show`, `pi-tube setup yt-dlp`.";
   }
 }
 
-function commanderErrorToCliError(error: CommanderError, argv: string[]): CliError {
-  return new CliError(error.message, {
-    code: "INPUT_INVALID",
-    guidance: guidanceForCommand(argv[0]),
-  });
+function commanderErrorToCliFailure(error: CommanderError, argv: readonly string[]): CliFailure {
+  return new CliFailure(createError("INPUT_INVALID", error.message, { hint: hintForCommand(argv[0]) }));
 }
 
 function createProgram(setAction: (action: CliAction) => void): Command {
@@ -251,33 +223,38 @@ function parseAction(argv: string[]): CliAction {
   try {
     program.parse(argv, { from: "user" });
   } catch (error) {
-    if (error instanceof CommanderError) throw commanderErrorToCliError(error, argv);
+    if (error instanceof CommanderError) throw commanderErrorToCliFailure(error, argv);
     throw error;
   }
 
   return action ?? { kind: "root", input: undefined, extraPositionals: [], options: program.opts<RootOptions>() };
 }
 
-async function runTranscribeAction(action: Extract<CliAction, { kind: "transcribe" }>): Promise<number> {
-  const progress = createProgressReporter({ color: action.rootOptions.color !== false });
+async function runTranscribeAction(
+  action: Extract<CliAction, { kind: "transcribe" }>,
+  { app, io }: CliDeps,
+): Promise<number> {
+  const progress = createProgressReporter({ color: action.rootOptions.color !== false, stream: io.progressStream });
   const startTime = Date.now();
+  const { env, cwd } = app.environment;
 
   try {
-    const result = await handleBaselineInput({
+    const result = await app.legacy.handleBaselineInput({
       input: action.input ?? "",
       json: Boolean(action.options.json),
       extraPositionals: action.extraPositionals,
       provider: action.options.provider,
       language: action.options.language,
       timestamps: Boolean(action.options.timestamps),
+      transcriptionOptions: { env },
       onProgress: (step) => progress.update(step),
     });
 
     progress.update({ label: "Saving output..." });
-    const persisted = persistBaselineIntakeResult(result, { env: process.env, cwd: process.cwd() });
+    const persisted = app.legacy.persistBaselineIntakeResult(result, { env, cwd });
     progress.succeed(persisted.outputPath, Date.now() - startTime);
-    console.log(`[OUTPUT_FILE] ${persisted.outputPath}`);
-    console.log(`[OUTPUT_FILE_URI] ${persisted.outputUri}`);
+    io.writeOut(`[OUTPUT_FILE] ${persisted.outputPath}`);
+    io.writeOut(`[OUTPUT_FILE_URI] ${persisted.outputUri}`);
     return 0;
   } catch (error) {
     progress.fail("Failed");
@@ -285,22 +262,25 @@ async function runTranscribeAction(action: Extract<CliAction, { kind: "transcrib
   }
 }
 
-async function runDownloadAction(action: Extract<CliAction, { kind: "download" }>): Promise<number> {
-  const progress = createProgressReporter({ color: action.rootOptions.color !== false });
+async function runDownloadAction(
+  action: Extract<CliAction, { kind: "download" }>,
+  { app, io }: CliDeps,
+): Promise<number> {
+  const progress = createProgressReporter({ color: action.rootOptions.color !== false, stream: io.progressStream });
   const startTime = Date.now();
   try {
-    const result = await handleDownloadCommand({
+    const result = await app.legacy.handleDownloadCommand({
       input: action.input,
       extraPositionals: action.extraPositionals,
       audio: Boolean(action.options.audio),
       outputDir: action.options.output,
-      env: process.env,
-      cwd: process.cwd(),
+      env: app.environment.env,
+      cwd: app.environment.cwd,
       onProgress: (step) => progress.update(step),
     });
     progress.succeed(result.outputPath, Date.now() - startTime);
-    console.log(`[DOWNLOAD_FILE] ${result.outputPath}`);
-    console.log(`[DOWNLOAD_FILE_URI] ${result.outputUri}`);
+    io.writeOut(`[DOWNLOAD_FILE] ${result.outputPath}`);
+    io.writeOut(`[DOWNLOAD_FILE_URI] ${result.outputUri}`);
     return 0;
   } catch (error) {
     progress.fail("Failed");
@@ -313,110 +293,116 @@ function promptForApiKey(provider: string | undefined): string | undefined {
   return prompt(`Paste ${provider ?? "provider"} API key:`)?.trim();
 }
 
-function runAuthAction(action: Extract<CliAction, { kind: "auth" }>): number {
+function runAuthAction(action: Extract<CliAction, { kind: "auth" }>, { app, io }: CliDeps): number {
+  const options = { env: app.environment.env };
   switch (action.action) {
     case "login": {
       const apiKey = action.provider
-        ? (action.options.key ?? process.env.PI_TUBE_TEST_AUTH_KEY ?? promptForApiKey(action.provider))
+        ? (action.options.key ?? options.env.PI_TUBE_TEST_AUTH_KEY ?? promptForApiKey(action.provider))
         : undefined;
-      console.log(handleAuthLogin({ provider: action.provider, apiKey, options: { env: process.env } }));
+      io.writeOut(app.legacy.handleAuthLogin({ provider: action.provider, apiKey, options }));
       return 0;
     }
     case "status":
-      console.log(handleAuthStatus({ env: process.env, options: { env: process.env } }));
+      io.writeOut(app.legacy.handleAuthStatus({ env: options.env, options }));
       return 0;
     case "logout":
-      console.log(handleAuthLogout({ provider: action.provider, options: { env: process.env } }));
+      io.writeOut(app.legacy.handleAuthLogout({ provider: action.provider, options }));
       return 0;
     default:
-      throw new CliError("Missing or unsupported auth action.", {
-        code: "INPUT_INVALID",
-        guidance: guidanceForCommand("auth"),
-      });
+      throw new CliFailure(
+        createError("INPUT_INVALID", "Missing or unsupported auth action.", { hint: hintForCommand("auth") }),
+      );
   }
 }
 
-function runDefaultsAction(action: Extract<CliAction, { kind: "defaults" }>): number {
+function runDefaultsAction(action: Extract<CliAction, { kind: "defaults" }>, { app, io }: CliDeps): number {
+  const options = { env: app.environment.env };
   switch (action.action) {
     case "provider":
-      console.log(handleDefaultsProvider({ provider: action.value, options: { env: process.env } }));
+      io.writeOut(app.legacy.handleDefaultsProvider({ provider: action.value, options }));
       return 0;
     case "language":
-      console.log(handleDefaultsLanguage({ language: action.value, options: { env: process.env } }));
+      io.writeOut(app.legacy.handleDefaultsLanguage({ language: action.value, options }));
       return 0;
     case "show":
-      console.log(handleDefaultsShow({ options: { env: process.env } }));
+      io.writeOut(app.legacy.handleDefaultsShow({ options }));
       return 0;
     default:
-      throw new CliError("Missing or unsupported defaults action.", {
-        code: "INPUT_INVALID",
-        guidance: guidanceForCommand("defaults"),
-      });
+      throw new CliFailure(
+        createError("INPUT_INVALID", "Missing or unsupported defaults action.", { hint: hintForCommand("defaults") }),
+      );
   }
 }
 
-function runSetupAction(action: Extract<CliAction, { kind: "setup" }>): number {
+function runSetupAction(action: Extract<CliAction, { kind: "setup" }>, { io, system }: CliDeps): number {
   const output = handleSetupCommand(action.subcommand, {
     global: action.options.global,
     nonInteractive: Boolean(action.options.yes || action.options.prompt === false || action.options.nonInteractive),
     agent: action.options.agent,
+    platform: system.platform,
+    runInteractive: system.runInteractive,
+    writeOut: io.writeOut,
   });
-  if (output) console.log(output);
+  if (output) io.writeOut(output);
   return 0;
 }
 
-function runConfigAction(action: Extract<CliAction, { kind: "config" }>): number {
-  console.log(
-    handleConfigCommand({ args: action.args, json: Boolean(action.options.json), options: { env: process.env } }),
+function runConfigAction(action: Extract<CliAction, { kind: "config" }>, { app, io }: CliDeps): number {
+  io.writeOut(
+    app.legacy.handleConfigCommand({
+      args: action.args,
+      json: Boolean(action.options.json),
+      options: { env: app.environment.env },
+    }),
   );
   return 0;
 }
 
 function runRootAction(action: Extract<CliAction, { kind: "root" }>): number {
   if (action.input) {
-    throw new CliError("Implicit transcription is no longer supported.", {
-      code: "INPUT_INVALID",
-      guidance: guidanceForCommand(undefined),
-    });
+    throw new CliFailure(
+      createError("INPUT_INVALID", "Implicit transcription is no longer supported.", {
+        hint: hintForCommand(undefined),
+      }),
+    );
   }
 
-  throw new CliError("Missing command.", {
-    code: "INPUT_INVALID",
-    guidance: guidanceForCommand(undefined),
-  });
+  throw new CliFailure(createError("INPUT_INVALID", "Missing command.", { hint: hintForCommand(undefined) }));
 }
 
-export async function runCli(argv: string[]): Promise<number> {
+/** Runs one CLI invocation against injected dependencies and returns the process exit code. */
+export const runCli = async (argv: readonly string[], deps: CliDeps): Promise<number> => {
   try {
-    const action = parseAction(argv);
+    const action = parseAction([...argv]);
 
     switch (action.kind) {
       case "help": {
         const helpTopic = resolveHelpTopic(action.positionals);
-        console.log(renderHelp(helpTopic, !action.noColor));
+        deps.io.writeOut(renderHelp(helpTopic, !action.noColor));
         return 0;
       }
       case "version":
-        console.log(`${COMMAND_IDENTITY} ${APP_VERSION}`);
+        deps.io.writeOut(`${COMMAND_IDENTITY} ${APP_VERSION}`);
         return 0;
       case "transcribe":
-        return await runTranscribeAction(action);
+        return await runTranscribeAction(action, deps);
       case "download":
-        return await runDownloadAction(action);
+        return await runDownloadAction(action, deps);
       case "auth":
-        return runAuthAction(action);
+        return runAuthAction(action, deps);
       case "defaults":
-        return runDefaultsAction(action);
+        return runDefaultsAction(action, deps);
       case "setup":
-        return runSetupAction(action);
+        return runSetupAction(action, deps);
       case "config":
-        return runConfigAction(action);
+        return runConfigAction(action, deps);
       case "root":
         return runRootAction(action);
     }
   } catch (caught) {
     const error = toPiTubeError(caught);
-    console.error(formatErrorForCli(error));
+    deps.io.writeErr(formatErrorForCli(error));
     return exitCodeFor(error);
   }
-}
+};

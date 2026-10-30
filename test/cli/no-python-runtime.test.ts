@@ -1,12 +1,9 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
+import { spawnCli } from "../helpers/spawn-cli.ts";
 
 function runCli(args: string[]) {
-  return Bun.spawnSync({
-    cmd: ["bun", "run", "--bun", "bin/pi-tube.ts", ...args],
-    stdout: "pipe",
-    stderr: "pipe",
-  });
+  return spawnCli(args);
 }
 
 describe("No-Python runtime regression guard", () => {
@@ -31,7 +28,7 @@ describe("No-Python runtime regression guard", () => {
   });
 
   test("runtime bootstrap modules do not shell toward Python tooling", () => {
-    const files = ["src/index.ts", "src/cli/build-cli.ts", "src/cli/handlers.ts"];
+    const files = ["src/main.ts", "src/bootstrap.ts", "src/adapters/cli/run-cli.ts", "src/cli/handlers.ts"];
 
     const content = files.map((file) => readFileSync(file, "utf8")).join("\n");
     expect(content).not.toMatch(/python|pipx|typer/i);

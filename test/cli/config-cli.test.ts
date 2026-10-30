@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterAll, describe, expect, test } from "vitest";
 import { getConfigValue, listConfigValues, resolveConfigPath, setConfigValue } from "../../src/config/store.ts";
+import { spawnCli } from "../helpers/spawn-cli.ts";
 import { readOutputFileFromStdout } from "./output-file.ts";
 
 const outputDir = mkdtempSync(path.join(os.tmpdir(), "pi-tube-cli-config-output-"));
@@ -12,12 +13,7 @@ afterAll(() => {
 });
 
 function runCli(args: string[], env: Record<string, string> = {}) {
-  return Bun.spawnSync({
-    cmd: ["bun", "run", "--bun", "bin/pi-tube.ts", ...args],
-    stdout: "pipe",
-    stderr: "pipe",
-    env: { ...process.env, PI_TUBE_OUTPUT_DIR: outputDir, ...env },
-  });
+  return spawnCli(args, { PI_TUBE_OUTPUT_DIR: outputDir, ...env });
 }
 
 describe("config store", () => {

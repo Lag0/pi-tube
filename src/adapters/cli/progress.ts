@@ -51,14 +51,12 @@ const createSilentReporter = (): ProgressReporter => ({
 });
 
 /**
- * Creates a progress reporter that displays a spinner and step info on stderr.
- * Keeps stdout clean for machine-readable output contracts.
+ * Creates a progress reporter that displays a spinner and step info on `stream` (stderr in a terminal).
+ * Without a TTY stream it stays silent, keeping stdout clean for machine-readable output contracts.
  */
 export const createProgressReporter = (options: ProgressOptions): ProgressReporter => {
-  const stream = options.stream ?? process.stderr;
-  const isTTY = "isTTY" in stream && stream.isTTY;
-
-  if (!isTTY) return createSilentReporter();
+  const { stream } = options;
+  if (!stream?.isTTY) return createSilentReporter();
 
   const { color } = options;
   let frameIndex = 0;

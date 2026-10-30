@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, describe, expect, test } from "vitest";
+import { spawnCli } from "../helpers/spawn-cli.ts";
 import { extractOutputPath, readOutputFileFromStdout } from "./output-file.ts";
 
 const outputDir = mkdtempSync(path.join(os.tmpdir(), "pi-tube-cli-output-"));
@@ -11,12 +12,7 @@ afterAll(() => {
 });
 
 function runCli(args: string[], env: Record<string, string> = {}) {
-  return Bun.spawnSync({
-    cmd: ["bun", "run", "--bun", "bin/pi-tube.ts", ...args],
-    stdout: "pipe",
-    stderr: "pipe",
-    env: { ...process.env, PI_TUBE_OUTPUT_DIR: outputDir, ...env },
-  });
+  return spawnCli(args, { PI_TUBE_OUTPUT_DIR: outputDir, ...env });
 }
 
 const mediaUrl = "https://cdn.example.com/audio/demo.wav";
