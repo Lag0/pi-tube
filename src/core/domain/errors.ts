@@ -24,6 +24,14 @@ export const ERROR_CATALOG = {
     category: "unexpected",
     hint: "This is a pi-tube bug. Report it at https://github.com/Lag0/pi-tube/issues with the command you ran.",
   },
+  CONFIG_INVALID: {
+    category: "config",
+    hint: "Fix the file by hand or move it aside; pi-tube never overwrites a config it cannot parse.",
+  },
+  CONFIG_IO_FAILED: {
+    category: "config",
+    hint: "Check that your user can read and write the config file and its directory.",
+  },
   SETUP_COMMAND_FAILED: {
     category: "dependency",
     hint: "Check the command output above and run it manually.",
