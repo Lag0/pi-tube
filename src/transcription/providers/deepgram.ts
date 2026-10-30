@@ -8,13 +8,9 @@ import {
   createTranscriptionProviderRateLimitError,
   createTranscriptionProviderUnavailableError,
 } from "../../errors/cli-errors.ts";
-import type {
-  TranscriptionRequest,
-  TranscriptionResult,
-  TranscriptionSegment,
-} from "../types.ts";
-import type { TranscriptionProvider } from "./provider.ts";
+import type { TranscriptionRequest, TranscriptionResult, TranscriptionSegment } from "../types.ts";
 import { prepareProviderMediaInput } from "./media-input.ts";
+import type { TranscriptionProvider } from "./provider.ts";
 
 interface DeepgramSdkErrorLike {
   message?: string;
@@ -27,7 +23,11 @@ interface DeepgramSdkResponse {
 }
 
 interface DeepgramListenClient {
-  transcribeUrl(source: { url: string }, options?: Record<string, unknown>, endpoint?: string): Promise<DeepgramSdkResponse>;
+  transcribeUrl(
+    source: { url: string },
+    options?: Record<string, unknown>,
+    endpoint?: string,
+  ): Promise<DeepgramSdkResponse>;
   transcribeFile(source: Buffer, options?: Record<string, unknown>, endpoint?: string): Promise<DeepgramSdkResponse>;
 }
 
@@ -55,17 +55,22 @@ function normalizeDeepgramSegments(words: unknown[]): TranscriptionSegment[] | u
       start_ms?: unknown;
       end_ms?: unknown;
     };
-    const text = typeof word.word === "string" ? word.word.trim() : typeof word.text === "string" ? word.text.trim() : "";
+    const text =
+      typeof word.word === "string" ? word.word.trim() : typeof word.text === "string" ? word.text.trim() : "";
     if (!text) {
       continue;
     }
 
     const fromMilliseconds =
-      typeof word.start_ms === "number" && Number.isFinite(word.start_ms) &&
-      typeof word.end_ms === "number" && Number.isFinite(word.end_ms);
+      typeof word.start_ms === "number" &&
+      Number.isFinite(word.start_ms) &&
+      typeof word.end_ms === "number" &&
+      Number.isFinite(word.end_ms);
     const fromSeconds =
-      typeof word.start === "number" && Number.isFinite(word.start) &&
-      typeof word.end === "number" && Number.isFinite(word.end);
+      typeof word.start === "number" &&
+      Number.isFinite(word.start) &&
+      typeof word.end === "number" &&
+      Number.isFinite(word.end);
 
     if (!fromMilliseconds && !fromSeconds) {
       continue;

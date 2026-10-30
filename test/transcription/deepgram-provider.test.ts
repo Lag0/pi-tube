@@ -1,8 +1,8 @@
-import { describe, expect, test } from "vitest";
 import { Buffer } from "node:buffer";
 import { chmodSync, existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { describe, expect, test } from "vitest";
 import { createDeepgramProvider } from "../../src/transcription/providers/deepgram.ts";
 import type { TranscriptionRequest } from "../../src/transcription/types.ts";
 
@@ -239,14 +239,14 @@ describe("deepgram provider", () => {
     process.env.PI_TUBE_TEST_YTDLP_DOWNLOAD_PATH = mockedDownloadPath;
 
     try {
-      let fileBuffer: Buffer | null = null;
+      const captured: { buffer?: Buffer } = {};
       const provider = createDeepgramProvider({
         client: {
           async transcribeUrl() {
             throw new Error("transcribeUrl should not be called for youtube sources");
           },
           async transcribeFile(source) {
-            fileBuffer = source;
+            captured.buffer = source;
             return {
               result: {
                 results: {
@@ -261,8 +261,8 @@ describe("deepgram provider", () => {
 
       const result = await provider.transcribe(youtubeRequest);
 
-      expect(fileBuffer).toBeInstanceOf(Buffer);
-      expect((fileBuffer as Buffer).length).toBeGreaterThan(0);
+      expect(captured.buffer).toBeInstanceOf(Buffer);
+      expect(captured.buffer?.length).toBeGreaterThan(0);
       expect(result.transcript).toBe("hello from deepgram");
       expect(existsSync(mockedDownloadPath)).toBe(false);
     } finally {
@@ -325,7 +325,8 @@ describe("deepgram provider", () => {
     }
   });
 
-  test("fails fast when yt-dlp download stalls for youtube sources", async () => {
+  // The fake yt-dlp is a `#!/bin/sh` script found through a `:`-separated PATH; Windows runs neither.
+  test.skipIf(process.platform === "win32")("fails fast when yt-dlp download stalls for youtube sources", async () => {
     const tempDir = mkdtempSync(path.join(os.tmpdir(), "pi-tube-deepgram-provider-timeout-"));
     const mockYtDlpPath = path.join(tempDir, "yt-dlp");
     writeFileSync(mockYtDlpPath, "#!/bin/sh\nsleep 60\n");
@@ -363,6 +364,7 @@ describe("deepgram provider", () => {
 
       await expect(provider.transcribe(youtubeRequest)).rejects.toMatchObject({
         code: "TRANSCRIPTION_PROVIDER_FAILED",
+        message: expect.stringContaining("timed out after 20ms"),
       });
     } finally {
       if (originalPath === undefined) {

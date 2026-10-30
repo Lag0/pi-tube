@@ -1,9 +1,4 @@
-export type SourceClassification =
-  | "youtube"
-  | "instagram"
-  | "direct_url"
-  | "local_file"
-  | "unsupported_url";
+export type SourceClassification = "youtube" | "instagram" | "direct_url" | "local_file" | "unsupported_url";
 
 export type ResolvedSource =
   | {

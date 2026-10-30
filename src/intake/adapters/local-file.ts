@@ -1,11 +1,8 @@
 import { existsSync, statSync } from "node:fs";
 import path from "node:path";
-import {
-  createLocalFileNotFoundError,
-  createUnsupportedLocalFileExtensionError,
-} from "../../errors/cli-errors.ts";
-import type { ResolvedSource } from "../types.ts";
+import { createLocalFileNotFoundError, createUnsupportedLocalFileExtensionError } from "../../errors/cli-errors.ts";
 import { getLocalFileExtension } from "../policy.ts";
+import type { ResolvedSource } from "../types.ts";
 
 export async function resolveLocalFileSource(input: string): Promise<ResolvedSource> {
   const absolutePath = path.resolve(input);

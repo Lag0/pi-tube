@@ -1,4 +1,4 @@
-import { getErrorCatalogEntry, type ErrorCode } from "./catalog.ts";
+import { type ErrorCode, getErrorCatalogEntry } from "./catalog.ts";
 
 export class CliError extends Error {
   public readonly code: ErrorCode;
@@ -11,9 +11,7 @@ export class CliError extends Error {
     this.name = "CliError";
     this.code = options.code;
     const resolvedExitCode = options.exitCode ?? catalog.exitCode;
-    this.exitCode = Number.isInteger(resolvedExitCode) && resolvedExitCode > 0
-      ? resolvedExitCode
-      : catalog.exitCode;
+    this.exitCode = Number.isInteger(resolvedExitCode) && resolvedExitCode > 0 ? resolvedExitCode : catalog.exitCode;
     const guidance = options.guidance ?? [...catalog.guidance];
     this.guidance = guidance
       .map((line) => line.trim())
@@ -38,7 +36,7 @@ export function createTranscriptionProviderNotConfiguredError(provider: string):
     exitCode: 2,
     guidance: [
       `Configure credentials for \`${provider}\` via \`pi-tube auth login ${provider}\`.`,
-      "Run `pi-tube auth status` to inspect missing credentials."
+      "Run `pi-tube auth status` to inspect missing credentials.",
     ],
   });
 }
@@ -172,9 +170,7 @@ export function createUnsupportedLocalFileExtensionError(filePath: string): CliE
   return new CliError(`Local file extension is not supported: \`${filePath}\`.`, {
     code: "LOCAL_FILE_UNSUPPORTED_EXTENSION",
     exitCode: 2,
-    guidance: [
-      "Use a supported audio/video format (for example .mp3, .wav, .m4a, .mp4, .mov).",
-    ],
+    guidance: ["Use a supported audio/video format (for example .mp3, .wav, .m4a, .mp4, .mov)."],
   });
 }
 

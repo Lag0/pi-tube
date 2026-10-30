@@ -1,14 +1,9 @@
-import { afterAll, describe, expect, test } from "vitest";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { afterAll, describe, expect, test } from "vitest";
+import { getConfigValue, listConfigValues, resolveConfigPath, setConfigValue } from "../../src/config/store.ts";
 import { readOutputFileFromStdout } from "./output-file.ts";
-import {
-  getConfigValue,
-  listConfigValues,
-  resolveConfigPath,
-  setConfigValue,
-} from "../../src/config/store.ts";
 
 const outputDir = mkdtempSync(path.join(os.tmpdir(), "pi-tube-cli-config-output-"));
 
@@ -41,7 +36,7 @@ describe("config store", () => {
       env: { HOME: "/tmp/pi-tube-home" },
     });
 
-    expect(configPath).toBe("/tmp/pi-tube-home/.pi-tube/config.json");
+    expect(configPath).toBe(path.join("/tmp/pi-tube-home", ".pi-tube", "config.json"));
   });
 
   test("supports deterministic set/get/list and stable serialization", () => {

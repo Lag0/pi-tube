@@ -1,7 +1,8 @@
-import { describe, expect, test } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
+import { describe, expect, test } from "vitest";
 
 function runCli(args: string[], env: Record<string, string> = {}) {
   return Bun.spawnSync({
@@ -24,7 +25,7 @@ describe("download command", () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout.toString()).toContain(`[DOWNLOAD_FILE] ${output}`);
-    expect(result.stdout.toString()).toContain(`[DOWNLOAD_FILE_URI] file://${output}`);
+    expect(result.stdout.toString()).toContain(`[DOWNLOAD_FILE_URI] ${pathToFileURL(output).href}`);
   });
 
   test("supports audio-only downloads", () => {
@@ -41,9 +42,12 @@ describe("download command", () => {
     const cwd = mkdtempSync(path.join(os.tmpdir(), "pi-tube-download-cli-"));
     const output = path.join(cwd, "custom", "reel.mp4");
     try {
-      const result = runCli(["download", "https://www.instagram.com/reel/abc123", "--output", path.join(cwd, "custom")], {
-        PI_TUBE_TEST_DOWNLOAD_FILE: output,
-      });
+      const result = runCli(
+        ["download", "https://www.instagram.com/reel/abc123", "--output", path.join(cwd, "custom")],
+        {
+          PI_TUBE_TEST_DOWNLOAD_FILE: output,
+        },
+      );
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout.toString()).toContain(`[DOWNLOAD_FILE] ${output}`);

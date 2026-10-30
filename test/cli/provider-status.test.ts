@@ -1,7 +1,7 @@
-import { describe, expect, test } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { describe, expect, test } from "vitest";
 
 function runCli(args: string[], env: Record<string, string> = {}) {
   const configDir = mkdtempSync(path.join(os.tmpdir(), "pi-tube-auth-status-"));

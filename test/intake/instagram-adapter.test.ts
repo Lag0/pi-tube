@@ -1,26 +1,21 @@
 import { describe, expect, test } from "vitest";
+import { createInstagramAuthRequiredError, createInstagramExtractFailedError } from "../../src/errors/cli-errors.ts";
 import { resolveInstagramSource } from "../../src/intake/adapters/instagram.ts";
 import { resolveInstagramWithYtDlp } from "../../src/intake/tools/yt-dlp.ts";
-import {
-  createInstagramAuthRequiredError,
-  createInstagramExtractFailedError,
-} from "../../src/errors/cli-errors.ts";
+import { expectSourceKind } from "../helpers/resolved-source.ts";
 
 describe("instagram yt-dlp boundary", () => {
   test("returns parsed media metadata on successful yt-dlp output", async () => {
-    const result = await resolveInstagramWithYtDlp(
-      "https://www.instagram.com/reel/abc123/",
-      async () => ({
-        exitCode: 0,
-        stdout: JSON.stringify({
-          url: "https://cdn.example.com/instagram/reel.mp4",
-          title: "Instagram Reel",
-          timestamp: 1_700_000_000,
-          description: "Caption with https://example.com/link",
-        }),
-        stderr: "",
+    const result = await resolveInstagramWithYtDlp("https://www.instagram.com/reel/abc123/", async () => ({
+      exitCode: 0,
+      stdout: JSON.stringify({
+        url: "https://cdn.example.com/instagram/reel.mp4",
+        title: "Instagram Reel",
+        timestamp: 1_700_000_000,
+        description: "Caption with https://example.com/link",
       }),
-    );
+      stderr: "",
+    }));
 
     expect(result.mediaUrl).toBe("https://cdn.example.com/instagram/reel.mp4");
     expect(result.title).toBe("Instagram Reel");
@@ -52,7 +47,7 @@ describe("instagram adapter", () => {
       }),
     });
 
-    expect(source.kind).toBe("instagram");
+    expectSourceKind(source, "instagram");
     expect(source.mediaUrl).toBe("https://cdn.example.com/instagram/reel.mp4");
     expect(source.title).toBe("Public Reel");
     expect(source.originalInput).toBe("https://www.instagram.com/reel/abc123");

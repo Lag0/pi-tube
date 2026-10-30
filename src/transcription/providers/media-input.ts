@@ -1,17 +1,12 @@
 import { mkdirSync, rmSync } from "node:fs";
 import path from "node:path";
-import {
-  createTranscriptionProviderFailedError,
-  createYtDlpNotFoundError,
-} from "../../errors/cli-errors.ts";
+import { createTranscriptionProviderFailedError, createYtDlpNotFoundError } from "../../errors/cli-errors.ts";
 import type { ResolvedSource } from "../../intake/types.ts";
 import type { TranscriptionProviderId } from "../types.ts";
 
-export interface ProviderMediaInput {
-  key: "url" | "file";
-  value: string | Blob;
-  cleanup?: () => void;
-}
+export type ProviderMediaInput =
+  | { key: "url"; value: string; cleanup?: () => void }
+  | { key: "file"; value: Blob; cleanup?: () => void };
 
 const AUDIO_FORMAT_SELECTOR = "bestaudio[ext=m4a]/bestaudio/best";
 const DEFAULT_YTDLP_TIMEOUT_MS = 120_000;
@@ -45,7 +40,7 @@ function resolveYtDlpTimeoutMs(env: Record<string, string | undefined> = process
 }
 
 async function waitForExitWithTimeout(
-  process: Bun.Subprocess<"pipe", "pipe", "inherit">,
+  process: Bun.Subprocess<"ignore", "pipe", "pipe">,
   timeoutMs: number,
 ): Promise<{ timedOut: boolean; exitCode: number }> {
   return new Promise((resolve) => {
@@ -83,10 +78,7 @@ function parseDownloadedPath(stdout: string): string | undefined {
   return lines.length > 0 ? lines[lines.length - 1] : undefined;
 }
 
-async function downloadMediaForTranscription(
-  input: string,
-  providerId: TranscriptionProviderId,
-): Promise<string> {
+async function downloadMediaForTranscription(input: string, providerId: TranscriptionProviderId): Promise<string> {
   const mockedPath = process.env.PI_TUBE_TEST_YTDLP_DOWNLOAD_PATH?.trim();
   if (mockedPath) {
     return mockedPath;
@@ -104,7 +96,7 @@ async function downloadMediaForTranscription(
   mkdirSync(tempDir, { recursive: true });
   const outputTemplate = path.join(tempDir, `${crypto.randomUUID()}-%(id)s.%(ext)s`);
 
-  let child: Bun.Subprocess<"pipe", "pipe", "inherit">;
+  let child: Bun.Subprocess<"ignore", "pipe", "pipe">;
   try {
     child = Bun.spawn({
       cmd: [
@@ -122,7 +114,7 @@ async function downloadMediaForTranscription(
       ],
       stdout: "pipe",
       stderr: "pipe",
-      stdin: "inherit",
+      stdin: "ignore",
       env: globalThis.process.env,
     });
   } catch (error) {
@@ -141,10 +133,7 @@ async function downloadMediaForTranscription(
     throw createTranscriptionProviderFailedError(providerId, `yt-dlp media download timed out after ${timeoutMs}ms`);
   }
 
-  const [stdout, stderr] = await Promise.all([
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-  ]);
+  const [stdout, stderr] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text()]);
 
   if (exitResult.exitCode !== 0) {
     if (/not found|command not found|enoent/i.test(stderr)) {

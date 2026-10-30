@@ -1,19 +1,15 @@
 import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
 import {
-  CliError,
+  type CliError,
   createTranscriptionProviderAuthError,
   createTranscriptionProviderFailedError,
   createTranscriptionProviderInvalidResponseError,
   createTranscriptionProviderRateLimitError,
   createTranscriptionProviderUnavailableError,
 } from "../../errors/cli-errors.ts";
-import type {
-  TranscriptionRequest,
-  TranscriptionResult,
-  TranscriptionSegment,
-} from "../types.ts";
-import type { TranscriptionProvider } from "./provider.ts";
+import type { TranscriptionRequest, TranscriptionResult, TranscriptionSegment } from "../types.ts";
 import { prepareProviderMediaInput } from "./media-input.ts";
+import type { TranscriptionProvider } from "./provider.ts";
 
 interface ElevenLabsSpeechToTextPayload {
   modelId: string;
@@ -60,8 +56,10 @@ function normalizeElevenLabsSegments(words: unknown[]): TranscriptionSegment[] |
     }
 
     if (
-      typeof word.start !== "number" || !Number.isFinite(word.start) ||
-      typeof word.end !== "number" || !Number.isFinite(word.end)
+      typeof word.start !== "number" ||
+      !Number.isFinite(word.start) ||
+      typeof word.end !== "number" ||
+      !Number.isFinite(word.end)
     ) {
       continue;
     }
@@ -87,9 +85,8 @@ function parseElevenLabsResponse(payload: unknown): {
     throw createTranscriptionProviderInvalidResponseError("elevenlabs");
   }
 
-  const text = typeof (payload as { text?: unknown }).text === "string"
-    ? (payload as { text: string }).text.trim()
-    : "";
+  const text =
+    typeof (payload as { text?: unknown }).text === "string" ? (payload as { text: string }).text.trim() : "";
   if (!text) {
     throw createTranscriptionProviderInvalidResponseError("elevenlabs");
   }
@@ -217,7 +214,7 @@ export function createElevenLabsProvider(options: ElevenLabsProviderOptions = {}
         if (media.key === "url") {
           payload.sourceUrl = String(media.value);
         } else {
-          payload.file = media.value as Blob;
+          payload.file = media.value;
         }
 
         let response: unknown;

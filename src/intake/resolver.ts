@@ -1,9 +1,9 @@
-import { classifyInput } from "./policy.ts";
-import { resolveYouTubeSource } from "./adapters/youtube.ts";
-import { resolveInstagramSource } from "./adapters/instagram.ts";
-import { resolveDirectUrlSource } from "./adapters/direct-url.ts";
-import { resolveLocalFileSource } from "./adapters/local-file.ts";
 import { CliError, createUnsupportedUrlNotDirectMediaError } from "../errors/cli-errors.ts";
+import { resolveDirectUrlSource } from "./adapters/direct-url.ts";
+import { resolveInstagramSource } from "./adapters/instagram.ts";
+import { resolveLocalFileSource } from "./adapters/local-file.ts";
+import { resolveYouTubeSource } from "./adapters/youtube.ts";
+import { classifyInput } from "./policy.ts";
 import type { ResolvedSource, SourceClassification } from "./types.ts";
 
 interface ResolverDeps {
@@ -23,7 +23,9 @@ export async function resolveSource(input: string, deps: ResolverDeps = {}): Pro
     throw new CliError("Input cannot be empty.", {
       code: "CLI_CONTRACT_VIOLATION",
       exitCode: 2,
-      guidance: ["Use one of: `pi-tube transcribe <input>`, `pi-tube transcribe <input> --provider <deepgram|groq|elevenlabs>`, `pi-tube transcribe <input> --json`."]
+      guidance: [
+        "Use one of: `pi-tube transcribe <input>`, `pi-tube transcribe <input> --provider <deepgram|groq|elevenlabs>`, `pi-tube transcribe <input> --json`.",
+      ],
     });
   }
 

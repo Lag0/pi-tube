@@ -67,15 +67,11 @@ function normalizeConfig(raw: unknown): PiTubeConfig {
   };
 
   config.version =
-    typeof input.version === "number" && Number.isInteger(input.version)
-      ? input.version
-      : CONFIG_VERSION;
+    typeof input.version === "number" && Number.isInteger(input.version) ? input.version : CONFIG_VERSION;
   config.defaults.provider = normalizeProvider(input.defaults?.provider);
   config.defaults.language = normalizeOptionalString(input.defaults?.language)?.toLowerCase();
   config.providers.deepgram.api_key = normalizeOptionalString(input.providers?.deepgram?.api_key);
-  config.providers.deepgram.api_key_env = normalizeOptionalString(
-    input.providers?.deepgram?.api_key_env,
-  );
+  config.providers.deepgram.api_key_env = normalizeOptionalString(input.providers?.deepgram?.api_key_env);
   config.providers.groq.api_key = normalizeOptionalString(input.providers?.groq?.api_key);
   config.providers.groq.api_key_env = normalizeOptionalString(input.providers?.groq?.api_key_env);
   config.providers.elevenlabs.api_key = normalizeOptionalString(input.providers?.elevenlabs?.api_key);
@@ -143,9 +139,7 @@ export function writeConfig(config: PiTubeConfig, options: ConfigStoreOptions = 
 
 function assertConfigKey(key: string): asserts key is ConfigKey {
   if (!CONFIG_KEYS.includes(key as ConfigKey)) {
-    throw new Error(
-      `Unsupported config key: \`${key}\`. Supported keys: ${CONFIG_KEYS.join(", ")}`,
-    );
+    throw new Error(`Unsupported config key: \`${key}\`. Supported keys: ${CONFIG_KEYS.join(", ")}`);
   }
 }
 
@@ -234,9 +228,7 @@ export function getConfigValue(key: string, options: ConfigStoreOptions = {}): u
   }
 }
 
-export function listConfigValues(
-  options: ConfigStoreOptions = {},
-): Record<ConfigKey, unknown> {
+export function listConfigValues(options: ConfigStoreOptions = {}): Record<ConfigKey, unknown> {
   const config = readConfig(options);
 
   return {

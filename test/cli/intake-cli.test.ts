@@ -1,7 +1,7 @@
-import { afterAll, describe, expect, test } from "vitest";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { afterAll, describe, expect, test } from "vitest";
 import { readOutputFileFromStdout } from "./output-file.ts";
 
 const outputDir = mkdtempSync(path.join(os.tmpdir(), "pi-tube-cli-intake-output-"));
@@ -126,7 +126,7 @@ describe("CLI intake integration", () => {
 
       expect(result.exitCode).toBe(0);
       expect(stdout).toContain('source_kind: "local_file"');
-      expect(stdout).toContain(`source_reference: "${filePath}"`);
+      expect(stdout).toContain(`source_reference: ${JSON.stringify(filePath)}`);
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
     }

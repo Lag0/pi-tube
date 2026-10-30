@@ -1,7 +1,8 @@
-import { describe, expect, test } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
+import { describe, expect, test } from "vitest";
 import { downloadInternalsForTests, downloadMedia } from "../../src/download/service.ts";
 
 function tempDir(): string {
@@ -17,14 +18,14 @@ describe("download service", () => {
         cwd,
         executor: async (args) => {
           calls.push(args);
-          return { exitCode: 0, stdout: path.join(cwd, "downloads", "video.mp4") + "\n", stderr: "" };
+          return { exitCode: 0, stdout: `${path.join(cwd, "downloads", "video.mp4")}\n`, stderr: "" };
         },
       });
 
       expect(result.sourceKind).toBe("youtube");
       expect(result.media).toBe("video");
       expect(result.outputPath).toBe(path.join(cwd, "downloads", "video.mp4"));
-      expect(result.outputUri).toBe(`file://${path.join(cwd, "downloads", "video.mp4")}`);
+      expect(result.outputUri).toBe(pathToFileURL(path.join(cwd, "downloads", "video.mp4")).href);
       expect(calls[0]).toContain("bestvideo*+bestaudio/best");
       expect(calls[0]).toContain("--merge-output-format");
       expect(calls[0]).toContain(path.join(cwd, "downloads"));
@@ -63,7 +64,7 @@ describe("download service", () => {
         outputDir: "custom-media",
         executor: async (args) => {
           expect(args).toContain(path.join(cwd, "custom-media"));
-          return { exitCode: 0, stdout: path.join(cwd, "custom-media", "reel.mp4") + "\n", stderr: "" };
+          return { exitCode: 0, stdout: `${path.join(cwd, "custom-media", "reel.mp4")}\n`, stderr: "" };
         },
       });
     } finally {
@@ -72,15 +73,19 @@ describe("download service", () => {
   });
 
   test("fails when yt-dlp does not report a downloaded path", async () => {
-    await expect(downloadMedia("https://www.youtube.com/watch?v=abc123", {
-      executor: async () => ({ exitCode: 0, stdout: "", stderr: "" }),
-    })).rejects.toMatchObject({ code: "DOWNLOAD_FAILED" });
+    await expect(
+      downloadMedia("https://www.youtube.com/watch?v=abc123", {
+        executor: async () => ({ exitCode: 0, stdout: "", stderr: "" }),
+      }),
+    ).rejects.toMatchObject({ code: "DOWNLOAD_FAILED" });
   });
 
   test("maps Instagram auth failures", async () => {
-    await expect(downloadMedia("https://www.instagram.com/reel/private123", {
-      executor: async () => ({ exitCode: 1, stdout: "", stderr: "login required" }),
-    })).rejects.toMatchObject({ code: "INSTAGRAM_AUTH_REQUIRED" });
+    await expect(
+      downloadMedia("https://www.instagram.com/reel/private123", {
+        executor: async () => ({ exitCode: 1, stdout: "", stderr: "login required" }),
+      }),
+    ).rejects.toMatchObject({ code: "INSTAGRAM_AUTH_REQUIRED" });
   });
 
   test("builds deterministic yt-dlp arguments", () => {

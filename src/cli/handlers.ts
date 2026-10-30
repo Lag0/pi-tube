@@ -1,27 +1,24 @@
-import { CliError } from "../errors/cli-errors.ts";
+import {
+  type ConfigStoreOptions,
+  getConfigValue,
+  isConfigProviderId,
+  listConfigValues,
+  readConfig,
+  resolveConfigPath,
+  setConfigValue,
+  writeConfig,
+} from "../config/store.ts";
+import { CONFIG_KEYS, CONFIG_PROVIDER_IDS, type ConfigKey, type ConfigProviderId } from "../config/types.ts";
 import { downloadMedia } from "../download/service.ts";
 import type { DownloadResult } from "../download/types.ts";
+import { CliError } from "../errors/cli-errors.ts";
 import { resolveSource } from "../intake/resolver.ts";
 import { buildOutputArtifact } from "../output/build-artifact.ts";
 import { renderJson } from "../output/json.ts";
 import { renderMarkdown } from "../output/markdown.ts";
-import { persistOutputArtifact, type PersistedOutputArtifact } from "./persist-output.ts";
-import {
-  getConfigValue,
-  isConfigProviderId,
-  readConfig,
-  listConfigValues,
-  resolveConfigPath,
-  setConfigValue,
-  writeConfig,
-  type ConfigStoreOptions,
-} from "../config/store.ts";
-import { CONFIG_KEYS, CONFIG_PROVIDER_IDS, type ConfigKey, type ConfigProviderId } from "../config/types.ts";
-import {
-  transcribeFromResolvedSource,
-  type TranscriptionServiceOptions,
-} from "../transcription/service.ts";
+import { type TranscriptionServiceOptions, transcribeFromResolvedSource } from "../transcription/service.ts";
 import type { TranscriptionExecutionResult } from "../transcription/types.ts";
+import { type PersistedOutputArtifact, persistOutputArtifact } from "./persist-output.ts";
 
 export interface ProgressStep {
   label: string;
@@ -120,11 +117,12 @@ export async function handleBaselineInput({
   onProgress?.({ label: "Resolving source..." });
   const source = await resolveSource(input);
 
-  const sourceDetail = source.kind === "youtube" || source.kind === "instagram"
-    ? source.title ?? source.kind
-    : source.kind === "local_file"
-      ? source.kind
-      : "direct url";
+  const sourceDetail =
+    source.kind === "youtube" || source.kind === "instagram"
+      ? (source.title ?? source.kind)
+      : source.kind === "local_file"
+        ? source.kind
+        : "direct url";
 
   onProgress?.({ label: "Transcribing audio...", detail: `(${sourceDetail})` });
   const transcription = await transcribeFromResolvedSource(source, {
@@ -138,13 +136,6 @@ export async function handleBaselineInput({
     json,
     timestamps,
   };
-}
-
-export function formatBaselineIntakeResult(result: BaselineIntakeResult): string {
-  const artifact = buildOutputArtifact(result.transcription, {
-    includeTimestamps: result.timestamps,
-  });
-  return result.json ? renderJson(artifact) : renderMarkdown(artifact);
 }
 
 function maskSecretForStatus(value: string | undefined): string {
@@ -164,7 +155,9 @@ function requireAuthProvider(provider: string | undefined): ConfigProviderId {
     throw new CliError("Missing provider.", {
       code: "CLI_CONTRACT_VIOLATION",
       exitCode: 2,
-      guidance: ["Use one of: `pi-tube auth login <deepgram|groq|elevenlabs>`, `pi-tube auth status`, `pi-tube auth logout <deepgram|groq|elevenlabs>`."],
+      guidance: [
+        "Use one of: `pi-tube auth login <deepgram|groq|elevenlabs>`, `pi-tube auth status`, `pi-tube auth logout <deepgram|groq|elevenlabs>`.",
+      ],
     });
   }
   return requireConfigProviderId(provider);
@@ -177,7 +170,9 @@ export function handleAuthLogin({ provider, apiKey, options }: AuthLoginInput): 
     throw new CliError("Missing API key.", {
       code: "CLI_CONTRACT_VIOLATION",
       exitCode: 2,
-      guidance: ["Use one of: `pi-tube auth login <deepgram|groq|elevenlabs>`, `pi-tube auth login <deepgram|groq|elevenlabs> --key <api_key>`."],
+      guidance: [
+        "Use one of: `pi-tube auth login <deepgram|groq|elevenlabs>`, `pi-tube auth login <deepgram|groq|elevenlabs> --key <api_key>`.",
+      ],
     });
   }
 
@@ -221,7 +216,9 @@ export function handleDefaultsProvider({ provider, options }: DefaultsProviderIn
     throw new CliError("Missing default provider.", {
       code: "CLI_CONTRACT_VIOLATION",
       exitCode: 2,
-      guidance: ["Use one of: `pi-tube defaults provider <deepgram|groq|elevenlabs>`, `pi-tube defaults language <code>`, `pi-tube defaults show`."],
+      guidance: [
+        "Use one of: `pi-tube defaults provider <deepgram|groq|elevenlabs>`, `pi-tube defaults language <code>`, `pi-tube defaults show`.",
+      ],
     });
   }
   const providerId = requireConfigProviderId(provider);
@@ -235,10 +232,14 @@ export function handleDefaultsLanguage({ language, options }: DefaultsLanguageIn
     throw new CliError("Missing default language.", {
       code: "CLI_CONTRACT_VIOLATION",
       exitCode: 2,
-      guidance: ["Use one of: `pi-tube defaults provider <deepgram|groq|elevenlabs>`, `pi-tube defaults language <code>`, `pi-tube defaults show`."],
+      guidance: [
+        "Use one of: `pi-tube defaults provider <deepgram|groq|elevenlabs>`, `pi-tube defaults language <code>`, `pi-tube defaults show`.",
+      ],
     });
   }
-  const { configPath, config } = withConfigValidation(() => setConfigValue("defaults.language", normalizedLanguage, options));
+  const { configPath, config } = withConfigValidation(() =>
+    setConfigValue("defaults.language", normalizedLanguage, options),
+  );
   return `[DEFAULTS_SET] language=${config.defaults.language} config_path=${configPath}`;
 }
 
@@ -266,7 +267,9 @@ export async function handleDownloadCommand({
     throw new CliError("`download` expects a YouTube or Instagram URL.", {
       code: "CLI_CONTRACT_VIOLATION",
       exitCode: 2,
-      guidance: ["Use one of: `pi-tube download <url>`, `pi-tube download <url> --audio`, `pi-tube download <url> --output <dir>`."],
+      guidance: [
+        "Use one of: `pi-tube download <url>`, `pi-tube download <url> --audio`, `pi-tube download <url> --output <dir>`.",
+      ],
     });
   }
 
@@ -274,7 +277,9 @@ export async function handleDownloadCommand({
     throw new CliError("`download` accepts exactly one URL input.", {
       code: "CLI_CONTRACT_VIOLATION",
       exitCode: 2,
-      guidance: ["Use one of: `pi-tube download <url>`, `pi-tube download <url> --audio`, `pi-tube download <url> --output <dir>`."],
+      guidance: [
+        "Use one of: `pi-tube download <url>`, `pi-tube download <url> --audio`, `pi-tube download <url> --output <dir>`.",
+      ],
     });
   }
 
@@ -374,9 +379,7 @@ function withConfigValidation<T>(operation: () => T): T {
     throw new CliError(detail, {
       code: "CLI_CONTRACT_VIOLATION",
       exitCode: 2,
-      guidance: [
-        "Run `pi-tube config --help` for supported keys and aliases.",
-      ],
+      guidance: ["Run `pi-tube config --help` for supported keys and aliases."],
     });
   }
 }
@@ -474,11 +477,7 @@ function formatConfigSetResult({
   return `[CONFIG_SET] key=${key} value=${toDisplayConfigValue(key, value)} config_path=${configPath}`;
 }
 
-export function handleConfigCommand({
-  args,
-  json,
-  options,
-}: ConfigCommandInput): string {
+export function handleConfigCommand({ args, json, options }: ConfigCommandInput): string {
   const [action, ...rest] = args;
   const configPath = resolveConfigPath(options);
 
@@ -544,8 +543,7 @@ export function handleConfigCommand({
 
     const key = requireConfigKey(rawKey);
     withConfigValidation(() => setConfigValue(key, rawValue, options));
-    const value = withConfigValidation(() =>
-      getConfigValue(key, { ...options, env: options?.env ?? process.env }));
+    const value = withConfigValidation(() => getConfigValue(key, { ...options, env: options?.env ?? process.env }));
     return formatConfigSetResult({ json, configPath, action: "set", key, value });
   }
 
@@ -571,8 +569,7 @@ export function handleConfigCommand({
       const key: ConfigKey = "defaults.provider";
       const providerId = requireConfigProviderId(provider);
       withConfigValidation(() => setConfigValue(key, providerId, options));
-      const value = withConfigValidation(() =>
-        getConfigValue(key, { ...options, env: options?.env ?? process.env }));
+      const value = withConfigValidation(() => getConfigValue(key, { ...options, env: options?.env ?? process.env }));
       return formatConfigSetResult({ json, configPath, action: "provider.set", key, value });
     }
 
@@ -601,12 +598,12 @@ export function handleConfigCommand({
 
       const providerId = requireConfigProviderId(provider);
       const normalizedValue = providerAction === "env" ? requireEnvVarName(valueInput) : valueInput;
-      const key = providerAction === "env"
-        ? (`providers.${providerId}.api_key_env` as ConfigKey)
-        : (`providers.${providerId}.api_key` as ConfigKey);
+      const key =
+        providerAction === "env"
+          ? (`providers.${providerId}.api_key_env` as ConfigKey)
+          : (`providers.${providerId}.api_key` as ConfigKey);
       withConfigValidation(() => setConfigValue(key, normalizedValue, options));
-      const value = withConfigValidation(() =>
-        getConfigValue(key, { ...options, env: options?.env ?? process.env }));
+      const value = withConfigValidation(() => getConfigValue(key, { ...options, env: options?.env ?? process.env }));
       return formatConfigSetResult({ json, configPath, action: `provider.${providerAction}`, key, value });
     }
 
@@ -638,8 +635,7 @@ export function handleConfigCommand({
       }
 
       withConfigValidation(() => setConfigValue(key, valueInput, options));
-      const value = withConfigValidation(() =>
-        getConfigValue(key, { ...options, env: options?.env ?? process.env }));
+      const value = withConfigValidation(() => getConfigValue(key, { ...options, env: options?.env ?? process.env }));
       return formatConfigSetResult({ json, configPath, action: "language.set", key, value });
     }
 

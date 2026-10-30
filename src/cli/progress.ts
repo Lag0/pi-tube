@@ -43,11 +43,6 @@ const truncatePath = (filePath: string, maxLength: number = 60): string => {
   return filePath;
 };
 
-const truncateDetail = (detail: string, maxLength: number = 50): string => {
-  if (detail.length <= maxLength) return detail;
-  return `${detail.slice(0, maxLength - 3)}...`;
-};
-
 /** Creates a no-op reporter for non-TTY or machine-readable output. */
 const createSilentReporter = (): ProgressReporter => ({
   update: () => {},
@@ -77,9 +72,7 @@ export const createProgressReporter = (options: ProgressOptions): ProgressReport
     const spinner = paint(frame, ANSI_CYAN, color);
 
     // Get terminal width, default to 80 if unavailable
-    const terminalWidth = ("columns" in stream && typeof (stream as any).columns === "number")
-      ? (stream as any).columns
-      : 80;
+    const terminalWidth = typeof stream.columns === "number" ? stream.columns : 80;
 
     // Build content and ensure it fits in terminal width
     const maxWidth = Math.max(30, terminalWidth - 2);

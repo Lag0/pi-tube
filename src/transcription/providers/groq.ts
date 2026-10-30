@@ -1,24 +1,21 @@
-import Groq from "groq-sdk";
+import Groq, { toFile } from "groq-sdk";
+import type { TranscriptionCreateParams } from "groq-sdk/resources/audio/transcriptions";
 import {
-  CliError,
+  type CliError,
   createTranscriptionProviderAuthError,
   createTranscriptionProviderFailedError,
   createTranscriptionProviderInvalidResponseError,
   createTranscriptionProviderRateLimitError,
   createTranscriptionProviderUnavailableError,
 } from "../../errors/cli-errors.ts";
-import type {
-  TranscriptionRequest,
-  TranscriptionResult,
-  TranscriptionSegment,
-} from "../types.ts";
-import type { TranscriptionProvider } from "./provider.ts";
+import type { TranscriptionRequest, TranscriptionResult, TranscriptionSegment } from "../types.ts";
 import { prepareProviderMediaInput } from "./media-input.ts";
+import type { TranscriptionProvider } from "./provider.ts";
 
 type ProviderFetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
 interface GroqAudioTranscriptionClient {
-  create(payload: Record<string, unknown>): Promise<unknown>;
+  create(payload: TranscriptionCreateParams): Promise<unknown>;
 }
 
 export interface GroqProviderOptions {
@@ -51,11 +48,15 @@ function normalizeGroqSegments(rawSegments: unknown[]): TranscriptionSegment[] |
     }
 
     const fromMilliseconds =
-      typeof segment.start_ms === "number" && Number.isFinite(segment.start_ms) &&
-      typeof segment.end_ms === "number" && Number.isFinite(segment.end_ms);
+      typeof segment.start_ms === "number" &&
+      Number.isFinite(segment.start_ms) &&
+      typeof segment.end_ms === "number" &&
+      Number.isFinite(segment.end_ms);
     const fromSeconds =
-      typeof segment.start === "number" && Number.isFinite(segment.start) &&
-      typeof segment.end === "number" && Number.isFinite(segment.end);
+      typeof segment.start === "number" &&
+      Number.isFinite(segment.start) &&
+      typeof segment.end === "number" &&
+      Number.isFinite(segment.end);
 
     if (!fromMilliseconds && !fromSeconds) {
       continue;
@@ -64,9 +65,7 @@ function normalizeGroqSegments(rawSegments: unknown[]): TranscriptionSegment[] |
     const startMs = fromMilliseconds
       ? Math.round(segment.start_ms as number)
       : Math.round((segment.start as number) * 1000);
-    const endMs = fromMilliseconds
-      ? Math.round(segment.end_ms as number)
-      : Math.round((segment.end as number) * 1000);
+    const endMs = fromMilliseconds ? Math.round(segment.end_ms as number) : Math.round((segment.end as number) * 1000);
 
     if (endMs < startMs) {
       continue;
@@ -87,14 +86,15 @@ function parseGroqResponse(payload: unknown): {
     throw createTranscriptionProviderInvalidResponseError("groq");
   }
 
-  const text = typeof (payload as { text?: unknown }).text === "string" ? (payload as { text: string }).text.trim() : "";
+  const text =
+    typeof (payload as { text?: unknown }).text === "string" ? (payload as { text: string }).text.trim() : "";
   if (!text) {
     throw createTranscriptionProviderInvalidResponseError("groq");
   }
 
   const detectedLanguage =
     typeof (payload as { language?: unknown }).language === "string"
-      ? ((payload as { language: string }).language || undefined)
+      ? (payload as { language: string }).language || undefined
       : undefined;
   const rawSegments = Array.isArray((payload as { segments?: unknown[] }).segments)
     ? ((payload as { segments?: unknown[] }).segments ?? [])
@@ -172,7 +172,7 @@ function createGroqTranscriptionClient(options: GroqProviderOptions): GroqAudioT
     fetch: options.fetchImpl,
   });
 
-  return client.audio.transcriptions as GroqAudioTranscriptionClient;
+  return client.audio.transcriptions;
 }
 
 export function createGroqProvider(options: GroqProviderOptions = {}): TranscriptionProvider {
@@ -214,7 +214,7 @@ export function createGroqProvider(options: GroqProviderOptions = {}): Transcrip
       const transcriptionClient = options.client ?? createGroqTranscriptionClient(options);
       const media = await prepareProviderMediaInput(request.source, "groq");
       try {
-        const payload: Record<string, unknown> = {
+        const payload: TranscriptionCreateParams = {
           model,
           response_format: "verbose_json",
           timestamp_granularities: ["segment", "word"],
@@ -223,9 +223,10 @@ export function createGroqProvider(options: GroqProviderOptions = {}): Transcrip
           payload.language = request.requestedLanguage;
         }
         if (media.key === "url") {
-          payload.url = String(media.value);
+          payload.url = media.value;
         } else {
-          payload.file = media.value;
+          // Bun.file() values are already file-like and pass through unchanged; a bare Blob gets wrapped.
+          payload.file = await toFile(media.value);
         }
 
         let response: unknown;
