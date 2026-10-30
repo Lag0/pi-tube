@@ -7,11 +7,9 @@ import {
 import type { ResolvedSource } from "../../intake/types.ts";
 import type { TranscriptionProviderId } from "../types.ts";
 
-export interface ProviderMediaInput {
-  key: "url" | "file";
-  value: string | Blob;
-  cleanup?: () => void;
-}
+export type ProviderMediaInput =
+  | { key: "url"; value: string; cleanup?: () => void }
+  | { key: "file"; value: Blob; cleanup?: () => void };
 
 const AUDIO_FORMAT_SELECTOR = "bestaudio[ext=m4a]/bestaudio/best";
 const DEFAULT_YTDLP_TIMEOUT_MS = 120_000;
@@ -45,7 +43,7 @@ function resolveYtDlpTimeoutMs(env: Record<string, string | undefined> = process
 }
 
 async function waitForExitWithTimeout(
-  process: Bun.Subprocess<"pipe", "pipe", "inherit">,
+  process: Bun.Subprocess<"ignore", "pipe", "pipe">,
   timeoutMs: number,
 ): Promise<{ timedOut: boolean; exitCode: number }> {
   return new Promise((resolve) => {
@@ -104,7 +102,7 @@ async function downloadMediaForTranscription(
   mkdirSync(tempDir, { recursive: true });
   const outputTemplate = path.join(tempDir, `${crypto.randomUUID()}-%(id)s.%(ext)s`);
 
-  let child: Bun.Subprocess<"pipe", "pipe", "inherit">;
+  let child: Bun.Subprocess<"ignore", "pipe", "pipe">;
   try {
     child = Bun.spawn({
       cmd: [
@@ -122,7 +120,7 @@ async function downloadMediaForTranscription(
       ],
       stdout: "pipe",
       stderr: "pipe",
-      stdin: "inherit",
+      stdin: "ignore",
       env: globalThis.process.env,
     });
   } catch (error) {

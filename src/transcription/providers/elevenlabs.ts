@@ -217,7 +217,7 @@ export function createElevenLabsProvider(options: ElevenLabsProviderOptions = {}
         if (media.key === "url") {
           payload.sourceUrl = String(media.value);
         } else {
-          payload.file = media.value as Blob;
+          payload.file = media.value;
         }
 
         let response: unknown;

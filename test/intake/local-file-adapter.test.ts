@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { expectSourceKind } from "../helpers/resolved-source.ts";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -13,7 +14,7 @@ describe("local file adapter", () => {
       writeFileSync(filePath, "audio-data");
       const source = await resolveLocalFileSource(filePath);
 
-      expect(source.kind).toBe("local_file");
+      expectSourceKind(source, "local_file");
       expect(source.absolutePath).toBe(filePath);
       expect(source.extension).toBe("wav");
     } finally {

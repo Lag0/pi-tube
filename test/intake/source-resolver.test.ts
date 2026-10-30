@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { expectSourceKind } from "../helpers/resolved-source.ts";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -17,14 +18,14 @@ describe("source resolver", () => {
       }),
     });
 
-    expect(source.kind).toBe("youtube");
+    expectSourceKind(source, "youtube");
     expect(source.mediaUrl).toBe("https://cdn.example.com/video.mp4");
   });
 
   test("classifies direct media URL by extension", async () => {
     const source = await resolveSource("https://cdn.example.com/audio/sample.mp3");
 
-    expect(source.kind).toBe("direct_url");
+    expectSourceKind(source, "direct_url");
     expect(source.extension).toBe("mp3");
     expect(source.mediaUrl).toBe("https://cdn.example.com/audio/sample.mp3");
   });
@@ -40,7 +41,7 @@ describe("source resolver", () => {
       }),
     });
 
-    expect(source.kind).toBe("instagram");
+    expectSourceKind(source, "instagram");
     expect(source.mediaUrl).toBe("https://cdn.example.com/instagram/reel.mp4");
   });
 
@@ -58,7 +59,7 @@ describe("source resolver", () => {
       writeFileSync(filePath, "audio-data");
       const source = await resolveSource(filePath);
 
-      expect(source.kind).toBe("local_file");
+      expectSourceKind(source, "local_file");
       expect(source.absolutePath).toBe(filePath);
       expect(source.extension).toBe("wav");
     } finally {

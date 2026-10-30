@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { expectSourceKind } from "../helpers/resolved-source.ts";
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -169,7 +170,7 @@ describe("youtube adapter", () => {
       }),
     });
 
-    expect(source.kind).toBe("youtube");
+    expectSourceKind(source, "youtube");
     expect(source.mediaUrl).toBe("https://cdn.example.com/video.mp4");
     expect(source.title).toBe("Demo Video");
     expect(source).toMatchObject({

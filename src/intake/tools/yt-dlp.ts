@@ -41,7 +41,7 @@ function resolveYtDlpTimeoutMs(env: Record<string, string | undefined> = process
 }
 
 async function waitForExitWithTimeout(
-  process: Bun.Subprocess<"pipe", "pipe", "inherit">,
+  process: Bun.Subprocess<"ignore", "pipe", "pipe">,
   timeoutMs: number,
 ): Promise<{ timedOut: boolean; exitCode: number }> {
   return new Promise((resolve) => {
@@ -72,14 +72,14 @@ async function waitForExitWithTimeout(
 }
 
 async function defaultYtDlpExecutor(args: string[]): Promise<YtDlpExecutionResult> {
-  let process: Bun.Subprocess<"pipe", "pipe", "inherit">;
+  let process: Bun.Subprocess<"ignore", "pipe", "pipe">;
 
   try {
     process = Bun.spawn({
       cmd: ["yt-dlp", ...args],
       stdout: "pipe",
       stderr: "pipe",
-      stdin: "inherit",
+      stdin: "ignore",
       env: globalThis.process.env,
     });
   } catch (error) {

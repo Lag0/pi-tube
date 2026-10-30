@@ -1,4 +1,5 @@
-import Groq from "groq-sdk";
+import Groq, { toFile } from "groq-sdk";
+import type { TranscriptionCreateParams } from "groq-sdk/resources/audio/transcriptions";
 import {
   CliError,
   createTranscriptionProviderAuthError,
@@ -18,7 +19,7 @@ import { prepareProviderMediaInput } from "./media-input.ts";
 type ProviderFetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
 interface GroqAudioTranscriptionClient {
-  create(payload: Record<string, unknown>): Promise<unknown>;
+  create(payload: TranscriptionCreateParams): Promise<unknown>;
 }
 
 export interface GroqProviderOptions {
@@ -172,7 +173,7 @@ function createGroqTranscriptionClient(options: GroqProviderOptions): GroqAudioT
     fetch: options.fetchImpl,
   });
 
-  return client.audio.transcriptions as GroqAudioTranscriptionClient;
+  return client.audio.transcriptions;
 }
 
 export function createGroqProvider(options: GroqProviderOptions = {}): TranscriptionProvider {
@@ -214,7 +215,7 @@ export function createGroqProvider(options: GroqProviderOptions = {}): Transcrip
       const transcriptionClient = options.client ?? createGroqTranscriptionClient(options);
       const media = await prepareProviderMediaInput(request.source, "groq");
       try {
-        const payload: Record<string, unknown> = {
+        const payload: TranscriptionCreateParams = {
           model,
           response_format: "verbose_json",
           timestamp_granularities: ["segment", "word"],
@@ -223,9 +224,10 @@ export function createGroqProvider(options: GroqProviderOptions = {}): Transcrip
           payload.language = request.requestedLanguage;
         }
         if (media.key === "url") {
-          payload.url = String(media.value);
+          payload.url = media.value;
         } else {
-          payload.file = media.value;
+          // Bun.file() values are already file-like and pass through unchanged; a bare Blob gets wrapped.
+          payload.file = await toFile(media.value);
         }
 
         let response: unknown;

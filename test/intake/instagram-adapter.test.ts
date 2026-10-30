@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { expectSourceKind } from "../helpers/resolved-source.ts";
 import { resolveInstagramSource } from "../../src/intake/adapters/instagram.ts";
 import { resolveInstagramWithYtDlp } from "../../src/intake/tools/yt-dlp.ts";
 import {
@@ -52,7 +53,7 @@ describe("instagram adapter", () => {
       }),
     });
 
-    expect(source.kind).toBe("instagram");
+    expectSourceKind(source, "instagram");
     expect(source.mediaUrl).toBe("https://cdn.example.com/instagram/reel.mp4");
     expect(source.title).toBe("Public Reel");
     expect(source.originalInput).toBe("https://www.instagram.com/reel/abc123");

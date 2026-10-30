@@ -239,14 +239,14 @@ describe("deepgram provider", () => {
     process.env.PI_TUBE_TEST_YTDLP_DOWNLOAD_PATH = mockedDownloadPath;
 
     try {
-      let fileBuffer: Buffer | null = null;
+      const captured: { buffer?: Buffer } = {};
       const provider = createDeepgramProvider({
         client: {
           async transcribeUrl() {
             throw new Error("transcribeUrl should not be called for youtube sources");
           },
           async transcribeFile(source) {
-            fileBuffer = source;
+            captured.buffer = source;
             return {
               result: {
                 results: {
@@ -261,8 +261,8 @@ describe("deepgram provider", () => {
 
       const result = await provider.transcribe(youtubeRequest);
 
-      expect(fileBuffer).toBeInstanceOf(Buffer);
-      expect((fileBuffer as Buffer).length).toBeGreaterThan(0);
+      expect(captured.buffer).toBeInstanceOf(Buffer);
+      expect(captured.buffer?.length).toBeGreaterThan(0);
       expect(result.transcript).toBe("hello from deepgram");
       expect(existsSync(mockedDownloadPath)).toBe(false);
     } finally {

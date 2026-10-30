@@ -29,7 +29,7 @@ function resolveTimeoutMs(env: Record<string, string | undefined>): number {
 }
 
 async function waitForExitWithTimeout(
-  process: Bun.Subprocess<"pipe", "pipe", "inherit">,
+  process: Bun.Subprocess<"ignore", "pipe", "pipe">,
   timeoutMs: number,
 ): Promise<{ timedOut: boolean; exitCode: number }> {
   return new Promise((resolve) => {
@@ -56,13 +56,13 @@ async function waitForExitWithTimeout(
 
 function createDefaultExecutor(env: Record<string, string | undefined>) {
   return async (args: string[]): Promise<DownloadExecutionResult> => {
-    let child: Bun.Subprocess<"pipe", "pipe", "inherit">;
+    let child: Bun.Subprocess<"ignore", "pipe", "pipe">;
     try {
       child = Bun.spawn({
         cmd: ["yt-dlp", ...args],
         stdout: "pipe",
         stderr: "pipe",
-        stdin: "inherit",
+        stdin: "ignore",
         env,
       });
     } catch (error) {
