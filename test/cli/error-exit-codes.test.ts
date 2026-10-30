@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, describe, expect, test } from "vitest";
@@ -110,19 +110,36 @@ describe("CLI error exits and formatting", () => {
     expect(result.stderr.toString()).toContain("[UNEXPECTED]");
   });
 
-  test("keeps config validation deterministic for friendly and legacy routes", () => {
-    const friendlyInvalidProvider = runCli(["config", "provider", "set", "invalid-provider"]);
-    const legacyInvalidProvider = runCli(["config", "set", "defaults.provider", "invalid-provider"]);
-    const missingFriendlyValue = runCli(["config", "provider", "env", "groq"]);
+  test("keeps config validation deterministic", () => {
+    const removedAlias = runCli(["config", "provider", "set", "invalid-provider"]);
+    const invalidProvider = runCli(["config", "set", "defaults.provider", "invalid-provider"]);
+    const missingValue = runCli(["config", "set", "defaults.provider"]);
 
-    expect(friendlyInvalidProvider.exitCode).toBe(2);
-    expect(friendlyInvalidProvider.stderr.toString()).toContain("[INPUT_INVALID]");
+    expect(removedAlias.exitCode).toBe(2);
+    expect(removedAlias.stderr.toString()).toContain("[INPUT_INVALID]");
 
-    expect(legacyInvalidProvider.exitCode).toBe(2);
-    expect(legacyInvalidProvider.stderr.toString()).toContain("[INPUT_INVALID]");
+    expect(invalidProvider.exitCode).toBe(2);
+    expect(invalidProvider.stderr.toString()).toContain("[PROVIDER_INVALID]");
 
-    expect(missingFriendlyValue.exitCode).toBe(2);
-    expect(missingFriendlyValue.stderr.toString()).toContain("[INPUT_INVALID]");
+    expect(missingValue.exitCode).toBe(2);
+    expect(missingValue.stderr.toString()).toContain("[INPUT_INVALID]");
+  });
+
+  test("an unparsable config fails transcribe with CONFIG_INVALID and is left untouched", () => {
+    const brokenConfigPath = path.join(configDir, "broken.json");
+    const truncated = '{"version": 1, "providers": {';
+    writeFileSync(brokenConfigPath, truncated);
+
+    const result = runCli(["transcribe", mediaUrl], {
+      PI_TUBE_CONFIG_PATH: brokenConfigPath,
+      PI_TUBE_TEST_DEEPGRAM_RESPONSE: JSON.stringify({
+        results: { channels: [{ alternatives: [{ transcript: "ok" }] }] },
+      }),
+    });
+
+    expect(result.exitCode).toBe(6);
+    expect(result.stderr.toString()).toContain("[CONFIG_INVALID]");
+    expect(readFileSync(brokenConfigPath, "utf8")).toBe(truncated);
   });
 
   test("keeps setup automation flags scoped to setup command", () => {

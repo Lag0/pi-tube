@@ -7,7 +7,18 @@ const PACKAGE_JSON_URL = new URL("../../../package.json", import.meta.url);
 const PACKAGE_JSON = JSON.parse(readFileSync(PACKAGE_JSON_URL, "utf8")) as { version?: string };
 export const APP_VERSION = typeof PACKAGE_JSON.version === "string" ? PACKAGE_JSON.version : "0.0.0";
 
-export type HelpTopic = "root" | "transcribe" | "download" | "auth" | "defaults" | "setup";
+export type HelpTopic = "root" | "transcribe" | "download" | "providers" | "auth" | "defaults" | "config" | "setup";
+
+/** Topics accepted by `pi-tube help <topic>` and `pi-tube <topic> --help`. */
+export const HELP_TOPICS: readonly HelpTopic[] = [
+  "transcribe",
+  "download",
+  "providers",
+  "auth",
+  "defaults",
+  "config",
+  "setup",
+];
 
 const ROOT_HELP_DOCUMENT: HelpDocument = {
   title: `${COMMAND_IDENTITY} CLI`,
@@ -15,8 +26,10 @@ const ROOT_HELP_DOCUMENT: HelpDocument = {
   usage: [
     `${COMMAND_IDENTITY} transcribe <input> [--provider <deepgram|groq|elevenlabs>] [--language <code>] [--timestamps] [--json]`,
     `${COMMAND_IDENTITY} download <url> [--audio] [--output <dir>]`,
+    `${COMMAND_IDENTITY} providers [--json]`,
     `${COMMAND_IDENTITY} auth <login|status|logout> [provider]`,
     `${COMMAND_IDENTITY} defaults <provider|language|show> [value]`,
+    `${COMMAND_IDENTITY} config <list|get|set> [key] [value] [--json]`,
     `${COMMAND_IDENTITY} setup <skills|yt-dlp|mcp> [--global] [--agent <name>] [--yes|--no-prompt]`,
   ],
   commandGroups: [
@@ -30,8 +43,12 @@ const ROOT_HELP_DOCUMENT: HelpDocument = {
     {
       title: "Account",
       rows: [
+        {
+          term: `${COMMAND_IDENTITY} providers`,
+          description: "Show which providers have an API key and where it comes from.",
+        },
         { term: `${COMMAND_IDENTITY} auth login <provider>`, description: "Save a provider API key locally." },
-        { term: `${COMMAND_IDENTITY} auth status`, description: "Show provider authentication status." },
+        { term: `${COMMAND_IDENTITY} auth status`, description: "Same as `providers`." },
         { term: `${COMMAND_IDENTITY} auth logout <provider>`, description: "Remove a stored provider API key." },
       ],
     },
@@ -47,6 +64,7 @@ const ROOT_HELP_DOCUMENT: HelpDocument = {
           description: "Set the default transcription language.",
         },
         { term: `${COMMAND_IDENTITY} defaults show`, description: "Show default preferences." },
+        { term: `${COMMAND_IDENTITY} config list`, description: "Show every config value." },
       ],
     },
     {
@@ -76,7 +94,7 @@ const ROOT_HELP_DOCUMENT: HelpDocument = {
   notes: [
     "Transcription is explicit in v2: use `pi-tube transcribe <input>`.",
     "Provider API keys are stored in `~/.pi-tube/config.json` with restricted file permissions.",
-    "Environment variables (`DEEPGRAM_API_KEY`, `GROQ_API_KEY`, `ELEVENLABS_API_KEY`) remain automatic fallbacks.",
+    "Environment variables (`DEEPGRAM_API_KEY`, `GROQ_API_KEY`, `ELEVENLABS_API_KEY`) take precedence over stored keys.",
     "Successful transcriptions print `[OUTPUT_FILE]` and `[OUTPUT_FILE_URI]`.",
     "Successful downloads print `[DOWNLOAD_FILE]` and `[DOWNLOAD_FILE_URI]`.",
   ],
@@ -133,9 +151,21 @@ const AUTH_HELP_DOCUMENT: HelpDocument = {
     `${COMMAND_IDENTITY} auth logout elevenlabs`,
   ],
   notes: [
-    "Stored keys are masked in all command output.",
+    "API keys are never printed; `pi-tube providers` shows where each key comes from.",
     "Config is written to `~/.pi-tube/config.json` with restricted permissions.",
-    "Environment variables remain automatic fallbacks and do not need setup commands.",
+    "Environment variables take precedence over stored keys and need no setup command.",
+  ],
+};
+
+const PROVIDERS_HELP_DOCUMENT: HelpDocument = {
+  title: `${COMMAND_IDENTITY} providers`,
+  summary: "Show which providers have an API key and where it comes from.",
+  usage: [`${COMMAND_IDENTITY} providers [--json]`],
+  options: [{ term: "--json", description: "Output deterministic JSON format." }],
+  examples: [`${COMMAND_IDENTITY} providers`, `${COMMAND_IDENTITY} providers --json`],
+  notes: [
+    "`key_source` is `env`, `config` or `none`; an env var wins over a stored key.",
+    "Keys are never printed, not even masked.",
   ],
 };
 
@@ -153,6 +183,26 @@ const DEFAULTS_HELP_DOCUMENT: HelpDocument = {
     `${COMMAND_IDENTITY} defaults show`,
   ],
   notes: ["Defaults are stored in the same local config file as auth settings."],
+};
+
+const CONFIG_HELP_DOCUMENT: HelpDocument = {
+  title: `${COMMAND_IDENTITY} config`,
+  summary: "Read and change config values.",
+  usage: [
+    `${COMMAND_IDENTITY} config list [--json]`,
+    `${COMMAND_IDENTITY} config get <key> [--json]`,
+    `${COMMAND_IDENTITY} config set <key> <value> [--json]`,
+  ],
+  options: [{ term: "--json", description: "Output deterministic JSON format." }],
+  examples: [
+    `${COMMAND_IDENTITY} config list`,
+    `${COMMAND_IDENTITY} config set defaults.provider groq`,
+    `${COMMAND_IDENTITY} config set providers.groq.api_key_env MY_GROQ_KEY`,
+  ],
+  notes: [
+    "Keys: `defaults.provider`, `defaults.language` and `providers.<id>.api_key_env`.",
+    "API keys are not config values: store one with `pi-tube auth login <provider>`.",
+  ],
 };
 
 const SETUP_HELP_DOCUMENT: HelpDocument = {
@@ -186,7 +236,9 @@ const SETUP_HELP_DOCUMENT: HelpDocument = {
 export function getHelpDocument(topic: HelpTopic): HelpDocument {
   if (topic === "transcribe") return TRANSCRIBE_HELP_DOCUMENT;
   if (topic === "download") return DOWNLOAD_HELP_DOCUMENT;
+  if (topic === "providers") return PROVIDERS_HELP_DOCUMENT;
   if (topic === "auth") return AUTH_HELP_DOCUMENT;
+  if (topic === "config") return CONFIG_HELP_DOCUMENT;
   if (topic === "defaults") return DEFAULTS_HELP_DOCUMENT;
   if (topic === "setup") return SETUP_HELP_DOCUMENT;
   return ROOT_HELP_DOCUMENT;

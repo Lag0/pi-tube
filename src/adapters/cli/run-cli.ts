@@ -1,11 +1,14 @@
 import { Command, CommanderError } from "commander";
 import { createError, toPiTubeError } from "../../core/index.ts";
-import { APP_VERSION, COMMAND_IDENTITY, getHelpDocument, type HelpTopic } from "./command-contract.ts";
+import { APP_VERSION, COMMAND_IDENTITY, getHelpDocument, HELP_TOPICS, type HelpTopic } from "./command-contract.ts";
+import { runAuth, runProviders } from "./commands/account.ts";
+import { runConfig, runDefaults } from "./commands/config.ts";
 import { CliFailure, exitCodeFor, formatErrorForCli } from "./error-output.ts";
 import { type HelpDocument, renderHelpDocument } from "./help-renderer.ts";
 import type { CliDeps } from "./io.ts";
 import { createProgressReporter } from "./progress.ts";
 import { handleSetupCommand } from "./setup.ts";
+import { hintForCommand } from "./usage-hints.ts";
 
 type CliAction =
   | { kind: "root"; input?: string; extraPositionals: string[]; options: RootOptions }
@@ -19,6 +22,7 @@ type CliAction =
       rootOptions: RootOptions;
     }
   | { kind: "download"; input?: string; extraPositionals: string[]; options: DownloadOptions; rootOptions: RootOptions }
+  | { kind: "providers"; options: JsonCommandOptions }
   | { kind: "auth"; action?: string; provider?: string; options: AuthOptions; rootOptions: RootOptions }
   | { kind: "defaults"; action?: string; value?: string; rootOptions: RootOptions }
   | { kind: "setup"; subcommand?: string; options: SetupCommandOptions; rootOptions: RootOptions }
@@ -44,7 +48,7 @@ interface DownloadOptions {
   output?: string;
 }
 
-interface AuthOptions {
+interface AuthOptions extends JsonCommandOptions {
   key?: string;
 }
 
@@ -74,39 +78,22 @@ function resolveHelpTopic(positionals: string[]): HelpTopic {
     }
 
     if (!second) return "root";
-    if (["transcribe", "download", "auth", "defaults", "setup"].includes(second)) {
+    if (HELP_TOPICS.includes(second as HelpTopic)) {
       return second as HelpTopic;
     }
 
     throw new CliFailure(
       createError("INPUT_INVALID", `Unsupported help topic: \`${second}\`.`, {
-        hint: `Supported help topics: ${COMMAND_IDENTITY} help, ${COMMAND_IDENTITY} help transcribe, ${COMMAND_IDENTITY} help download, ${COMMAND_IDENTITY} help auth, ${COMMAND_IDENTITY} help defaults, ${COMMAND_IDENTITY} help setup.`,
+        hint: `Supported help topics: ${COMMAND_IDENTITY} help, ${HELP_TOPICS.map((topic) => `${COMMAND_IDENTITY} help ${topic}`).join(", ")}.`,
       }),
     );
   }
 
-  if (["transcribe", "download", "auth", "defaults", "setup"].includes(first ?? "")) {
+  if (HELP_TOPICS.includes(first as HelpTopic)) {
     return first as HelpTopic;
   }
 
   return "root";
-}
-
-function hintForCommand(command: string | undefined): string {
-  switch (command) {
-    case "transcribe":
-      return "Use one of: `pi-tube transcribe <input>`, `pi-tube transcribe <input> --provider <deepgram|groq|elevenlabs>`, `pi-tube transcribe <input> --json`.";
-    case "download":
-      return "Use one of: `pi-tube download <url>`, `pi-tube download <url> --audio`, `pi-tube download <url> --output <dir>`.";
-    case "auth":
-      return "Use one of: `pi-tube auth login <deepgram|groq|elevenlabs>`, `pi-tube auth status`, `pi-tube auth logout <deepgram|groq|elevenlabs>`.";
-    case "defaults":
-      return "Use one of: `pi-tube defaults provider <deepgram|groq|elevenlabs>`, `pi-tube defaults language <code>`, `pi-tube defaults show`.";
-    case "setup":
-      return "Use one of: `pi-tube setup yt-dlp`, `pi-tube setup skills`, `pi-tube setup mcp`.";
-    default:
-      return "Use one of: `pi-tube transcribe <input>`, `pi-tube download <url>`, `pi-tube auth status`, `pi-tube defaults show`, `pi-tube setup yt-dlp`.";
-  }
 }
 
 function commanderErrorToCliFailure(error: CommanderError, argv: readonly string[]): CliFailure {
@@ -164,11 +151,20 @@ function createProgram(setAction: (action: CliAction) => void): Command {
     });
 
   program
+    .command("providers")
+    .description("Show which providers have an API key and where it comes from.")
+    .option("--json", "Output deterministic JSON format.")
+    .action((options: JsonCommandOptions) => {
+      setAction({ kind: "providers", options });
+    });
+
+  program
     .command("auth")
     .description("Manage provider API keys.")
     .argument("[action]", "login, status, or logout")
-    .argument("[provider]", "deepgram or groq")
+    .argument("[provider]", "deepgram, groq or elevenlabs")
     .option("--key <api_key>", "API key for non-interactive login.")
+    .option("--json", "Output deterministic JSON format.")
     .action((action: string | undefined, provider: string | undefined, options: AuthOptions) => {
       setAction({ kind: "auth", action, provider, options, rootOptions: program.opts<RootOptions>() });
     });
@@ -195,11 +191,10 @@ function createProgram(setAction: (action: CliAction) => void): Command {
       setAction({ kind: "setup", subcommand, options, rootOptions: program.opts<RootOptions>() });
     });
 
-  // Hidden legacy escape hatch for existing scripts. Not documented in root help.
   program
     .command("config")
-    .description("Legacy raw configuration command.")
-    .argument("[args...]", "legacy config action and arguments")
+    .description("Read and change config values.")
+    .argument("[args...]", "list, get <key>, or set <key> <value>")
     .option("--json", "Emit deterministic JSON output.")
     .action((args: string[], options: JsonCommandOptions) => {
       setAction({ kind: "config", args, options, rootOptions: program.opts<RootOptions>() });
@@ -236,22 +231,17 @@ async function runTranscribeAction(
 ): Promise<number> {
   const progress = createProgressReporter({ color: action.rootOptions.color !== false, stream: io.progressStream });
   const startTime = Date.now();
-  const { env, cwd } = app.environment;
 
   try {
-    const result = await app.legacy.handleBaselineInput({
+    const persisted = await app.legacy.transcribe({
       input: action.input ?? "",
       json: Boolean(action.options.json),
       extraPositionals: action.extraPositionals,
       provider: action.options.provider,
       language: action.options.language,
       timestamps: Boolean(action.options.timestamps),
-      transcriptionOptions: { env },
       onProgress: (step) => progress.update(step),
     });
-
-    progress.update({ label: "Saving output..." });
-    const persisted = app.legacy.persistBaselineIntakeResult(result, { env, cwd });
     progress.succeed(persisted.outputPath, Date.now() - startTime);
     io.writeOut(`[OUTPUT_FILE] ${persisted.outputPath}`);
     io.writeOut(`[OUTPUT_FILE_URI] ${persisted.outputUri}`);
@@ -269,13 +259,11 @@ async function runDownloadAction(
   const progress = createProgressReporter({ color: action.rootOptions.color !== false, stream: io.progressStream });
   const startTime = Date.now();
   try {
-    const result = await app.legacy.handleDownloadCommand({
+    const result = await app.legacy.download({
       input: action.input,
       extraPositionals: action.extraPositionals,
       audio: Boolean(action.options.audio),
       outputDir: action.options.output,
-      env: app.environment.env,
-      cwd: app.environment.cwd,
       onProgress: (step) => progress.update(step),
     });
     progress.succeed(result.outputPath, Date.now() - startTime);
@@ -285,53 +273,6 @@ async function runDownloadAction(
   } catch (error) {
     progress.fail("Failed");
     throw error;
-  }
-}
-
-function promptForApiKey(provider: string | undefined): string | undefined {
-  if (typeof prompt !== "function") return undefined;
-  return prompt(`Paste ${provider ?? "provider"} API key:`)?.trim();
-}
-
-function runAuthAction(action: Extract<CliAction, { kind: "auth" }>, { app, io }: CliDeps): number {
-  const options = { env: app.environment.env };
-  switch (action.action) {
-    case "login": {
-      const apiKey = action.provider
-        ? (action.options.key ?? options.env.PI_TUBE_TEST_AUTH_KEY ?? promptForApiKey(action.provider))
-        : undefined;
-      io.writeOut(app.legacy.handleAuthLogin({ provider: action.provider, apiKey, options }));
-      return 0;
-    }
-    case "status":
-      io.writeOut(app.legacy.handleAuthStatus({ env: options.env, options }));
-      return 0;
-    case "logout":
-      io.writeOut(app.legacy.handleAuthLogout({ provider: action.provider, options }));
-      return 0;
-    default:
-      throw new CliFailure(
-        createError("INPUT_INVALID", "Missing or unsupported auth action.", { hint: hintForCommand("auth") }),
-      );
-  }
-}
-
-function runDefaultsAction(action: Extract<CliAction, { kind: "defaults" }>, { app, io }: CliDeps): number {
-  const options = { env: app.environment.env };
-  switch (action.action) {
-    case "provider":
-      io.writeOut(app.legacy.handleDefaultsProvider({ provider: action.value, options }));
-      return 0;
-    case "language":
-      io.writeOut(app.legacy.handleDefaultsLanguage({ language: action.value, options }));
-      return 0;
-    case "show":
-      io.writeOut(app.legacy.handleDefaultsShow({ options }));
-      return 0;
-    default:
-      throw new CliFailure(
-        createError("INPUT_INVALID", "Missing or unsupported defaults action.", { hint: hintForCommand("defaults") }),
-      );
   }
 }
 
@@ -345,17 +286,6 @@ function runSetupAction(action: Extract<CliAction, { kind: "setup" }>, { io, sys
     writeOut: io.writeOut,
   });
   if (output) io.writeOut(output);
-  return 0;
-}
-
-function runConfigAction(action: Extract<CliAction, { kind: "config" }>, { app, io }: CliDeps): number {
-  io.writeOut(
-    app.legacy.handleConfigCommand({
-      args: action.args,
-      json: Boolean(action.options.json),
-      options: { env: app.environment.env },
-    }),
-  );
   return 0;
 }
 
@@ -389,14 +319,21 @@ export const runCli = async (argv: readonly string[], deps: CliDeps): Promise<nu
         return await runTranscribeAction(action, deps);
       case "download":
         return await runDownloadAction(action, deps);
+      case "providers":
+        return await runProviders(deps, { json: Boolean(action.options.json) });
       case "auth":
-        return runAuthAction(action, deps);
+        return await runAuth(deps, {
+          action: action.action,
+          provider: action.provider,
+          key: action.options.key,
+          json: Boolean(action.options.json),
+        });
       case "defaults":
-        return runDefaultsAction(action, deps);
+        return await runDefaults(deps, action.action, action.value);
       case "setup":
         return runSetupAction(action, deps);
       case "config":
-        return runConfigAction(action, deps);
+        return await runConfig(deps, action.args, Boolean(action.options.json));
       case "root":
         return runRootAction(action);
     }
