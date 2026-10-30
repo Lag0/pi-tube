@@ -25,3 +25,8 @@ output/
 .firecrawl/
 .tmp-repos
 node_modules
+
+# Package managers other than Bun, local agent tooling, worktrees
+package-lock.json
+skills-lock.json
+.worktrees/
