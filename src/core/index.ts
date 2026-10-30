@@ -69,6 +69,7 @@ export {
 export { err, type Failure, ok, type Result, type Success } from "./domain/result.ts";
 export type { AudioInput, ResolvedSource } from "./domain/source.ts";
 export type { OutputArtifact } from "./domain/transcript/contract.ts";
+export { sourceReferenceOf } from "./domain/transcript/render-markdown.ts";
 export type { ConfigStore } from "./ports/config-store.ts";
 export type {
   DownloadedMedia,

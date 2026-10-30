@@ -24,4 +24,6 @@ export interface CliDeps {
   readonly app: App;
   readonly io: CliIo;
   readonly system: CliSystem;
+  /** Aborts the running operation (Ctrl-C, SIGTERM); wired by `main`. */
+  readonly signal?: AbortSignal;
 }

@@ -12,15 +12,7 @@ const BOOTSTRAP = "src/bootstrap.ts";
 const MAIN = "src/main.ts";
 
 // Pre-v3 code that the core has not replaced yet. Shrinks to empty in phase 1b/1c.
-const LEGACY = [
-  "src/cli/handlers.ts",
-  "src/cli/persist-output.ts",
-  "src/intake/",
-  "src/transcription/",
-  "src/download/",
-  "src/output/",
-  "src/errors/",
-];
+const LEGACY = ["src/cli/handlers.ts", "src/intake/", "src/download/", "src/errors/"];
 
 const PROCESS_IO =
   /process\.(stdout|stderr|exit|exitCode|argv)\b|console\.|Bun\.(stdout|stderr)\b|\{[^}]*\b(stdout|stderr|exit|exitCode|argv)\b[^}]*\}\s*=\s*process\b/;

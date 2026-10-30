@@ -1,5 +1,5 @@
 import { expect } from "vitest";
-import type { ResolvedSource } from "../../src/intake/types.ts";
+import type { ResolvedSource } from "../../src/core/domain/source.ts";
 
 /** Asserts the resolved source kind and narrows the union so kind-specific fields type-check. */
 export function expectSourceKind<K extends ResolvedSource["kind"]>(

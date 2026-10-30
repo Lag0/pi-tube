@@ -110,7 +110,7 @@ const TRANSCRIBE_HELP_DOCUMENT: HelpDocument = {
     { term: "--provider <deepgram|groq|elevenlabs>", description: "Select transcription provider." },
     { term: "--language <code>", description: "Optional language preference." },
     { term: "--timestamps", description: "Include timestamp blocks in transcript output." },
-    { term: "--json", description: "Output deterministic JSON format." },
+    { term: "--json", description: "Print the result as JSON on stdout and save the transcript as JSON." },
   ],
   examples: [
     `${COMMAND_IDENTITY} transcribe "https://youtube.com/watch?v=dQw4w9WgXcQ"`,

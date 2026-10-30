@@ -1,15 +1,16 @@
-import type { OutputArtifact } from "./contract.ts";
+import type { OutputArtifact, OutputArtifactSource } from "./contract.ts";
+
+/** The one URL or path that identifies the source in the frontmatter and in CLI JSON output. */
+export function sourceReferenceOf(source: OutputArtifactSource): string {
+  return source.media_url ?? source.absolute_path ?? source.normalized_url ?? source.original_input;
+}
 
 function encodeFrontmatterValue(value: string | undefined): string {
   return value ? JSON.stringify(value) : "null";
 }
 
 function buildFrontmatter(artifact: OutputArtifact): string {
-  const sourceReference =
-    artifact.source.media_url ??
-    artifact.source.absolute_path ??
-    artifact.source.normalized_url ??
-    artifact.source.original_input;
+  const sourceReference = sourceReferenceOf(artifact.source);
 
   const lines = [
     "---",

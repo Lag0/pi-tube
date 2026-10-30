@@ -10,11 +10,7 @@ const INTERACTIVE_PASSTHROUGH = new Set(["src/infrastructure/interactive-command
 const SPAWNS_PROCESS = /["'](node:)?child_process["']|Bun\.spawn(Sync)?\b/;
 const SPAWNERS = new Set(["src/infrastructure/process/run-process.ts", "src/infrastructure/interactive-command.ts"]);
 // Removed in Task 7 of phase 1b.
-const LEGACY_SPAWNERS = new Set([
-  "src/intake/tools/yt-dlp.ts",
-  "src/transcription/providers/media-input.ts",
-  "src/download/service.ts",
-]);
+const LEGACY_SPAWNERS = new Set(["src/intake/tools/yt-dlp.ts", "src/download/service.ts"]);
 
 function listTypeScriptFiles(dir: string): string[] {
   return readdirSync(dir, { recursive: true, encoding: "utf8" })

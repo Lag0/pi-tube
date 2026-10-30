@@ -1,13 +1,13 @@
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { classifyInput } from "../core/domain/source-policy.ts";
 import {
   CliError,
   createDownloadFailedError,
   createInstagramAuthRequiredError,
   createYtDlpNotFoundError,
 } from "../errors/cli-errors.ts";
-import { classifyInput } from "../intake/policy.ts";
 import type {
   DownloadExecutionResult,
   DownloadMediaKind,
