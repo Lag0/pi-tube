@@ -3,9 +3,18 @@ import path from "node:path";
 import { describe, expect, test } from "vitest";
 
 const SRC_DIR = path.resolve("src");
-const INHERITED_STDIN = /stdin:\s*"inherit"/;
+// Catches `stdin: "inherit"`, `stdio: "inherit"` and `stdio: ["inherit", ...]`.
+const INHERITED_STDIN = /stdin:\s*"inherit"|stdio:\s*"inherit"|stdio:\s*\[\s*"inherit"/;
 // `pi-tube setup` runs interactive installers (brew, npx skills) in the user's terminal; never reachable from MCP.
 const INTERACTIVE_PASSTHROUGH = new Set(["src/infrastructure/interactive-command.ts"]);
+const SPAWNS_PROCESS = /["'](node:)?child_process["']|Bun\.spawn(Sync)?\b/;
+const SPAWNERS = new Set(["src/infrastructure/process/run-process.ts", "src/infrastructure/interactive-command.ts"]);
+// Removed in Task 7 of phase 1b.
+const LEGACY_SPAWNERS = new Set([
+  "src/intake/tools/yt-dlp.ts",
+  "src/transcription/providers/media-input.ts",
+  "src/download/service.ts",
+]);
 
 function listTypeScriptFiles(dir: string): string[] {
   return readdirSync(dir, { recursive: true, encoding: "utf8" })
@@ -20,6 +29,16 @@ describe("child process hygiene", () => {
       .filter((file) => INHERITED_STDIN.test(readFileSync(file, "utf8")))
       .map((file) => path.relative(process.cwd(), file).split(path.sep).join("/"))
       .filter((file) => !INTERACTIVE_PASSTHROUGH.has(file));
+
+    expect(offenders).toEqual([]);
+  });
+
+  // Every child process goes through the hardened runner (stdin ignored, allowlisted env, tree kill).
+  test("only the process runner and the setup runner spawn processes", () => {
+    const offenders = listTypeScriptFiles(SRC_DIR)
+      .filter((file) => SPAWNS_PROCESS.test(readFileSync(file, "utf8")))
+      .map((file) => path.relative(process.cwd(), file).split(path.sep).join("/"))
+      .filter((file) => !SPAWNERS.has(file) && !LEGACY_SPAWNERS.has(file));
 
     expect(offenders).toEqual([]);
   });
