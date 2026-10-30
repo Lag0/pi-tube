@@ -33,9 +33,10 @@ function formatTimestamp(milliseconds: number): string {
   const seconds = Math.floor((normalized % 60_000) / 1000);
   const ms = normalized % 1000;
 
-  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(
-    seconds,
-  ).padStart(2, "0")}.${String(ms).padStart(3, "0")}`;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(
+    2,
+    "0",
+  )}.${String(ms).padStart(3, "0")}`;
 }
 
 function buildSourceMetadataLines(artifact: OutputArtifact): string[] {
@@ -70,9 +71,7 @@ function buildSourceMetadataLines(artifact: OutputArtifact): string[] {
 }
 
 export function renderMarkdown(artifact: OutputArtifact): string {
-  const includeTranscriptHeader = artifact.summary.key_points.some((point) =>
-    point.startsWith("Timestamp mode: on"),
-  );
+  const includeTranscriptHeader = artifact.summary.key_points.some((point) => point.startsWith("Timestamp mode: on"));
   const segments = artifact.transcript.segments ?? [];
   const segmentLines =
     includeTranscriptHeader && segments.length > 0

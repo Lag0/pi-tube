@@ -1,10 +1,10 @@
-import { describe, expect, test } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { buildOutputArtifact } from "../../src/output/build-artifact.ts";
-import { renderJson } from "../../src/output/json.ts";
-import { renderMarkdown } from "../../src/output/markdown.ts";
-import type { TranscriptionExecutionResult } from "../../src/transcription/types.ts";
+import { describe, expect, test } from "vitest";
+import { buildOutputArtifact } from "../../../../src/core/domain/transcript/build-artifact.ts";
+import { renderJson } from "../../../../src/core/domain/transcript/render-json.ts";
+import { renderMarkdown } from "../../../../src/core/domain/transcript/render-markdown.ts";
+import type { TranscriptionExecutionResult } from "../../../../src/core/domain/transcript/types.ts";
 
 function formatTimestamp(milliseconds: number): string {
   const hours = Math.floor(milliseconds / 3_600_000);
@@ -71,9 +71,7 @@ describe("output parity", () => {
 
   test("golden fixtures preserve semantic parity assumptions", () => {
     const markdownFixture = readFileSync(path.join(FIXTURE_ROOT, "markdown-golden.md"), "utf8");
-    const jsonFixture = JSON.parse(
-      readFileSync(path.join(FIXTURE_ROOT, "json-golden.json"), "utf8"),
-    ) as {
+    const jsonFixture = JSON.parse(readFileSync(path.join(FIXTURE_ROOT, "json-golden.json"), "utf8")) as {
       schema_version: string;
       source: { kind: string; media_url: string | null };
       transcription: { provider: string; requested_language: string | null; detected_language: string | null };
@@ -85,12 +83,8 @@ describe("output parity", () => {
     expect(markdownFixture).toContain(`source_kind: "${jsonFixture.source.kind}"`);
     expect(markdownFixture).toContain(`source_reference: "${jsonFixture.source.media_url}"`);
     expect(markdownFixture).toContain(`provider: "${jsonFixture.transcription.provider}"`);
-    expect(markdownFixture).toContain(
-      `requested_language: "${jsonFixture.transcription.requested_language}"`,
-    );
-    expect(markdownFixture).toContain(
-      `detected_language: "${jsonFixture.transcription.detected_language}"`,
-    );
+    expect(markdownFixture).toContain(`requested_language: "${jsonFixture.transcription.requested_language}"`);
+    expect(markdownFixture).toContain(`detected_language: "${jsonFixture.transcription.detected_language}"`);
 
     for (const point of jsonFixture.summary.key_points) {
       expect(markdownFixture).toContain(`- ${point}`);

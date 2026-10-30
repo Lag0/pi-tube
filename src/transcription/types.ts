@@ -1,12 +1,9 @@
-import type { ResolvedSource } from "../intake/types.ts";
+import type { ResolvedSource } from "../core/domain/source.ts";
+import type { TranscriptionSegment } from "../core/domain/transcript/types.ts";
+
+export type { TranscriptionExecutionResult, TranscriptionSegment } from "../core/domain/transcript/types.ts";
 
 export type TranscriptionProviderId = "deepgram" | "groq" | "elevenlabs";
-
-export interface TranscriptionSegment {
-  startMs: number;
-  endMs: number;
-  text: string;
-}
 
 export interface TranscriptionRequest {
   source: ResolvedSource;
@@ -14,15 +11,6 @@ export interface TranscriptionRequest {
 }
 
 export interface TranscriptionResult {
-  provider: TranscriptionProviderId;
-  transcript: string;
-  requestedLanguage?: string;
-  detectedLanguage?: string;
-  segments?: TranscriptionSegment[];
-}
-
-export interface TranscriptionExecutionResult {
-  source: ResolvedSource;
   provider: TranscriptionProviderId;
   transcript: string;
   requestedLanguage?: string;

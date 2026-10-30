@@ -1,11 +1,7 @@
-import type { ResolvedSource } from "../intake/types.ts";
-import type { TranscriptionExecutionResult } from "../transcription/types.ts";
-import type {
-  OutputArtifact,
-  OutputArtifactSegment,
-  OutputArtifactSource,
-} from "./contract.ts";
+import type { ResolvedSource } from "../source.ts";
+import type { OutputArtifact, OutputArtifactSegment, OutputArtifactSource } from "./contract.ts";
 import { OUTPUT_SCHEMA_VERSION } from "./contract.ts";
+import type { TranscriptionExecutionResult } from "./types.ts";
 
 interface SegmentLike {
   startMs: number;
@@ -24,6 +20,19 @@ export interface BuildOutputArtifactOptions {
   includeTimestamps?: boolean;
 }
 
+/** Drops query and fragment, which can carry signatures or tokens; a string that is not a URL is returned as is. */
+export function toPersistedUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    parsed.search = "";
+    parsed.hash = "";
+    return parsed.toString();
+  } catch {
+    return url;
+  }
+}
+
+// The yt-dlp media URL of YouTube and Instagram is signed and expires, so it is never persisted.
 function mapSource(source: ResolvedSource): OutputArtifactSource {
   switch (source.kind) {
     case "youtube":
@@ -31,7 +40,6 @@ function mapSource(source: ResolvedSource): OutputArtifactSource {
         kind: source.kind,
         original_input: source.originalInput,
         normalized_url: source.normalizedUrl,
-        media_url: source.mediaUrl,
         title: source.title,
         published_at: source.publishedAt,
         description: source.description,
@@ -42,15 +50,14 @@ function mapSource(source: ResolvedSource): OutputArtifactSource {
         kind: source.kind,
         original_input: source.originalInput,
         normalized_url: source.normalizedUrl,
-        media_url: source.mediaUrl,
         title: source.title,
       };
     case "direct_url":
       return {
         kind: source.kind,
-        original_input: source.originalInput,
-        normalized_url: source.normalizedUrl,
-        media_url: source.mediaUrl,
+        original_input: toPersistedUrl(source.originalInput),
+        normalized_url: toPersistedUrl(source.normalizedUrl),
+        media_url: toPersistedUrl(source.mediaUrl),
         extension: source.extension,
       };
     case "local_file":
@@ -63,7 +70,10 @@ function mapSource(source: ResolvedSource): OutputArtifactSource {
   }
 }
 
-function mapSegments(segments: SegmentLike[] | undefined, includeTimestamps: boolean): OutputArtifactSegment[] | undefined {
+function mapSegments(
+  segments: SegmentLike[] | undefined,
+  includeTimestamps: boolean,
+): OutputArtifactSegment[] | undefined {
   if (!includeTimestamps) {
     return undefined;
   }
@@ -89,9 +99,7 @@ function mapSegments(segments: SegmentLike[] | undefined, includeTimestamps: boo
       text: segment.text.trim(),
     }));
 
-  const compacted = normalized.length >= SEGMENT_COMPACTION_THRESHOLD
-    ? compactDenseSegments(normalized)
-    : normalized;
+  const compacted = normalized.length >= SEGMENT_COMPACTION_THRESHOLD ? compactDenseSegments(normalized) : normalized;
 
   return compacted.map((segment) => ({
     start_ms: segment.startMs,
@@ -138,7 +146,8 @@ function compactDenseSegments(segments: SegmentLike[]): SegmentLike[] {
     const gapMs = segment.startMs - current.endMs;
     const projectedDurationMs = segment.endMs - current.startMs;
     const reachedWordTarget = current.wordCount >= SEGMENT_COMPACTION_TARGET_WORDS;
-    const sentenceBoundary = /[.!?]$/.test(current.lastToken) && current.wordCount >= SEGMENT_COMPACTION_MIN_SENTENCE_WORDS;
+    const sentenceBoundary =
+      /[.!?]$/.test(current.lastToken) && current.wordCount >= SEGMENT_COMPACTION_MIN_SENTENCE_WORDS;
     const shouldBreak =
       gapMs > SEGMENT_COMPACTION_MAX_GAP_MS ||
       projectedDurationMs > SEGMENT_COMPACTION_MAX_DURATION_MS ||
@@ -209,11 +218,7 @@ function buildExtractiveSummary(fullText: string): string {
   return `${selected.slice(0, 317).trimEnd()}...`;
 }
 
-function summarize(
-  result: TranscriptionExecutionResult,
-  segmentCount: number,
-  includeTimestamps: boolean,
-) {
+function summarize(result: TranscriptionExecutionResult, segmentCount: number, includeTimestamps: boolean) {
   const requestedLanguage = result.requestedLanguage ?? "auto";
   const detectedLanguage = result.detectedLanguage ?? "unknown";
   const paragraph = buildExtractiveSummary(result.transcript);

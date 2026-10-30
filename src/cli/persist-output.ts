@@ -2,8 +2,9 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import type { OutputArtifact } from "../core/domain/transcript/contract.ts";
+import { transcriptFileName } from "../core/domain/transcript/file-name.ts";
 import { resolvePiTubePaths } from "../infrastructure/paths.ts";
-import type { OutputArtifact } from "../output/contract.ts";
 
 interface PersistOutputArtifactOptions {
   asJson: boolean;
@@ -19,52 +20,11 @@ export interface PersistedOutputArtifact {
   outputUri: string;
 }
 
-function sanitizeLabel(value: string): string {
-  const normalized = value
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .replace(/-{2,}/g, "-");
-
-  return normalized || "transcript";
-}
-
-function extractFilenameLabel(source: OutputArtifact["source"]): string | undefined {
-  if (source.title && source.title.trim().length > 0) {
-    return source.title.trim();
-  }
-
-  if (source.absolute_path && source.absolute_path.trim().length > 0) {
-    return path.parse(source.absolute_path).name;
-  }
-
-  const urlCandidate = source.media_url ?? source.normalized_url ?? source.original_input;
-  try {
-    const parsed = new URL(urlCandidate);
-    const base = path.basename(parsed.pathname);
-    if (base && base !== "/") {
-      return path.parse(base).name;
-    }
-    return parsed.hostname;
-  } catch {
-    return source.kind;
-  }
-}
-
 function resolveOutputDir({
   env = process.env,
   cwd = process.cwd(),
 }: Pick<PersistOutputArtifactOptions, "env" | "cwd">): string {
   return resolvePiTubePaths({ env, cwd, homedir: os.homedir }).outputDir;
-}
-
-function formatDatePart(now: Date): string {
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
 }
 
 function buildUniqueOutputPath(basePath: string): string {
@@ -87,10 +47,12 @@ export function persistOutputArtifact(options: PersistOutputArtifactOptions): Pe
   const outputDir = resolveOutputDir(options);
   mkdirSync(outputDir, { recursive: true });
 
-  const label = sanitizeLabel(extractFilenameLabel(options.artifact.source) ?? "transcript");
-  const datePart = formatDatePart(options.now ?? new Date());
-  const extension = options.asJson ? "json" : "md";
-  const targetPath = buildUniqueOutputPath(path.join(outputDir, `${datePart}-${label}.${extension}`));
+  const fileName = transcriptFileName({
+    artifact: options.artifact,
+    now: options.now ?? new Date(),
+    format: options.asJson ? "json" : "markdown",
+  });
+  const targetPath = buildUniqueOutputPath(path.join(outputDir, fileName));
 
   writeFileSync(targetPath, options.content, "utf8");
 

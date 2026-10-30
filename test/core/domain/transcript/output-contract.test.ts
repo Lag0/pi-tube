@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
-import type { TranscriptionExecutionResult } from "../../src/transcription/types.ts";
-import { buildOutputArtifact } from "../../src/output/build-artifact.ts";
-import { OUTPUT_SCHEMA_VERSION } from "../../src/output/contract.ts";
+import { buildOutputArtifact } from "../../../../src/core/domain/transcript/build-artifact.ts";
+import { OUTPUT_SCHEMA_VERSION } from "../../../../src/core/domain/transcript/contract.ts";
+import type { TranscriptionExecutionResult } from "../../../../src/core/domain/transcript/types.ts";
 
 const baseResult: TranscriptionExecutionResult = {
   source: {

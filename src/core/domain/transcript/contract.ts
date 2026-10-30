@@ -1,5 +1,5 @@
-import type { ResolvedSource } from "../intake/types.ts";
-import type { TranscriptionProviderId } from "../transcription/types.ts";
+import type { ProviderId } from "../providers.ts";
+import type { ResolvedSource } from "../source.ts";
 
 export const OUTPUT_SCHEMA_VERSION = "1.1.0" as const;
 
@@ -17,7 +17,7 @@ export interface OutputArtifactSource {
 }
 
 export interface OutputArtifactTranscription {
-  provider: TranscriptionProviderId;
+  provider: ProviderId;
   requested_language?: string;
   detected_language?: string;
 }

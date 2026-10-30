@@ -1,11 +1,11 @@
 import type { EnvironmentVariables, PiTubeConfig } from "../core/domain/config.ts";
+import { buildOutputArtifact } from "../core/domain/transcript/build-artifact.ts";
+import { renderJson } from "../core/domain/transcript/render-json.ts";
+import { renderMarkdown } from "../core/domain/transcript/render-markdown.ts";
 import { downloadMedia } from "../download/service.ts";
 import type { DownloadResult } from "../download/types.ts";
 import { CliError } from "../errors/cli-errors.ts";
 import { resolveSource } from "../intake/resolver.ts";
-import { buildOutputArtifact } from "../output/build-artifact.ts";
-import { renderJson } from "../output/json.ts";
-import { renderMarkdown } from "../output/markdown.ts";
 import { transcribeFromResolvedSource } from "../transcription/service.ts";
 import type { TranscriptionExecutionResult } from "../transcription/types.ts";
 import { type PersistedOutputArtifact, persistOutputArtifact } from "./persist-output.ts";

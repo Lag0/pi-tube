@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
-import { buildOutputArtifact } from "../../src/output/build-artifact.ts";
-import { renderJson } from "../../src/output/json.ts";
-import type { TranscriptionExecutionResult } from "../../src/transcription/types.ts";
+import { buildOutputArtifact } from "../../../../src/core/domain/transcript/build-artifact.ts";
+import { renderJson } from "../../../../src/core/domain/transcript/render-json.ts";
+import type { TranscriptionExecutionResult } from "../../../../src/core/domain/transcript/types.ts";
 
 const executionResult: TranscriptionExecutionResult = {
   source: {

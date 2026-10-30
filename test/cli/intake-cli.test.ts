@@ -36,7 +36,8 @@ describe("CLI intake integration", () => {
 
     expect(result.exitCode).toBe(0);
     expect(stdout).toContain('source_kind: "youtube"');
-    expect(stdout).toContain('source_reference: "https://cdn.example.com/youtube/video.mp4"');
+    expect(stdout).toContain('source_reference: "https://www.youtube.com/watch?v=abc123"');
+    expect(stdout).not.toContain("cdn.example.com");
   });
 
   test("maps missing yt-dlp dependency to deterministic code", () => {
@@ -79,7 +80,8 @@ describe("CLI intake integration", () => {
 
     expect(result.exitCode).toBe(0);
     expect(stdout).toContain('source_kind: "instagram"');
-    expect(stdout).toContain('source_reference: "https://cdn.example.com/instagram/reel.mp4"');
+    expect(stdout).toContain('source_reference: "https://www.instagram.com/reel/abc123"');
+    expect(stdout).not.toContain("cdn.example.com");
   });
 
   test("fails unsupported non-direct URL with deterministic code", () => {

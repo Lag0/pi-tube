@@ -1,10 +1,10 @@
-import { describe, expect, test } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { buildOutputArtifact } from "../../src/output/build-artifact.ts";
-import { renderJson } from "../../src/output/json.ts";
-import { renderMarkdown } from "../../src/output/markdown.ts";
-import type { TranscriptionExecutionResult } from "../../src/transcription/types.ts";
+import { describe, expect, test } from "vitest";
+import { buildOutputArtifact } from "../../../../src/core/domain/transcript/build-artifact.ts";
+import { renderJson } from "../../../../src/core/domain/transcript/render-json.ts";
+import { renderMarkdown } from "../../../../src/core/domain/transcript/render-markdown.ts";
+import type { TranscriptionExecutionResult } from "../../../../src/core/domain/transcript/types.ts";
 
 const FIXTURE_GENERATED_AT = "2026-03-02T23:50:00.000Z";
 const FIXTURE_ROOT = path.join("test", "fixtures", "output");
