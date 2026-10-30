@@ -36,6 +36,10 @@ export const ERROR_CATALOG = {
     category: "cancelled",
     hint: "Run the command again to retry.",
   },
+  STORAGE_IO_FAILED: {
+    category: "config",
+    hint: "Check that your user can write to the output directory, or pass --output with another directory.",
+  },
   SETUP_COMMAND_FAILED: {
     category: "dependency",
     hint: "Check the command output above and run it manually.",
