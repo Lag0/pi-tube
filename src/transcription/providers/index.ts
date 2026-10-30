@@ -6,11 +6,6 @@ import type { TranscriptionProvider } from "./provider.ts";
 
 export type ProviderRegistry = Partial<Record<TranscriptionProviderId, TranscriptionProvider>>;
 
-export interface ProviderDefinition {
-  id: TranscriptionProviderId;
-  requiredEnv: string[];
-}
-
 interface ProviderCredentialOverride {
   apiKey?: string;
 }
@@ -18,12 +13,6 @@ interface ProviderCredentialOverride {
 export interface DefaultProviderRegistryOptions {
   credentials?: Partial<Record<TranscriptionProviderId, ProviderCredentialOverride>>;
 }
-
-export const TRANSCRIPTION_PROVIDER_DEFINITIONS: ProviderDefinition[] = [
-  { id: "deepgram", requiredEnv: ["DEEPGRAM_API_KEY"] },
-  { id: "groq", requiredEnv: ["GROQ_API_KEY"] },
-  { id: "elevenlabs", requiredEnv: ["ELEVENLABS_API_KEY", "ELEVEN_API_KEY"] },
-];
 
 export function getDefaultProviderRegistry(options: DefaultProviderRegistryOptions = {}): ProviderRegistry {
   return {

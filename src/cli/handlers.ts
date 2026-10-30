@@ -138,13 +138,6 @@ export async function handleBaselineInput({
   };
 }
 
-export function formatBaselineIntakeResult(result: BaselineIntakeResult): string {
-  const artifact = buildOutputArtifact(result.transcription, {
-    includeTimestamps: result.timestamps,
-  });
-  return result.json ? renderJson(artifact) : renderMarkdown(artifact);
-}
-
 function maskSecretForStatus(value: string | undefined): string {
   if (!value) return "-";
   if (value.length <= 8) return "***";
