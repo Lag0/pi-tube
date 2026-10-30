@@ -22,12 +22,21 @@ const LEGACY = [
   "src/errors/",
 ];
 
-const PROCESS_IO = /process\.(stdout|stderr|exit|argv)\b|console\./;
+const PROCESS_IO =
+  /process\.(stdout|stderr|exit|exitCode|argv)\b|console\.|Bun\.(stdout|stderr)\b|\{[^}]*\b(stdout|stderr|exit|exitCode|argv)\b[^}]*\}\s*=\s*process\b/;
+const PROCESS_MODULES = new Set(["node:process", "process"]);
+// Guards against a broken collector making every edge rule pass vacuously.
+const MIN_RESOLVED_EDGES = 100;
 
 const edges = collectImports("src");
 const files = listSourceFiles("src");
 
-const isLegacy = (file: string): boolean => LEGACY.some((entry) => file === entry || file.startsWith(entry));
+// Extensionless specifiers (`./cli/handlers`) resolve to the same module, so compare without `.ts`.
+const withoutExtension = (file: string): string => file.replace(/\.ts$/, "");
+const isLegacy = (file: string): boolean =>
+  LEGACY.some((entry) => withoutExtension(file) === withoutExtension(entry) || file.startsWith(entry));
+const isModule = (edge: ImportEdge, file: string): boolean =>
+  edge.resolved !== undefined && withoutExtension(edge.resolved) === withoutExtension(file);
 const isPackage = (edge: ImportEdge): boolean => edge.resolved === undefined;
 const isNodeBuiltin = (edge: ImportEdge): boolean => edge.specifier.startsWith("node:");
 const within = (prefix: string) => (edge: ImportEdge) => edge.resolved?.startsWith(prefix) ?? false;
@@ -40,6 +49,10 @@ const violations = (
   edges.filter((edge) => isSubject(edge.from) && !isAllowed(edge)).map((edge) => `${edge.from} -> ${edge.specifier}`);
 
 describe("layer import rules", () => {
+  test("0. every file under src/core imports only src/core", () => {
+    expect(violations((file) => file.startsWith("src/core/"), within("src/core/"))).toEqual([]);
+  });
+
   test("1. domain imports only domain: no package, no node builtin", () => {
     expect(violations((file) => file.startsWith(DOMAIN), within(DOMAIN))).toEqual([]);
   });
@@ -58,8 +71,8 @@ describe("layer import rules", () => {
     const allowed = (edge: ImportEdge) =>
       isPackage(edge) ||
       isNodeBuiltin(edge) ||
-      edge.resolved === CORE_ENTRY ||
-      edge.resolved === BOOTSTRAP ||
+      isModule(edge, CORE_ENTRY) ||
+      isModule(edge, BOOTSTRAP) ||
       (edge.resolved?.startsWith(`${adapterOf(edge.from)}/`) ?? false);
     expect(violations(subject, allowed)).toEqual([]);
   });
@@ -91,7 +104,11 @@ describe("layer import rules", () => {
     const offenders = files
       .filter((file) => !file.startsWith(ADAPTERS) && file !== MAIN)
       .filter((file) => PROCESS_IO.test(readFileSync(file, "utf8")));
-    expect(offenders).toEqual([]);
+    const processImports = edges
+      .filter((edge) => PROCESS_MODULES.has(edge.specifier))
+      .filter((edge) => !edge.from.startsWith(ADAPTERS) && edge.from !== MAIN)
+      .map((edge) => `${edge.from} -> ${edge.specifier}`);
+    expect([...offenders, ...processImports]).toEqual([]);
   });
 
   test("9. every layer has files and the scan is not empty", () => {
@@ -99,5 +116,6 @@ describe("layer import rules", () => {
       expect(files.filter((file) => file.startsWith(layer)).length, layer).toBeGreaterThanOrEqual(1);
     }
     expect(files.length).toBeGreaterThanOrEqual(30);
+    expect(edges.filter((edge) => edge.resolved !== undefined).length).toBeGreaterThanOrEqual(MIN_RESOLVED_EDGES);
   });
 });

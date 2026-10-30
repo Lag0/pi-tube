@@ -30,7 +30,14 @@ const edgeFor = (from: string, specifier: string, typeOnly: boolean): ImportEdge
   };
 };
 
-/** Collects static imports, re-exports, `import()` calls and `import("x")` types of every file under `rootDir`. */
+const isModuleCall = (node: ts.CallExpression): boolean =>
+  node.expression.kind === ts.SyntaxKind.ImportKeyword ||
+  (ts.isIdentifier(node.expression) && node.expression.text === "require");
+
+/**
+ * Collects static imports, re-exports, `import()` and `require()` calls, `import x = require()` and
+ * `import("x")` types of every file under `rootDir`.
+ */
 export const collectImports = (rootDir: string): readonly ImportEdge[] => {
   const edges: ImportEdge[] = [];
   for (const file of listSourceFiles(rootDir)) {
@@ -42,11 +49,17 @@ export const collectImports = (rootDir: string): readonly ImportEdge[] => {
         edges.push(edgeFor(file, node.moduleSpecifier.text, node.isTypeOnly));
       } else if (
         ts.isCallExpression(node) &&
-        node.expression.kind === ts.SyntaxKind.ImportKeyword &&
+        isModuleCall(node) &&
         node.arguments[0] &&
-        ts.isStringLiteral(node.arguments[0])
+        ts.isStringLiteralLike(node.arguments[0])
       ) {
         edges.push(edgeFor(file, node.arguments[0].text, false));
+      } else if (
+        ts.isImportEqualsDeclaration(node) &&
+        ts.isExternalModuleReference(node.moduleReference) &&
+        ts.isStringLiteral(node.moduleReference.expression)
+      ) {
+        edges.push(edgeFor(file, node.moduleReference.expression.text, node.isTypeOnly));
       } else if (
         ts.isImportTypeNode(node) &&
         ts.isLiteralTypeNode(node.argument) &&
