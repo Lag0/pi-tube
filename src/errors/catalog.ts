@@ -8,10 +8,6 @@ export const ERROR_CATALOG = {
     exitCode: 2,
     guidance: ["Run `pi-tube --help` to view supported usage."],
   },
-  CLI_LEGACY_COMPAT: {
-    exitCode: 2,
-    guidance: ["Use `pi-tube --help` for the current Bun/TS contract."],
-  },
   CLI_NOT_IMPLEMENTED: {
     exitCode: 2,
     guidance: ["Use `pi-tube --help` for active commands."],
