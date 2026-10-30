@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { DEFAULT_CONFIG } from "../../src/core/domain/config.ts";
 import type { ResolvedSource } from "../../src/intake/types.ts";
 import type { ProviderRegistry } from "../../src/transcription/providers/index.ts";
 import { selectTranscriptionProvider, transcribeFromResolvedSource } from "../../src/transcription/service.ts";
@@ -60,6 +61,7 @@ describe("transcription provider contract", () => {
 
   test("returns canonical provider-agnostic result shape", async () => {
     const result = await transcribeFromResolvedSource(sampleSource, {
+      config: DEFAULT_CONFIG,
       provider: "deepgram",
       language: "EN-US",
       providers: makeRegistry(),
@@ -75,18 +77,20 @@ describe("transcription provider contract", () => {
   test("throws stable error for invalid provider values", async () => {
     await expect(
       transcribeFromResolvedSource(sampleSource, {
+        config: DEFAULT_CONFIG,
         provider: "unknown",
         providers: makeRegistry(),
       }),
-    ).rejects.toMatchObject({ code: "TRANSCRIPTION_PROVIDER_INVALID" });
+    ).rejects.toMatchObject({ code: "PROVIDER_INVALID" });
   });
 
   test("throws stable error when selected provider is not registered", async () => {
     await expect(
       transcribeFromResolvedSource(sampleSource, {
+        config: DEFAULT_CONFIG,
         provider: "deepgram",
         providers: {},
       }),
-    ).rejects.toMatchObject({ code: "TRANSCRIPTION_PROVIDER_NOT_CONFIGURED" });
+    ).rejects.toMatchObject({ code: "PROVIDER_NOT_CONFIGURED" });
   });
 });

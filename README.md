@@ -27,7 +27,7 @@ bun install
 ## Quick Start
 
 ```bash
-pi-tube auth login groq --key gsk_...
+pi-tube auth login groq
 pi-tube defaults provider groq
 pi-tube transcribe "https://youtube.com/watch?v=dQw4w9WgXcQ"
 pi-tube download "https://youtube.com/watch?v=dQw4w9WgXcQ"
@@ -42,7 +42,7 @@ Core:
 
 Authentication:
 
-- `pi-tube auth login <deepgram|groq|elevenlabs> --key <api_key>`
+- `pi-tube auth login <deepgram|groq|elevenlabs> [--stdin]`
 - `pi-tube auth status`
 - `pi-tube auth logout <deepgram|groq|elevenlabs>`
 
@@ -95,7 +95,7 @@ Defaults:
 Provider API keys are saved in `~/.pi-tube/config.json` with restricted file permissions. Command output always masks keys.
 
 ```bash
-pi-tube auth login elevenlabs --key sk_...
+pi-tube auth login elevenlabs
 pi-tube auth status
 pi-tube auth logout elevenlabs
 ```
@@ -154,8 +154,8 @@ The primary runtime path is Bun + TypeScript. Python runtime is not required.
 
 Provider-layer failures are normalized to deterministic public codes:
 
-- `TRANSCRIPTION_PROVIDER_AUTH`
-- `TRANSCRIPTION_PROVIDER_RATE_LIMIT`
-- `TRANSCRIPTION_PROVIDER_UNAVAILABLE`
-- `TRANSCRIPTION_PROVIDER_FAILED`
-- `TRANSCRIPTION_PROVIDER_INVALID_RESPONSE`
+- `PROVIDER_AUTH`
+- `PROVIDER_RATE_LIMIT`
+- `PROVIDER_UNAVAILABLE`
+- `PROVIDER_FAILED`
+- `PROVIDER_INVALID_RESPONSE`

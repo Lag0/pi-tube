@@ -5,7 +5,7 @@ import { describe, expect, test } from "vitest";
 const SRC_DIR = path.resolve("src");
 const INHERITED_STDIN = /stdin:\s*"inherit"/;
 // `pi-tube setup` runs interactive installers (brew, npx skills) in the user's terminal; never reachable from MCP.
-const INTERACTIVE_PASSTHROUGH = new Set(["src/cli/setup.ts"]);
+const INTERACTIVE_PASSTHROUGH = new Set(["src/infrastructure/interactive-command.ts"]);
 
 function listTypeScriptFiles(dir: string): string[] {
   return readdirSync(dir, { recursive: true, encoding: "utf8" })

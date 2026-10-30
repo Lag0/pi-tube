@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, describe, expect, test } from "vitest";
+import { spawnCli } from "../helpers/spawn-cli.ts";
 import { readOutputFileFromStdout } from "./output-file.ts";
 
 const outputDir = mkdtempSync(path.join(os.tmpdir(), "pi-tube-cli-intake-output-"));
@@ -19,12 +20,7 @@ function runCli(args: string[], env: Record<string, string> = {}) {
     }),
   };
 
-  return Bun.spawnSync({
-    cmd: ["bun", "run", "--bun", "bin/pi-tube.ts", ...args],
-    stdout: "pipe",
-    stderr: "pipe",
-    env: { ...process.env, ...defaultEnv, PI_TUBE_OUTPUT_DIR: outputDir, ...env },
-  });
+  return spawnCli(args, { ...defaultEnv, PI_TUBE_OUTPUT_DIR: outputDir, ...env });
 }
 
 describe("CLI intake integration", () => {
@@ -49,7 +45,7 @@ describe("CLI intake integration", () => {
     });
     const stderr = result.stderr.toString();
 
-    expect(result.exitCode).toBe(2);
+    expect(result.exitCode).toBe(3);
     expect(stderr).toContain("[YTDLP_NOT_FOUND]");
   });
 
@@ -59,7 +55,7 @@ describe("CLI intake integration", () => {
     });
     const stderr = result.stderr.toString();
 
-    expect(result.exitCode).toBe(2);
+    expect(result.exitCode).toBe(5);
     expect(stderr).toContain("[YOUTUBE_EXTRACT_FAILED]");
   });
 
@@ -90,7 +86,7 @@ describe("CLI intake integration", () => {
     const result = runCli(["transcribe", "https://example.com/blog-post"]);
     const stderr = result.stderr.toString();
 
-    expect(result.exitCode).toBe(2);
+    expect(result.exitCode).toBe(5);
     expect(stderr).toContain("[UNSUPPORTED_URL_NOT_DIRECT_MEDIA]");
   });
 
@@ -100,7 +96,7 @@ describe("CLI intake integration", () => {
     });
     const stderr = result.stderr.toString();
 
-    expect(result.exitCode).toBe(2);
+    expect(result.exitCode).toBe(5);
     expect(stderr).toContain("[INSTAGRAM_AUTH_REQUIRED]");
     expect(stderr).toContain("supports Instagram public URLs only");
   });
@@ -111,7 +107,7 @@ describe("CLI intake integration", () => {
     });
     const stderr = result.stderr.toString();
 
-    expect(result.exitCode).toBe(2);
+    expect(result.exitCode).toBe(5);
     expect(stderr).toContain("[INSTAGRAM_EXTRACT_FAILED]");
   });
 

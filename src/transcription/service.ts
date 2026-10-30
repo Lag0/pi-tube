@@ -1,6 +1,7 @@
-import { readConfig } from "../config/store.ts";
-import type { PiTubeConfig } from "../config/types.ts";
+import type { EnvironmentVariables, PiTubeConfig } from "../core/domain/config.ts";
+import { resolveCredential } from "../core/domain/providers.ts";
 import { CliError, createTranscriptionProviderNotConfiguredError } from "../errors/cli-errors.ts";
+import { PROVIDER_DESCRIPTORS } from "../infrastructure/stt/registry.ts";
 import type { ResolvedSource } from "../intake/types.ts";
 import { getDefaultProviderRegistry, type ProviderRegistry, resolveProvider } from "./providers/index.ts";
 import type { TranscriptionExecutionResult, TranscriptionProviderId } from "./types.ts";
@@ -12,17 +13,17 @@ export const TRANSCRIPTION_LANGUAGE_ENV = "PI_TUBE_TRANSCRIPTION_LANGUAGE";
 export interface TranscriptionServiceOptions {
   provider?: string;
   language?: string;
-  env?: Record<string, string | undefined>;
+  env?: EnvironmentVariables;
   providers?: ProviderRegistry;
-  config?: PiTubeConfig;
+  config: PiTubeConfig;
 }
 
 const FALLBACK_ELIGIBLE_ERRORS = new Set([
-  "TRANSCRIPTION_PROVIDER_AUTH",
-  "TRANSCRIPTION_PROVIDER_RATE_LIMIT",
-  "TRANSCRIPTION_PROVIDER_UNAVAILABLE",
-  "TRANSCRIPTION_PROVIDER_FAILED",
-  "TRANSCRIPTION_PROVIDER_INVALID_RESPONSE",
+  "PROVIDER_AUTH",
+  "PROVIDER_RATE_LIMIT",
+  "PROVIDER_UNAVAILABLE",
+  "PROVIDER_FAILED",
+  "PROVIDER_INVALID_RESPONSE",
 ]);
 
 const PROVIDER_FALLBACK_ORDER: TranscriptionProviderId[] = ["deepgram", "groq", "elevenlabs"];
@@ -33,8 +34,7 @@ function parseProviderId(value: string): TranscriptionProviderId {
   }
 
   throw new CliError(`Unsupported transcription provider: \`${value}\`.`, {
-    code: "TRANSCRIPTION_PROVIDER_INVALID",
-    exitCode: 2,
+    code: "PROVIDER_INVALID",
     guidance: [
       "Use one of: `deepgram`, `groq`, `elevenlabs`.",
       "Set provider through `--provider` or PI_TUBE_TRANSCRIPTION_PROVIDER.",
@@ -43,7 +43,7 @@ function parseProviderId(value: string): TranscriptionProviderId {
 }
 
 export function selectTranscriptionProvider(
-  options: { provider?: string; config?: PiTubeConfig; env?: Record<string, string | undefined> } = {},
+  options: { provider?: string; config?: PiTubeConfig; env?: EnvironmentVariables } = {},
 ): TranscriptionProviderId {
   const fromCli = options.provider?.trim().toLowerCase();
   if (fromCli) {
@@ -71,45 +71,17 @@ function normalizeLanguage(language?: string): string | undefined {
 function resolveProviderApiKey(
   providerId: TranscriptionProviderId,
   config: PiTubeConfig,
-  env: Record<string, string | undefined>,
+  env: EnvironmentVariables,
 ): string | undefined {
-  const providerConfig = config.providers[providerId];
-  const fromConfig = providerConfig.api_key?.trim();
-  if (fromConfig) {
-    return fromConfig;
-  }
-
-  const fromReferencedEnvName = providerConfig.api_key_env?.trim();
-  if (fromReferencedEnvName) {
-    const referencedValue = env[fromReferencedEnvName]?.trim();
-    if (referencedValue) {
-      return referencedValue;
-    }
-  }
-
-  const defaultEnvKeys =
-    providerId === "deepgram"
-      ? ["DEEPGRAM_API_KEY"]
-      : providerId === "groq"
-        ? ["GROQ_API_KEY"]
-        : ["ELEVENLABS_API_KEY", "ELEVEN_API_KEY"];
-  for (const envKey of defaultEnvKeys) {
-    const fromDefaultEnv = env[envKey]?.trim();
-    if (fromDefaultEnv) {
-      return fromDefaultEnv;
-    }
-  }
-  return undefined;
+  const descriptor = PROVIDER_DESCRIPTORS.find((candidate) => candidate.id === providerId);
+  return descriptor ? resolveCredential(descriptor, config, env).apiKey : undefined;
 }
 
 function fallbackProvidersFor(providerId: TranscriptionProviderId): TranscriptionProviderId[] {
   return PROVIDER_FALLBACK_ORDER.filter((candidate) => candidate !== providerId);
 }
 
-function hasProviderMockOverride(
-  providerId: TranscriptionProviderId,
-  env: Record<string, string | undefined>,
-): boolean {
+function hasProviderMockOverride(providerId: TranscriptionProviderId, env: EnvironmentVariables): boolean {
   if (providerId === "deepgram") {
     return Boolean(env.PI_TUBE_TEST_DEEPGRAM_RESPONSE || env.PI_TUBE_TEST_DEEPGRAM_ERROR);
   }
@@ -153,10 +125,10 @@ async function transcribeWithProvider(
 
 export async function transcribeFromResolvedSource(
   source: ResolvedSource,
-  options: TranscriptionServiceOptions = {},
+  options: TranscriptionServiceOptions,
 ): Promise<TranscriptionExecutionResult> {
   const env = options.env ?? process.env;
-  const config = options.config ?? readConfig({ env });
+  const { config } = options;
   const selectedProviderId = selectTranscriptionProvider({ provider: options.provider, config, env });
   const requestedLanguage = normalizeLanguage(
     options.language ?? config.defaults.language ?? env[TRANSCRIPTION_LANGUAGE_ENV],
@@ -191,8 +163,7 @@ export async function transcribeFromResolvedSource(
 
   if (candidates.length === 0) {
     throw new CliError("No transcription provider is configured with credentials.", {
-      code: "TRANSCRIPTION_PROVIDER_NOT_CONFIGURED",
-      exitCode: 2,
+      code: "PROVIDER_NOT_CONFIGURED",
       guidance: [
         "Configure at least one provider credential (`pi-tube auth login <provider>`).",
         "Run `pi-tube auth status` to inspect missing credentials.",

@@ -1,46 +1,38 @@
-import { CliError, CliPlannedFeatureError } from "../errors/cli-errors.ts";
+import { createError } from "../../core/index.ts";
+import { CliFailure } from "./error-output.ts";
+import type { CliIo, CliSystem } from "./io.ts";
 
 const SKILLS_NPX_PACKAGE = "skills@1.4.1";
 const SKILL_SOURCE = "https://github.com/Lag0/pi-tube/tree/main";
 const NPM_PACKAGE_NAME = "@syxs/pi-tube";
+const SETUP_USAGE_HINT = "Use one of: `pi-tube setup yt-dlp`, `pi-tube setup skills`, `pi-tube setup mcp`.";
 
 export interface SetupOptions {
   global?: boolean;
   nonInteractive?: boolean;
   agent?: string;
-  env?: Record<string, string | undefined>;
+  platform: CliSystem["platform"];
+  runInteractive: CliSystem["runInteractive"];
+  writeOut: CliIo["writeOut"];
 }
 
-function toCommandString(command: string, args: string[]): string {
+function toCommandString(command: string, args: readonly string[]): string {
   const parts = [command, ...args].map((part) =>
     part.includes(" ") || part.includes('"') ? JSON.stringify(part) : part,
   );
   return parts.join(" ");
 }
 
-function runCommand(command: string, args: string[], options: SetupOptions): void {
+function runCommand(command: string, args: readonly string[], options: SetupOptions): void {
   const commandString = toCommandString(command, args);
-  const testDryRun = (options.env?.PI_TUBE_TEST_SETUP_DRY_RUN ?? process.env.PI_TUBE_TEST_SETUP_DRY_RUN) === "1";
+  options.writeOut(`Running: ${commandString}\n`);
 
-  console.log(`Running: ${commandString}\n`);
-
-  if (testDryRun) {
-    return;
-  }
-
-  const result = Bun.spawnSync({
-    cmd: [command, ...args],
-    stdin: "inherit",
-    stdout: "inherit",
-    stderr: "inherit",
-    env: options.env ?? process.env,
-  });
-
-  if (result.exitCode !== 0) {
-    throw new CliError(`Failed to run setup command: \`${commandString}\`.`, {
-      code: "SETUP_COMMAND_FAILED",
-      guidance: ["Verify that Node.js and npx are available in your environment."],
-    });
+  if (options.runInteractive(command, args) !== 0) {
+    throw new CliFailure(
+      createError("SETUP_COMMAND_FAILED", `Failed to run setup command: \`${commandString}\`.`, {
+        hint: "Verify that Node.js and npx are available in your environment.",
+      }),
+    );
   }
 }
 
@@ -61,10 +53,6 @@ function handleSetupInstall(): string {
   ];
 
   return lines.join("\n");
-}
-
-function getPlatform(options: SetupOptions): NodeJS.Platform | string {
-  return options.env?.PI_TUBE_TEST_PLATFORM ?? process.env.PI_TUBE_TEST_PLATFORM ?? process.platform;
 }
 
 function createYtDlpSetupLines(): string[] {
@@ -88,16 +76,12 @@ function createYtDlpSetupLines(): string[] {
 
 function handleSetupYtDlp(options: SetupOptions): string | null {
   if (options.nonInteractive) {
-    if (getPlatform(options) !== "darwin") {
-      throw new CliError("Automatic yt-dlp install is only supported on macOS with Homebrew.", {
-        code: "SETUP_COMMAND_FAILED",
-        guidance: [
-          "Install yt-dlp manually for your platform.",
-          "macOS/Homebrew: `brew install yt-dlp`.",
-          "Python/pipx: `pipx install yt-dlp`.",
-          "Then verify with `yt-dlp --version`.",
-        ],
-      });
+    if (options.platform !== "darwin") {
+      throw new CliFailure(
+        createError("SETUP_COMMAND_FAILED", "Automatic yt-dlp install is only supported on macOS with Homebrew.", {
+          hint: "Install yt-dlp manually for your platform. macOS/Homebrew: `brew install yt-dlp`. Python/pipx: `pipx install yt-dlp`. Then verify with `yt-dlp --version`.",
+        }),
+      );
     }
 
     runCommand("brew", ["install", "yt-dlp"], options);
@@ -125,12 +109,11 @@ function handleSetupSkills(options: SetupOptions): null {
   return null;
 }
 
-export function handleSetupCommand(subcommand: string | undefined, options: SetupOptions = {}): string | null {
+export function handleSetupCommand(subcommand: string | undefined, options: SetupOptions): string | null {
   if (!subcommand) {
-    throw new CliError("Missing or unsupported setup action.", {
-      code: "CLI_CONTRACT_VIOLATION",
-      guidance: ["Use one of: `pi-tube setup yt-dlp`, `pi-tube setup skills`, `pi-tube setup mcp`."],
-    });
+    throw new CliFailure(
+      createError("INPUT_INVALID", "Missing or unsupported setup action.", { hint: SETUP_USAGE_HINT }),
+    );
   }
 
   if (subcommand === "install") {
@@ -146,14 +129,14 @@ export function handleSetupCommand(subcommand: string | undefined, options: Setu
   }
 
   if (subcommand === "mcp") {
-    throw new CliPlannedFeatureError("`setup mcp`", "a follow-up release", [
-      "MCP installer bootstrap is not shipped in this package yet.",
-      "Use `pi-tube setup skills` for skill installation.",
-    ]);
+    throw new CliFailure(
+      createError("NOT_IMPLEMENTED", "`setup mcp` is coming soon in a follow-up release.", {
+        hint: "MCP installer bootstrap is not shipped in this package yet. Use `pi-tube setup skills` for skill installation.",
+      }),
+    );
   }
 
-  throw new CliError(`Unsupported setup action: \`${subcommand}\`.`, {
-    code: "CLI_CONTRACT_VIOLATION",
-    guidance: ["Use one of: `pi-tube setup yt-dlp`, `pi-tube setup skills`, `pi-tube setup mcp`."],
-  });
+  throw new CliFailure(
+    createError("INPUT_INVALID", `Unsupported setup action: \`${subcommand}\`.`, { hint: SETUP_USAGE_HINT }),
+  );
 }

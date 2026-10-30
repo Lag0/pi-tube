@@ -3,17 +3,10 @@ import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, expect, test } from "vitest";
+import { spawnCli } from "../helpers/spawn-cli.ts";
 
 function runCli(args: string[], env: Record<string, string> = {}) {
-  return Bun.spawnSync({
-    cmd: ["bun", "run", "--bun", "bin/pi-tube.ts", ...args],
-    stdout: "pipe",
-    stderr: "pipe",
-    env: {
-      ...process.env,
-      ...env,
-    },
-  });
+  return spawnCli(args, { ...env });
 }
 
 describe("download command", () => {
@@ -60,7 +53,7 @@ describe("download command", () => {
     const result = runCli(["download"]);
 
     expect(result.exitCode).toBe(2);
-    expect(result.stderr.toString()).toContain("[CLI_CONTRACT_VIOLATION]");
+    expect(result.stderr.toString()).toContain("[INPUT_INVALID]");
     expect(result.stderr.toString()).toContain("pi-tube download <url>");
   });
 
@@ -68,7 +61,7 @@ describe("download command", () => {
     const result = runCli(["download", "https://www.youtube.com/watch?v=abc123", "--provider", "groq"]);
 
     expect(result.exitCode).toBe(2);
-    expect(result.stderr.toString()).toContain("[CLI_CONTRACT_VIOLATION]");
+    expect(result.stderr.toString()).toContain("[INPUT_INVALID]");
     expect(result.stderr.toString()).toContain("unknown option '--provider'");
   });
 
@@ -78,7 +71,7 @@ describe("download command", () => {
     });
     const stderr = result.stderr.toString();
 
-    expect(result.exitCode).toBe(2);
+    expect(result.exitCode).toBe(3);
     expect(stderr).toContain("[YTDLP_NOT_FOUND]");
     expect(stderr).toContain("pi-tube setup yt-dlp");
   });
@@ -88,7 +81,7 @@ describe("download command", () => {
       PI_TUBE_TEST_DOWNLOAD_ERROR: "failed",
     });
 
-    expect(result.exitCode).toBe(2);
+    expect(result.exitCode).toBe(5);
     expect(result.stderr.toString()).toContain("[DOWNLOAD_FAILED]");
   });
 });

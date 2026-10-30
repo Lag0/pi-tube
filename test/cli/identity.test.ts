@@ -1,12 +1,9 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
+import { spawnCli } from "../helpers/spawn-cli.ts";
 
 function runCli(args: string[]) {
-  return Bun.spawnSync({
-    cmd: ["bun", "run", "--bun", "bin/pi-tube.ts", ...args],
-    stdout: "pipe",
-    stderr: "pipe",
-  });
+  return spawnCli(args);
 }
 
 describe("CLI identity and placeholders", () => {
@@ -33,7 +30,7 @@ describe("CLI identity and placeholders", () => {
     const stderr = result.stderr.toString();
 
     expect(result.exitCode).toBe(2);
-    expect(stderr).toContain("[CLI_CONTRACT_VIOLATION]");
+    expect(stderr).toContain("[INPUT_INVALID]");
     expect(stderr).toContain("Implicit transcription is no longer supported");
     expect(stderr).toContain("pi-tube transcribe <input>");
   });

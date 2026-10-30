@@ -1,6 +1,8 @@
 import { mkdirSync, rmSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { createTranscriptionProviderFailedError, createYtDlpNotFoundError } from "../../errors/cli-errors.ts";
+import { resolvePiTubePaths } from "../../infrastructure/paths.ts";
 import type { ResolvedSource } from "../../intake/types.ts";
 import type { TranscriptionProviderId } from "../types.ts";
 
@@ -11,15 +13,6 @@ export type ProviderMediaInput =
 const AUDIO_FORMAT_SELECTOR = "bestaudio[ext=m4a]/bestaudio/best";
 const DEFAULT_YTDLP_TIMEOUT_MS = 120_000;
 const YTDLP_TIMEOUT_ENV = "PI_TUBE_YTDLP_TIMEOUT_MS";
-
-function resolvePiTubeBaseDir(): string {
-  const home = process.env.HOME?.trim();
-  if (home) {
-    return path.join(home, ".pi-tube");
-  }
-
-  return path.resolve(process.cwd(), ".pi-tube");
-}
 
 function shouldUseDownloadedMedia(source: ResolvedSource): boolean {
   return source.kind === "youtube" || source.kind === "instagram";
@@ -92,7 +85,7 @@ async function downloadMediaForTranscription(input: string, providerId: Transcri
     throw createTranscriptionProviderFailedError(providerId, "yt-dlp media download failed: mocked failure");
   }
 
-  const tempDir = path.join(resolvePiTubeBaseDir(), "tmp");
+  const tempDir = resolvePiTubePaths({ env: process.env, cwd: process.cwd(), homedir: os.homedir }).tmpDir;
   mkdirSync(tempDir, { recursive: true });
   const outputTemplate = path.join(tempDir, `${crypto.randomUUID()}-%(id)s.%(ext)s`);
 

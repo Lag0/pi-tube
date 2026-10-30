@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { resolvePiTubePaths } from "../infrastructure/paths.ts";
 import type { OutputArtifact } from "../output/contract.ts";
 
 interface PersistOutputArtifactOptions {
@@ -56,17 +57,7 @@ function resolveOutputDir({
   env = process.env,
   cwd = process.cwd(),
 }: Pick<PersistOutputArtifactOptions, "env" | "cwd">): string {
-  const configuredPath = env.PI_TUBE_OUTPUT_DIR?.trim();
-  if (configuredPath) {
-    return path.isAbsolute(configuredPath) ? configuredPath : path.resolve(cwd, configuredPath);
-  }
-
-  const home = env.HOME?.trim() || os.homedir();
-  if (home) {
-    return path.join(home, ".pi-tube");
-  }
-
-  return path.resolve(cwd, ".pi-tube");
+  return resolvePiTubePaths({ env, cwd, homedir: os.homedir }).outputDir;
 }
 
 function formatDatePart(now: Date): string {

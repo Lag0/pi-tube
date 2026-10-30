@@ -72,15 +72,15 @@ async function waitForExitWithTimeout(
 }
 
 async function defaultYtDlpExecutor(args: string[]): Promise<YtDlpExecutionResult> {
-  let process: Bun.Subprocess<"ignore", "pipe", "pipe">;
+  let child: Bun.Subprocess<"ignore", "pipe", "pipe">;
 
   try {
-    process = Bun.spawn({
+    child = Bun.spawn({
       cmd: ["yt-dlp", ...args],
       stdout: "pipe",
       stderr: "pipe",
       stdin: "ignore",
-      env: globalThis.process.env,
+      env: process.env,
     });
   } catch (error) {
     if (error instanceof Error && /ENOENT|not found/i.test(error.message)) {
@@ -91,15 +91,12 @@ async function defaultYtDlpExecutor(args: string[]): Promise<YtDlpExecutionResul
   }
 
   const timeoutMs = resolveYtDlpTimeoutMs();
-  const exitResult = await waitForExitWithTimeout(process, timeoutMs);
+  const exitResult = await waitForExitWithTimeout(child, timeoutMs);
   if (exitResult.timedOut) {
     throw createYouTubeExtractFailedError(`yt-dlp timed out after ${timeoutMs}ms`);
   }
 
-  const [stdout, stderr] = await Promise.all([
-    new Response(process.stdout).text(),
-    new Response(process.stderr).text(),
-  ]);
+  const [stdout, stderr] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text()]);
 
   return { exitCode: exitResult.exitCode, stdout, stderr };
 }

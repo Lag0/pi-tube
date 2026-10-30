@@ -1,65 +1,58 @@
-import { mkdtempSync, rmSync } from "node:fs";
-import os from "node:os";
-import path from "node:path";
 import { describe, expect, test } from "vitest";
+import { runCliInProcess } from "../helpers/cli-harness.ts";
 
-function runCli(args: string[], env: Record<string, string> = {}) {
-  const configDir = mkdtempSync(path.join(os.tmpdir(), "pi-tube-auth-status-"));
-  const configPath = path.join(configDir, "config.json");
-  try {
-    return Bun.spawnSync({
-      cmd: ["bun", "run", "--bun", "bin/pi-tube.ts", ...args],
-      stdout: "pipe",
-      stderr: "pipe",
-      env: { ...process.env, PI_TUBE_CONFIG_PATH: configPath, ...env },
-    });
-  } finally {
-    rmSync(configDir, { recursive: true, force: true });
-  }
-}
-
-describe("auth status command", () => {
-  test("returns deterministic text output for provider auth state", () => {
-    const result = runCli(["auth", "status"], {
-      DEEPGRAM_API_KEY: "",
-      GROQ_API_KEY: "",
-      ELEVENLABS_API_KEY: "",
-      ELEVEN_API_KEY: "",
-    });
-    const stdout = result.stdout.toString();
-    const lines = stdout.trim().split("\n");
+describe("providers command", () => {
+  test("lists every provider as unconfigured without keys", async () => {
+    const result = await runCliInProcess(["providers"]);
+    const lines = result.stdout.trimEnd().split("\n");
 
     expect(result.exitCode).toBe(0);
-    expect(stdout).toContain("[AUTH_STATUS]");
-    expect(lines[2]).toBe("deepgram configured=false source=- key=-");
-    expect(lines[3]).toBe("groq configured=false source=- key=-");
-    expect(lines[4]).toBe("elevenlabs configured=false source=- key=-");
+    expect(lines[0]).toBe("[PROVIDERS]");
+    expect(lines[1]).toMatch(/^config_path=.+config\.json$/);
+    expect(lines.slice(2)).toEqual([
+      "deepgram configured=false key_source=none",
+      "groq configured=false key_source=none",
+      "elevenlabs configured=false key_source=none",
+    ]);
   });
 
-  test("reports env fallback auth state", () => {
-    const result = runCli(["auth", "status"], {
-      DEEPGRAM_API_KEY: "dg-secret",
-      GROQ_API_KEY: "",
-      ELEVENLABS_API_KEY: "sk-eleven-secret",
-      ELEVEN_API_KEY: "",
+  test("reports env keys by name and never prints them", async () => {
+    const result = await runCliInProcess(["providers"], {
+      env: { DEEPGRAM_API_KEY: "dg-secret", ELEVENLABS_API_KEY: "sk-eleven-secret" },
     });
-    const stdout = result.stdout.toString();
 
     expect(result.exitCode).toBe(0);
-    expect(stdout).toContain("deepgram configured=true source=DEEPGRAM_API_KEY key=dg-s***cret");
-    expect(stdout).toContain("groq configured=false source=- key=-");
-    expect(stdout).toContain("elevenlabs configured=true source=ELEVENLABS_API_KEY key=sk-e***cret");
+    expect(result.stdout).toContain("deepgram configured=true key_source=env env_name=DEEPGRAM_API_KEY\n");
+    expect(result.stdout).toContain("groq configured=false key_source=none\n");
+    expect(result.stdout).toContain("elevenlabs configured=true key_source=env env_name=ELEVENLABS_API_KEY\n");
+    expect(result.stdout).not.toMatch(/dg-secret|sk-eleven-secret/);
   });
 
-  test("accepts ELEVEN_API_KEY as an ElevenLabs env alias", () => {
-    const result = runCli(["auth", "status"], {
-      DEEPGRAM_API_KEY: "",
-      GROQ_API_KEY: "",
-      ELEVENLABS_API_KEY: "",
-      ELEVEN_API_KEY: "legacy-eleven-secret",
-    });
+  test("accepts ELEVEN_API_KEY as an ElevenLabs env alias", async () => {
+    const result = await runCliInProcess(["providers"], { env: { ELEVEN_API_KEY: "legacy-eleven-secret" } });
+
+    expect(result.stdout).toContain("elevenlabs configured=true key_source=env env_name=ELEVEN_API_KEY\n");
+  });
+
+  test("auth status is an alias of providers", async () => {
+    const env = { GROQ_API_KEY: "gsk" };
+
+    const providers = await runCliInProcess(["providers"], { env });
+    const status = await runCliInProcess(["auth", "status"], { env });
+
+    expect(status.stdout.split("\n").slice(2)).toEqual(providers.stdout.split("\n").slice(2));
+  });
+
+  test("emits JSON with null env_name outside env", async () => {
+    const result = await runCliInProcess(["providers", "--json"], { env: { GROQ_API_KEY: "gsk" } });
+    const payload = JSON.parse(result.stdout) as { config_path: string; providers: unknown[] };
 
     expect(result.exitCode).toBe(0);
-    expect(result.stdout.toString()).toContain("elevenlabs configured=true source=ELEVEN_API_KEY key=lega***cret");
+    expect(payload.config_path).toMatch(/config\.json$/);
+    expect(payload.providers).toEqual([
+      { id: "deepgram", positioning: "best_value", configured: false, key_source: "none", env_name: null },
+      { id: "groq", positioning: "best_value", configured: true, key_source: "env", env_name: "GROQ_API_KEY" },
+      { id: "elevenlabs", positioning: "highest_accuracy", configured: false, key_source: "none", env_name: null },
+    ]);
   });
 });

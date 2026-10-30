@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import type { PiTubeConfig } from "../../src/config/types.ts";
+import type { PiTubeConfig } from "../../src/core/domain/config.ts";
 import { createTranscriptionProviderFailedError } from "../../src/errors/cli-errors.ts";
 import type { ResolvedSource } from "../../src/intake/types.ts";
 import type { ProviderRegistry } from "../../src/transcription/providers/index.ts";
@@ -72,6 +72,7 @@ function config(overrides: Partial<PiTubeConfig["defaults"]> = {}): PiTubeConfig
 describe("transcription service", () => {
   test("uses CLI provider over env fallback", async () => {
     const result = await transcribeFromResolvedSource(source, {
+      config: config(),
       provider: "groq",
       env: { PI_TUBE_TRANSCRIPTION_PROVIDER: "deepgram" },
       providers: providers(),
@@ -83,6 +84,7 @@ describe("transcription service", () => {
 
   test("uses env provider fallback when CLI provider is omitted", async () => {
     const result = await transcribeFromResolvedSource(source, {
+      config: config(),
       env: { PI_TUBE_TRANSCRIPTION_PROVIDER: "elevenlabs" },
       providers: providers(),
     });
@@ -102,6 +104,7 @@ describe("transcription service", () => {
 
   test("applies language preference from CLI or env fallback", async () => {
     const fromCli = await transcribeFromResolvedSource(source, {
+      config: config(),
       provider: "deepgram",
       language: "PT-BR",
       env: { PI_TUBE_TRANSCRIPTION_LANGUAGE: "en" },
@@ -109,6 +112,7 @@ describe("transcription service", () => {
     });
 
     const fromEnv = await transcribeFromResolvedSource(source, {
+      config: config(),
       provider: "deepgram",
       env: { PI_TUBE_TRANSCRIPTION_LANGUAGE: "es" },
       providers: providers(),
@@ -131,10 +135,12 @@ describe("transcription service", () => {
 
   test("keeps canonical output shape identical across providers", async () => {
     const deepgram = await transcribeFromResolvedSource(source, {
+      config: config(),
       provider: "deepgram",
       providers: providers(),
     });
     const groq = await transcribeFromResolvedSource(source, {
+      config: config(),
       provider: "groq",
       providers: providers(),
     });
@@ -146,6 +152,7 @@ describe("transcription service", () => {
 
   test("preserves optional timestamp segments from provider results", async () => {
     const result = await transcribeFromResolvedSource(source, {
+      config: config(),
       provider: "deepgram",
       providers: providers(),
     });
@@ -175,6 +182,7 @@ describe("transcription service", () => {
     };
 
     const result = await transcribeFromResolvedSource(source, {
+      config: config(),
       provider: "deepgram",
       providers: fallbackProviders,
     });
@@ -186,6 +194,7 @@ describe("transcription service", () => {
   test("fails fast when no providers are configured with credentials", async () => {
     await expect(
       transcribeFromResolvedSource(source, {
+        config: config(),
         env: {
           DEEPGRAM_API_KEY: "",
           GROQ_API_KEY: "",
@@ -195,8 +204,7 @@ describe("transcription service", () => {
         },
       }),
     ).rejects.toMatchObject({
-      code: "TRANSCRIPTION_PROVIDER_NOT_CONFIGURED",
-      exitCode: 2,
+      code: "PROVIDER_NOT_CONFIGURED",
     });
   });
 });
