@@ -6,10 +6,11 @@ import { createApp } from "./bootstrap.ts";
 import { toPiTubeError } from "./core/index.ts";
 import { runInteractiveCommand } from "./infrastructure/interactive-command.ts";
 
-const CANCEL_SIGNALS: readonly NodeJS.Signals[] = ["SIGINT", "SIGTERM"];
+// SIGHUP too: yt-dlp runs in its own process group, so a closed terminal would otherwise orphan it.
+const CANCEL_SIGNALS: readonly NodeJS.Signals[] = ["SIGINT", "SIGTERM", "SIGHUP"];
 
 /**
- * CLI entry point: binds the real process to `runCli` and returns the exit code. The first Ctrl-C or
+ * CLI entry point: binds the real process to `runCli` and returns the exit code. The first Ctrl-C, SIGHUP or
  * SIGTERM cancels the running operation (exit 130, temp files removed); a second one kills the process.
  */
 export const main = async (argv: readonly string[] = process.argv.slice(2)): Promise<number> => {

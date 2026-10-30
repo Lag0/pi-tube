@@ -61,9 +61,9 @@ describe("cancellation", () => {
     expect(existsSync(outputDir) ? readdirSync(outputDir) : []).toEqual([]);
   });
 
-  test.skipIf(process.platform === "win32")(
-    "Ctrl-C on the real bin kills yt-dlp and its children and exits 130",
-    async () => {
+  test.skipIf(process.platform === "win32").each(["SIGINT", "SIGHUP"] as const)(
+    "%s on the real bin kills yt-dlp and its children, leaves no partial file and exits 130",
+    async (signal) => {
       const { copyFileSync, chmodSync, mkdirSync } = await import("node:fs");
       mkdirSync(FAKE_YTDLP_DIR, { recursive: true });
       copyFileSync(path.resolve("test", "fixtures-process", "fake-yt-dlp.sh"), path.join(FAKE_YTDLP_DIR, "yt-dlp"));
@@ -102,14 +102,16 @@ describe("cancellation", () => {
       const pidFile = path.join(outputDir, "pids");
       await waitFor(() => existsSync(pidFile), 15_000);
       const [ytDlpPid, sleepPid] = readFileSync(pidFile, "utf8").trim().split(" ").map(Number);
-      child.kill("SIGINT");
+      child.kill(signal);
       const code = await exited;
 
       expect(code).toBe(130);
       expect(stderr).toContain("[CANCELLED]");
       expect(Date.now() - startedAt).toBeLessThan(20_000);
       await waitFor(() => !isAlive(ytDlpPid ?? 0) && !isAlive(sleepPid ?? 0), 5000);
-      expect(readdirSync(outputDir).filter((name) => /\.(mp3|mp4|m4a)$/.test(name))).toEqual([]);
+      expect(readdirSync(outputDir)).toEqual(["pids"]);
+      const tmpDir = path.join(workDir, ".pi-tube", "tmp");
+      expect(existsSync(tmpDir) ? readdirSync(tmpDir) : []).toEqual([]);
       rmSync(FAKE_YTDLP_DIR, { recursive: true, force: true });
     },
     30_000,
