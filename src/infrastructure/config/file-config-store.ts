@@ -26,7 +26,8 @@ const ioFailed = (action: "read" | "write", location: string, error: unknown): R
 const loadConfig = async (configFile: string): Promise<Result<LoadedConfig>> => {
   let text: string;
   try {
-    text = await readFile(configFile, "utf8");
+    // Editors on Windows may save a UTF-8 BOM; v2 tolerated it, so v3 does too.
+    text = (await readFile(configFile, "utf8")).replace(/^\uFEFF/, "");
   } catch (error) {
     if (errnoOf(error) === "ENOENT") return ok({ raw: {}, config: DEFAULT_CONFIG });
     return ioFailed("read", configFile, error);

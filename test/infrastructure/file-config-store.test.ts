@@ -43,6 +43,18 @@ describe("file config store", () => {
     expect(await createFileConfigStore(configFile).read()).toEqual({ success: true, data: DEFAULT_CONFIG });
   });
 
+  test("reads and updates a config saved with a UTF-8 BOM", async () => {
+    writeRaw(`﻿${JSON.stringify(SAMPLE)}`);
+    const store = createFileConfigStore(configFile);
+
+    expect(await store.read()).toEqual({ success: true, data: SAMPLE });
+    expect(await store.write({ ...SAMPLE, defaults: { provider: "deepgram" } })).toEqual({
+      success: true,
+      data: undefined,
+    });
+    expect(JSON.parse(readFileSync(configFile, "utf8")).defaults.provider).toBe("deepgram");
+  });
+
   test("round-trips a written config", async () => {
     const store = createFileConfigStore(configFile);
 
