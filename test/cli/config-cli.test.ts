@@ -110,7 +110,7 @@ describe("config command integration", () => {
       const invalid = runCli(["config", "provider", "env", "groq", "gsk_very_secret_token"], env);
 
       expect(invalid.exitCode).toBe(2);
-      expect(invalid.stderr.toString()).toContain("[CLI_CONTRACT_VIOLATION]");
+      expect(invalid.stderr.toString()).toContain("[INPUT_INVALID]");
       expect(invalid.stderr.toString()).toContain("environment variable name");
     } finally {
       rmSync(tempDir, { recursive: true, force: true });

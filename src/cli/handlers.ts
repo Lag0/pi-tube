@@ -106,8 +106,7 @@ export async function handleBaselineInput({
 }: BaselineInput): Promise<BaselineIntakeResult> {
   if (extraPositionals.length > 0) {
     throw new CliError("Only one positional input is supported in Phase 2.", {
-      code: "CLI_CONTRACT_VIOLATION",
-      exitCode: 2,
+      code: "INPUT_INVALID",
       guidance: [
         "Use one of: `pi-tube transcribe <input>`, `pi-tube transcribe <input> --provider <deepgram|groq|elevenlabs>`, `pi-tube transcribe <input> --json`.",
       ],
@@ -153,8 +152,7 @@ function defaultProviderEnvNames(provider: ConfigProviderId): string[] {
 function requireAuthProvider(provider: string | undefined): ConfigProviderId {
   if (!provider) {
     throw new CliError("Missing provider.", {
-      code: "CLI_CONTRACT_VIOLATION",
-      exitCode: 2,
+      code: "INPUT_INVALID",
       guidance: [
         "Use one of: `pi-tube auth login <deepgram|groq|elevenlabs>`, `pi-tube auth status`, `pi-tube auth logout <deepgram|groq|elevenlabs>`.",
       ],
@@ -168,8 +166,7 @@ export function handleAuthLogin({ provider, apiKey, options }: AuthLoginInput): 
   const normalizedApiKey = apiKey?.trim();
   if (!normalizedApiKey) {
     throw new CliError("Missing API key.", {
-      code: "CLI_CONTRACT_VIOLATION",
-      exitCode: 2,
+      code: "INPUT_INVALID",
       guidance: [
         "Use one of: `pi-tube auth login <deepgram|groq|elevenlabs>`, `pi-tube auth login <deepgram|groq|elevenlabs> --key <api_key>`.",
       ],
@@ -214,8 +211,7 @@ export function handleAuthStatus({ env = process.env, options }: AuthStatusInput
 export function handleDefaultsProvider({ provider, options }: DefaultsProviderInput): string {
   if (!provider) {
     throw new CliError("Missing default provider.", {
-      code: "CLI_CONTRACT_VIOLATION",
-      exitCode: 2,
+      code: "INPUT_INVALID",
       guidance: [
         "Use one of: `pi-tube defaults provider <deepgram|groq|elevenlabs>`, `pi-tube defaults language <code>`, `pi-tube defaults show`.",
       ],
@@ -230,8 +226,7 @@ export function handleDefaultsLanguage({ language, options }: DefaultsLanguageIn
   const normalizedLanguage = language?.trim();
   if (!normalizedLanguage) {
     throw new CliError("Missing default language.", {
-      code: "CLI_CONTRACT_VIOLATION",
-      exitCode: 2,
+      code: "INPUT_INVALID",
       guidance: [
         "Use one of: `pi-tube defaults provider <deepgram|groq|elevenlabs>`, `pi-tube defaults language <code>`, `pi-tube defaults show`.",
       ],
@@ -265,8 +260,7 @@ export async function handleDownloadCommand({
 }: DownloadCommandInput): Promise<DownloadResult> {
   if (!input) {
     throw new CliError("`download` expects a YouTube or Instagram URL.", {
-      code: "CLI_CONTRACT_VIOLATION",
-      exitCode: 2,
+      code: "INPUT_INVALID",
       guidance: [
         "Use one of: `pi-tube download <url>`, `pi-tube download <url> --audio`, `pi-tube download <url> --output <dir>`.",
       ],
@@ -275,8 +269,7 @@ export async function handleDownloadCommand({
 
   if (extraPositionals.length > 0) {
     throw new CliError("`download` accepts exactly one URL input.", {
-      code: "CLI_CONTRACT_VIOLATION",
-      exitCode: 2,
+      code: "INPUT_INVALID",
       guidance: [
         "Use one of: `pi-tube download <url>`, `pi-tube download <url> --audio`, `pi-tube download <url> --output <dir>`.",
       ],
@@ -316,8 +309,7 @@ function requireConfigKey(key: string): ConfigKey {
 
   if (!supportedKeys.has(key as ConfigKey)) {
     throw new CliError(`Unsupported config key: \`${key}\`.`, {
-      code: "CLI_CONTRACT_VIOLATION",
-      exitCode: 2,
+      code: "INPUT_INVALID",
       guidance: [`Use one of: ${Array.from(supportedKeys).join(", ")}.`],
     });
   }
@@ -377,8 +369,7 @@ function withConfigValidation<T>(operation: () => T): T {
 
     const detail = error instanceof Error ? error.message : "Invalid config operation.";
     throw new CliError(detail, {
-      code: "CLI_CONTRACT_VIOLATION",
-      exitCode: 2,
+      code: "INPUT_INVALID",
       guidance: ["Run `pi-tube config --help` for supported keys and aliases."],
     });
   }
@@ -391,8 +382,7 @@ function requireConfigProviderId(input: string): ConfigProviderId {
   }
 
   throw new CliError(`Unsupported provider: \`${input}\`.`, {
-    code: "CLI_CONTRACT_VIOLATION",
-    exitCode: 2,
+    code: "INPUT_INVALID",
     guidance: ["Use one of: deepgram, groq, elevenlabs."],
   });
 }
@@ -407,8 +397,7 @@ function requireEnvVarName(value: string): string {
   throw new CliError(
     "`config provider env` expects an environment variable name (for example `GROQ_API_KEY`), not a raw key value.",
     {
-      code: "CLI_CONTRACT_VIOLATION",
-      exitCode: 2,
+      code: "INPUT_INVALID",
       guidance: [
         "Use `pi-tube config provider env <provider> <ENV_VAR>` with an env var name.",
         "If you intentionally want plaintext storage, use `pi-tube config provider key <provider> <api_key>`.",
@@ -483,8 +472,7 @@ export function handleConfigCommand({ args, json, options }: ConfigCommandInput)
 
   if (!action) {
     throw new CliError("Missing `config` action. Use `set`, `get`, `list`, `provider`, or `language`.", {
-      code: "CLI_CONTRACT_VIOLATION",
-      exitCode: 2,
+      code: "INPUT_INVALID",
       guidance: [
         "Use `pi-tube config list`.",
         "Use `pi-tube config get <key>`.",
@@ -498,8 +486,7 @@ export function handleConfigCommand({ args, json, options }: ConfigCommandInput)
   if (action === "list") {
     if (rest.length !== 0) {
       throw new CliError("`config list` does not accept extra arguments.", {
-        code: "CLI_CONTRACT_VIOLATION",
-        exitCode: 2,
+        code: "INPUT_INVALID",
       });
     }
     const values = withConfigValidation(() => listConfigValues(options));
@@ -522,8 +509,7 @@ export function handleConfigCommand({ args, json, options }: ConfigCommandInput)
     const [rawKey, ...extra] = rest;
     if (!rawKey || extra.length > 0) {
       throw new CliError("`config get` expects exactly one key.", {
-        code: "CLI_CONTRACT_VIOLATION",
-        exitCode: 2,
+        code: "INPUT_INVALID",
       });
     }
 
@@ -536,8 +522,7 @@ export function handleConfigCommand({ args, json, options }: ConfigCommandInput)
     const [rawKey, rawValue, ...extra] = rest;
     if (!rawKey || !rawValue || extra.length > 0) {
       throw new CliError("`config set` expects exactly `<key> <value>`.", {
-        code: "CLI_CONTRACT_VIOLATION",
-        exitCode: 2,
+        code: "INPUT_INVALID",
       });
     }
 
@@ -551,8 +536,7 @@ export function handleConfigCommand({ args, json, options }: ConfigCommandInput)
     const [providerAction, ...providerArgs] = rest;
     if (!providerAction) {
       throw new CliError("`config provider` requires one of: set, get, env, key.", {
-        code: "CLI_CONTRACT_VIOLATION",
-        exitCode: 2,
+        code: "INPUT_INVALID",
       });
     }
 
@@ -560,8 +544,7 @@ export function handleConfigCommand({ args, json, options }: ConfigCommandInput)
       const [provider, ...extra] = providerArgs;
       if (!provider || extra.length > 0) {
         throw new CliError("`config provider set` expects exactly one provider.", {
-          code: "CLI_CONTRACT_VIOLATION",
-          exitCode: 2,
+          code: "INPUT_INVALID",
           guidance: ["Use `pi-tube config provider set <deepgram|groq|elevenlabs>`."],
         });
       }
@@ -576,8 +559,7 @@ export function handleConfigCommand({ args, json, options }: ConfigCommandInput)
     if (providerAction === "get") {
       if (providerArgs.length > 0) {
         throw new CliError("`config provider get` does not accept extra arguments.", {
-          code: "CLI_CONTRACT_VIOLATION",
-          exitCode: 2,
+          code: "INPUT_INVALID",
         });
       }
 
@@ -591,8 +573,7 @@ export function handleConfigCommand({ args, json, options }: ConfigCommandInput)
       if (!provider || !valueInput || extra.length > 0) {
         const actionHint = providerAction === "env" ? "<provider> <ENV_VAR>" : "<provider> <api_key>";
         throw new CliError(`\`config provider ${providerAction}\` expects exactly ${actionHint}.`, {
-          code: "CLI_CONTRACT_VIOLATION",
-          exitCode: 2,
+          code: "INPUT_INVALID",
         });
       }
 
@@ -608,8 +589,7 @@ export function handleConfigCommand({ args, json, options }: ConfigCommandInput)
     }
 
     throw new CliError(`Unsupported \`config provider\` action: \`${providerAction}\`.`, {
-      code: "CLI_CONTRACT_VIOLATION",
-      exitCode: 2,
+      code: "INPUT_INVALID",
       guidance: ["Use one of: set, get, env, key."],
     });
   }
@@ -618,8 +598,7 @@ export function handleConfigCommand({ args, json, options }: ConfigCommandInput)
     const [languageAction, ...languageArgs] = rest;
     if (!languageAction) {
       throw new CliError("`config language` requires one of: set, get.", {
-        code: "CLI_CONTRACT_VIOLATION",
-        exitCode: 2,
+        code: "INPUT_INVALID",
       });
     }
 
@@ -629,8 +608,7 @@ export function handleConfigCommand({ args, json, options }: ConfigCommandInput)
       const [valueInput, ...extra] = languageArgs;
       if (!valueInput || extra.length > 0) {
         throw new CliError("`config language set` expects exactly one language code.", {
-          code: "CLI_CONTRACT_VIOLATION",
-          exitCode: 2,
+          code: "INPUT_INVALID",
         });
       }
 
@@ -642,8 +620,7 @@ export function handleConfigCommand({ args, json, options }: ConfigCommandInput)
     if (languageAction === "get") {
       if (languageArgs.length > 0) {
         throw new CliError("`config language get` does not accept extra arguments.", {
-          code: "CLI_CONTRACT_VIOLATION",
-          exitCode: 2,
+          code: "INPUT_INVALID",
         });
       }
 
@@ -652,15 +629,13 @@ export function handleConfigCommand({ args, json, options }: ConfigCommandInput)
     }
 
     throw new CliError(`Unsupported \`config language\` action: \`${languageAction}\`.`, {
-      code: "CLI_CONTRACT_VIOLATION",
-      exitCode: 2,
+      code: "INPUT_INVALID",
       guidance: ["Use one of: set, get."],
     });
   }
 
   throw new CliError(`Unsupported config action: \`${action}\`.`, {
-    code: "CLI_CONTRACT_VIOLATION",
-    exitCode: 2,
+    code: "INPUT_INVALID",
     guidance: ["Use one of: set, get, list, provider, language."],
   });
 }

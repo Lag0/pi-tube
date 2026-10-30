@@ -128,7 +128,7 @@ function handleSetupSkills(options: SetupOptions): null {
 export function handleSetupCommand(subcommand: string | undefined, options: SetupOptions = {}): string | null {
   if (!subcommand) {
     throw new CliError("Missing or unsupported setup action.", {
-      code: "CLI_CONTRACT_VIOLATION",
+      code: "INPUT_INVALID",
       guidance: ["Use one of: `pi-tube setup yt-dlp`, `pi-tube setup skills`, `pi-tube setup mcp`."],
     });
   }
@@ -153,7 +153,7 @@ export function handleSetupCommand(subcommand: string | undefined, options: Setu
   }
 
   throw new CliError(`Unsupported setup action: \`${subcommand}\`.`, {
-    code: "CLI_CONTRACT_VIOLATION",
+    code: "INPUT_INVALID",
     guidance: ["Use one of: `pi-tube setup yt-dlp`, `pi-tube setup skills`, `pi-tube setup mcp`."],
   });
 }

@@ -33,7 +33,7 @@ describe("CLI identity and placeholders", () => {
     const stderr = result.stderr.toString();
 
     expect(result.exitCode).toBe(2);
-    expect(stderr).toContain("[CLI_CONTRACT_VIOLATION]");
+    expect(stderr).toContain("[INPUT_INVALID]");
     expect(stderr).toContain("Implicit transcription is no longer supported");
     expect(stderr).toContain("pi-tube transcribe <input>");
   });

@@ -195,8 +195,7 @@ describe("transcription service", () => {
         },
       }),
     ).rejects.toMatchObject({
-      code: "TRANSCRIPTION_PROVIDER_NOT_CONFIGURED",
-      exitCode: 2,
+      code: "PROVIDER_NOT_CONFIGURED",
     });
   });
 });

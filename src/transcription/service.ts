@@ -18,11 +18,11 @@ export interface TranscriptionServiceOptions {
 }
 
 const FALLBACK_ELIGIBLE_ERRORS = new Set([
-  "TRANSCRIPTION_PROVIDER_AUTH",
-  "TRANSCRIPTION_PROVIDER_RATE_LIMIT",
-  "TRANSCRIPTION_PROVIDER_UNAVAILABLE",
-  "TRANSCRIPTION_PROVIDER_FAILED",
-  "TRANSCRIPTION_PROVIDER_INVALID_RESPONSE",
+  "PROVIDER_AUTH",
+  "PROVIDER_RATE_LIMIT",
+  "PROVIDER_UNAVAILABLE",
+  "PROVIDER_FAILED",
+  "PROVIDER_INVALID_RESPONSE",
 ]);
 
 const PROVIDER_FALLBACK_ORDER: TranscriptionProviderId[] = ["deepgram", "groq", "elevenlabs"];
@@ -33,8 +33,7 @@ function parseProviderId(value: string): TranscriptionProviderId {
   }
 
   throw new CliError(`Unsupported transcription provider: \`${value}\`.`, {
-    code: "TRANSCRIPTION_PROVIDER_INVALID",
-    exitCode: 2,
+    code: "PROVIDER_INVALID",
     guidance: [
       "Use one of: `deepgram`, `groq`, `elevenlabs`.",
       "Set provider through `--provider` or PI_TUBE_TRANSCRIPTION_PROVIDER.",
@@ -191,8 +190,7 @@ export async function transcribeFromResolvedSource(
 
   if (candidates.length === 0) {
     throw new CliError("No transcription provider is configured with credentials.", {
-      code: "TRANSCRIPTION_PROVIDER_NOT_CONFIGURED",
-      exitCode: 2,
+      code: "PROVIDER_NOT_CONFIGURED",
       guidance: [
         "Configure at least one provider credential (`pi-tube auth login <provider>`).",
         "Run `pi-tube auth status` to inspect missing credentials.",

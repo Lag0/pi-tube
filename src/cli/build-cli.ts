@@ -1,5 +1,7 @@
 import { Command, CommanderError } from "commander";
-import { CliError, formatCliError } from "../errors/cli-errors.ts";
+import { exitCodeFor, formatErrorForCli } from "../adapters/cli/error-output.ts";
+import { toPiTubeError } from "../core/domain/errors.ts";
+import { CliError } from "../errors/cli-errors.ts";
 import { APP_VERSION, COMMAND_IDENTITY, getHelpDocument, type HelpTopic } from "./command-contract.ts";
 import {
   handleAuthLogin,
@@ -81,8 +83,7 @@ function resolveHelpTopic(positionals: string[]): HelpTopic {
   if (first === "help") {
     if (rest.length > 0) {
       throw new CliError("`help` accepts at most one command name.", {
-        code: "CLI_CONTRACT_VIOLATION",
-        exitCode: 2,
+        code: "INPUT_INVALID",
       });
     }
 
@@ -92,8 +93,7 @@ function resolveHelpTopic(positionals: string[]): HelpTopic {
     }
 
     throw new CliError(`Unsupported help topic: \`${second}\`.`, {
-      code: "CLI_CONTRACT_VIOLATION",
-      exitCode: 2,
+      code: "INPUT_INVALID",
       guidance: [
         `Supported help topics: ${COMMAND_IDENTITY} help, ${COMMAND_IDENTITY} help transcribe, ${COMMAND_IDENTITY} help download, ${COMMAND_IDENTITY} help auth, ${COMMAND_IDENTITY} help defaults, ${COMMAND_IDENTITY} help setup.`,
       ],
@@ -136,8 +136,7 @@ function guidanceForCommand(command: string | undefined): string[] {
 
 function commanderErrorToCliError(error: CommanderError, argv: string[]): CliError {
   return new CliError(error.message, {
-    code: "CLI_CONTRACT_VIOLATION",
-    exitCode: error.exitCode === 0 ? 0 : 2,
+    code: "INPUT_INVALID",
     guidance: guidanceForCommand(argv[0]),
   });
 }
@@ -331,8 +330,7 @@ function runAuthAction(action: Extract<CliAction, { kind: "auth" }>): number {
       return 0;
     default:
       throw new CliError("Missing or unsupported auth action.", {
-        code: "CLI_CONTRACT_VIOLATION",
-        exitCode: 2,
+        code: "INPUT_INVALID",
         guidance: guidanceForCommand("auth"),
       });
   }
@@ -351,8 +349,7 @@ function runDefaultsAction(action: Extract<CliAction, { kind: "defaults" }>): nu
       return 0;
     default:
       throw new CliError("Missing or unsupported defaults action.", {
-        code: "CLI_CONTRACT_VIOLATION",
-        exitCode: 2,
+        code: "INPUT_INVALID",
         guidance: guidanceForCommand("defaults"),
       });
   }
@@ -378,15 +375,13 @@ function runConfigAction(action: Extract<CliAction, { kind: "config" }>): number
 function runRootAction(action: Extract<CliAction, { kind: "root" }>): number {
   if (action.input) {
     throw new CliError("Implicit transcription is no longer supported.", {
-      code: "CLI_CONTRACT_VIOLATION",
-      exitCode: 2,
+      code: "INPUT_INVALID",
       guidance: guidanceForCommand(undefined),
     });
   }
 
   throw new CliError("Missing command.", {
-    code: "CLI_CONTRACT_VIOLATION",
-    exitCode: 2,
+    code: "INPUT_INVALID",
     guidance: guidanceForCommand(undefined),
   });
 }
@@ -419,9 +414,9 @@ export async function runCli(argv: string[]): Promise<number> {
       case "root":
         return runRootAction(action);
     }
-  } catch (error) {
-    const formatted = formatCliError(error);
-    console.error(formatted.message);
-    return formatted.exitCode;
+  } catch (caught) {
+    const error = toPiTubeError(caught);
+    console.error(formatErrorForCli(error));
+    return exitCodeFor(error);
   }
 }

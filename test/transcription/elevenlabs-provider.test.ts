@@ -51,7 +51,7 @@ describe("elevenlabs provider", () => {
     ]);
   });
 
-  test("maps auth failures to TRANSCRIPTION_PROVIDER_AUTH", async () => {
+  test("maps auth failures to PROVIDER_AUTH", async () => {
     const provider = createElevenLabsProvider({
       client: {
         async convert() {
@@ -63,11 +63,11 @@ describe("elevenlabs provider", () => {
     });
 
     await expect(provider.transcribe(request)).rejects.toMatchObject({
-      code: "TRANSCRIPTION_PROVIDER_AUTH",
+      code: "PROVIDER_AUTH",
     });
   });
 
-  test("maps rate limiting to TRANSCRIPTION_PROVIDER_RATE_LIMIT", async () => {
+  test("maps rate limiting to PROVIDER_RATE_LIMIT", async () => {
     const provider = createElevenLabsProvider({
       client: {
         async convert() {
@@ -79,11 +79,11 @@ describe("elevenlabs provider", () => {
     });
 
     await expect(provider.transcribe(request)).rejects.toMatchObject({
-      code: "TRANSCRIPTION_PROVIDER_RATE_LIMIT",
+      code: "PROVIDER_RATE_LIMIT",
     });
   });
 
-  test("maps malformed provider payload to TRANSCRIPTION_PROVIDER_INVALID_RESPONSE", async () => {
+  test("maps malformed provider payload to PROVIDER_INVALID_RESPONSE", async () => {
     const provider = createElevenLabsProvider({
       client: {
         async convert() {
@@ -93,7 +93,7 @@ describe("elevenlabs provider", () => {
     });
 
     await expect(provider.transcribe(request)).rejects.toMatchObject({
-      code: "TRANSCRIPTION_PROVIDER_INVALID_RESPONSE",
+      code: "PROVIDER_INVALID_RESPONSE",
     });
   });
 });

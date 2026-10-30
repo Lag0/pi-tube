@@ -110,7 +110,7 @@ describe("setup command", () => {
     });
     const stderr = result.stderr.toString();
 
-    expect(result.exitCode).toBe(2);
+    expect(result.exitCode).toBe(3);
     expect(stderr).toContain("[SETUP_COMMAND_FAILED]");
     expect(stderr).toContain("Automatic yt-dlp install is only supported on macOS with Homebrew");
     expect(stderr).toContain("pipx install yt-dlp");
@@ -121,7 +121,7 @@ describe("setup command", () => {
     const stderr = result.stderr.toString();
 
     expect(result.exitCode).toBe(2);
-    expect(stderr).toContain("[CLI_NOT_IMPLEMENTED]");
+    expect(stderr).toContain("[NOT_IMPLEMENTED]");
     expect(stderr).toContain("setup mcp");
   });
 });

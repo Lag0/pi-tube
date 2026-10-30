@@ -21,8 +21,7 @@ export async function resolveSource(input: string, deps: ResolverDeps = {}): Pro
   const normalizedInput = input.trim();
   if (normalizedInput.length === 0) {
     throw new CliError("Input cannot be empty.", {
-      code: "CLI_CONTRACT_VIOLATION",
-      exitCode: 2,
+      code: "INPUT_INVALID",
       guidance: [
         "Use one of: `pi-tube transcribe <input>`, `pi-tube transcribe <input> --provider <deepgram|groq|elevenlabs>`, `pi-tube transcribe <input> --json`.",
       ],
@@ -46,10 +45,9 @@ export async function resolveSource(input: string, deps: ResolverDeps = {}): Pro
       return resolveLocalFile(normalizedInput);
     case "unsupported_url":
       throw createUnsupportedUrlNotDirectMediaError(normalizedInput);
-    default:
-      throw new CliError("Unable to classify source input.", {
-        code: "INTAKE_CLASSIFICATION_FAILED",
-        exitCode: 2,
-      });
+    default: {
+      const unreachable: never = classification;
+      throw new Error(`Unhandled source classification: ${String(unreachable)}`);
+    }
   }
 }

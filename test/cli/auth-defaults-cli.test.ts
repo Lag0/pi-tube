@@ -39,7 +39,7 @@ describe("auth and defaults commands", () => {
 
       expect(login.exitCode).toBe(2);
       expect(login.stdout.toString()).not.toContain("Paste provider API key");
-      expect(login.stderr.toString()).toContain("[CLI_CONTRACT_VIOLATION] Missing provider.");
+      expect(login.stderr.toString()).toContain("[INPUT_INVALID] Missing provider.");
       expect(login.stderr.toString()).toContain("pi-tube auth login <deepgram|groq|elevenlabs>");
     }));
 

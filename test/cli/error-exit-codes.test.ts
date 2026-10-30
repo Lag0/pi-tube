@@ -40,9 +40,9 @@ describe("CLI error exits and formatting", () => {
     const stderr = result.stderr.toString();
 
     expect(result.exitCode).toBe(2);
-    expect(stderr).toContain("[CLI_CONTRACT_VIOLATION]");
+    expect(stderr).toContain("[INPUT_INVALID]");
     expect(stderr).toContain(
-      "guidance: Use one of: `pi-tube transcribe <input>`, `pi-tube transcribe <input> --provider <deepgram|groq|elevenlabs>`, `pi-tube transcribe <input> --json`.",
+      "hint: Use one of: `pi-tube transcribe <input>`, `pi-tube transcribe <input> --provider <deepgram|groq|elevenlabs>`, `pi-tube transcribe <input> --json`.",
     );
   });
 
@@ -51,36 +51,36 @@ describe("CLI error exits and formatting", () => {
       {
         args: ["sample-input"],
         expected:
-          "guidance: Use one of: `pi-tube transcribe <input>`, `pi-tube download <url>`, `pi-tube auth status`, `pi-tube defaults show`, `pi-tube setup yt-dlp`.",
+          "hint: Use one of: `pi-tube transcribe <input>`, `pi-tube download <url>`, `pi-tube auth status`, `pi-tube defaults show`, `pi-tube setup yt-dlp`.",
       },
       {
         args: ["auth"],
         expected:
-          "guidance: Use one of: `pi-tube auth login <deepgram|groq|elevenlabs>`, `pi-tube auth status`, `pi-tube auth logout <deepgram|groq|elevenlabs>`.",
+          "hint: Use one of: `pi-tube auth login <deepgram|groq|elevenlabs>`, `pi-tube auth status`, `pi-tube auth logout <deepgram|groq|elevenlabs>`.",
       },
       {
         args: ["auth", "login"],
         expected:
-          "guidance: Use one of: `pi-tube auth login <deepgram|groq|elevenlabs>`, `pi-tube auth status`, `pi-tube auth logout <deepgram|groq|elevenlabs>`.",
+          "hint: Use one of: `pi-tube auth login <deepgram|groq|elevenlabs>`, `pi-tube auth status`, `pi-tube auth logout <deepgram|groq|elevenlabs>`.",
       },
       {
         args: ["defaults"],
         expected:
-          "guidance: Use one of: `pi-tube defaults provider <deepgram|groq|elevenlabs>`, `pi-tube defaults language <code>`, `pi-tube defaults show`.",
+          "hint: Use one of: `pi-tube defaults provider <deepgram|groq|elevenlabs>`, `pi-tube defaults language <code>`, `pi-tube defaults show`.",
       },
       {
         args: ["setup"],
-        expected: "guidance: Use one of: `pi-tube setup yt-dlp`, `pi-tube setup skills`, `pi-tube setup mcp`.",
+        expected: "hint: Use one of: `pi-tube setup yt-dlp`, `pi-tube setup skills`, `pi-tube setup mcp`.",
       },
       {
         args: ["download"],
         expected:
-          "guidance: Use one of: `pi-tube download <url>`, `pi-tube download <url> --audio`, `pi-tube download <url> --output <dir>`.",
+          "hint: Use one of: `pi-tube download <url>`, `pi-tube download <url> --audio`, `pi-tube download <url> --output <dir>`.",
       },
       {
         args: ["transcribe"],
         expected:
-          "guidance: Use one of: `pi-tube transcribe <input>`, `pi-tube transcribe <input> --provider <deepgram|groq|elevenlabs>`, `pi-tube transcribe <input> --json`.",
+          "hint: Use one of: `pi-tube transcribe <input>`, `pi-tube transcribe <input> --provider <deepgram|groq|elevenlabs>`, `pi-tube transcribe <input> --json`.",
       },
     ];
 
@@ -96,11 +96,10 @@ describe("CLI error exits and formatting", () => {
     const stderr = result.stderr.toString();
     const lines = stderr.trim().split("\n");
 
-    expect(result.exitCode).toBe(2);
+    expect(result.exitCode).toBe(5);
+    expect(lines).toHaveLength(2);
     expect(lines[0]).toContain("[UNSUPPORTED_URL_NOT_DIRECT_MEDIA]");
-    for (const line of lines.slice(1)) {
-      expect(line.startsWith("guidance: ")).toBe(true);
-    }
+    expect(lines[1]?.startsWith("hint: ")).toBe(true);
   });
 
   test("returns deterministic provider auth failure code", () => {
@@ -108,8 +107,8 @@ describe("CLI error exits and formatting", () => {
       PI_TUBE_TEST_DEEPGRAM_ERROR: "auth",
     });
 
-    expect(result.exitCode).toBe(2);
-    expect(result.stderr.toString()).toContain("[TRANSCRIPTION_PROVIDER_AUTH]");
+    expect(result.exitCode).toBe(4);
+    expect(result.stderr.toString()).toContain("[PROVIDER_AUTH]");
   });
 
   test("keeps unexpected failures distinguishable with exit code 1", () => {
@@ -118,7 +117,7 @@ describe("CLI error exits and formatting", () => {
     });
 
     expect(result.exitCode).toBe(1);
-    expect(result.stderr.toString()).toContain("[CLI_UNEXPECTED]");
+    expect(result.stderr.toString()).toContain("[UNEXPECTED]");
   });
 
   test("keeps config validation deterministic for friendly and legacy routes", () => {
@@ -127,20 +126,20 @@ describe("CLI error exits and formatting", () => {
     const missingFriendlyValue = runCli(["config", "provider", "env", "groq"]);
 
     expect(friendlyInvalidProvider.exitCode).toBe(2);
-    expect(friendlyInvalidProvider.stderr.toString()).toContain("[CLI_CONTRACT_VIOLATION]");
+    expect(friendlyInvalidProvider.stderr.toString()).toContain("[INPUT_INVALID]");
 
     expect(legacyInvalidProvider.exitCode).toBe(2);
-    expect(legacyInvalidProvider.stderr.toString()).toContain("[CLI_CONTRACT_VIOLATION]");
+    expect(legacyInvalidProvider.stderr.toString()).toContain("[INPUT_INVALID]");
 
     expect(missingFriendlyValue.exitCode).toBe(2);
-    expect(missingFriendlyValue.stderr.toString()).toContain("[CLI_CONTRACT_VIOLATION]");
+    expect(missingFriendlyValue.stderr.toString()).toContain("[INPUT_INVALID]");
   });
 
   test("keeps setup automation flags scoped to setup command", () => {
     const misplacedSetupFlag = runCli(["transcribe", mediaUrl, "--yes"]);
 
     expect(misplacedSetupFlag.exitCode).toBe(2);
-    expect(misplacedSetupFlag.stderr.toString()).toContain("[CLI_CONTRACT_VIOLATION]");
+    expect(misplacedSetupFlag.stderr.toString()).toContain("[INPUT_INVALID]");
   });
 });
 

@@ -78,7 +78,7 @@ describe("transcription provider contract", () => {
         provider: "unknown",
         providers: makeRegistry(),
       }),
-    ).rejects.toMatchObject({ code: "TRANSCRIPTION_PROVIDER_INVALID" });
+    ).rejects.toMatchObject({ code: "PROVIDER_INVALID" });
   });
 
   test("throws stable error when selected provider is not registered", async () => {
@@ -87,6 +87,6 @@ describe("transcription provider contract", () => {
         provider: "deepgram",
         providers: {},
       }),
-    ).rejects.toMatchObject({ code: "TRANSCRIPTION_PROVIDER_NOT_CONFIGURED" });
+    ).rejects.toMatchObject({ code: "PROVIDER_NOT_CONFIGURED" });
   });
 });

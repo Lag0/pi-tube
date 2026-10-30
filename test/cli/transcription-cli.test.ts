@@ -114,8 +114,8 @@ describe("CLI transcription integration", () => {
       PI_TUBE_TEST_DEEPGRAM_ERROR: "auth",
     });
 
-    expect(result.exitCode).toBe(2);
-    expect(result.stderr.toString()).toContain("[TRANSCRIPTION_PROVIDER_AUTH]");
+    expect(result.exitCode).toBe(4);
+    expect(result.stderr.toString()).toContain("[PROVIDER_AUTH]");
   });
 
   test("maps provider rate-limit failure to stable code with non-zero exit", () => {
@@ -123,8 +123,8 @@ describe("CLI transcription integration", () => {
       PI_TUBE_TEST_GROQ_ERROR: "rate_limit",
     });
 
-    expect(result.exitCode).toBe(2);
-    expect(result.stderr.toString()).toContain("[TRANSCRIPTION_PROVIDER_RATE_LIMIT]");
+    expect(result.exitCode).toBe(4);
+    expect(result.stderr.toString()).toContain("[PROVIDER_RATE_LIMIT]");
   });
 
   test("maps generic provider failure to stable code with non-zero exit", () => {
@@ -132,8 +132,8 @@ describe("CLI transcription integration", () => {
       PI_TUBE_TEST_DEEPGRAM_ERROR: "failed",
     });
 
-    expect(result.exitCode).toBe(2);
-    expect(result.stderr.toString()).toContain("[TRANSCRIPTION_PROVIDER_FAILED]");
+    expect(result.exitCode).toBe(4);
+    expect(result.stderr.toString()).toContain("[PROVIDER_FAILED]");
   });
 
   test("maps provider unavailable failure to stable code with non-zero exit", () => {
@@ -141,8 +141,8 @@ describe("CLI transcription integration", () => {
       PI_TUBE_TEST_GROQ_ERROR: "unavailable",
     });
 
-    expect(result.exitCode).toBe(2);
-    expect(result.stderr.toString()).toContain("[TRANSCRIPTION_PROVIDER_UNAVAILABLE]");
+    expect(result.exitCode).toBe(4);
+    expect(result.stderr.toString()).toContain("[PROVIDER_UNAVAILABLE]");
   });
 
   test("maps provider invalid response to stable code with non-zero exit", () => {
@@ -150,8 +150,8 @@ describe("CLI transcription integration", () => {
       PI_TUBE_TEST_GROQ_RESPONSE: JSON.stringify({ text: "" }),
     });
 
-    expect(result.exitCode).toBe(2);
-    expect(result.stderr.toString()).toContain("[TRANSCRIPTION_PROVIDER_INVALID_RESPONSE]");
+    expect(result.exitCode).toBe(4);
+    expect(result.stderr.toString()).toContain("[PROVIDER_INVALID_RESPONSE]");
   });
 
   test("fails fast when no provider credentials are configured", () => {
@@ -162,8 +162,8 @@ describe("CLI transcription integration", () => {
       ELEVEN_API_KEY: "",
     });
 
-    expect(result.exitCode).toBe(2);
-    expect(result.stderr.toString()).toContain("[TRANSCRIPTION_PROVIDER_NOT_CONFIGURED]");
+    expect(result.exitCode).toBe(4);
+    expect(result.stderr.toString()).toContain("[PROVIDER_NOT_CONFIGURED]");
     expect(result.stderr.toString()).toContain("auth status");
   });
 

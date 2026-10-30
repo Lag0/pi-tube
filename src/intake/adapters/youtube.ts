@@ -1,4 +1,3 @@
-import { CliError } from "../../errors/cli-errors.ts";
 import { isYouTubeUrl, tryParseHttpUrl } from "../policy.ts";
 import { resolveYouTubeWithYtDlp } from "../tools/yt-dlp.ts";
 import type { ResolvedSource } from "../types.ts";
@@ -12,11 +11,7 @@ export async function resolveYouTubeSource(input: string, deps: YouTubeAdapterDe
   const normalizedUrl = parsed?.toString() ?? input;
 
   if (!isYouTubeUrl(normalizedUrl)) {
-    throw new CliError(`Input is not a supported YouTube URL: \`${input}\`.`, {
-      code: "YOUTUBE_URL_INVALID",
-      exitCode: 2,
-      guidance: ["Use a valid public YouTube watch, short, or share URL."],
-    });
+    throw new Error("resolveYouTubeSource called with a non-YouTube URL");
   }
 
   const resolveMedia = deps.resolveMedia ?? resolveYouTubeWithYtDlp;
