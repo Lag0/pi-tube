@@ -32,6 +32,10 @@ export const ERROR_CATALOG = {
     category: "config",
     hint: "Check that your user can read and write the config file and its directory.",
   },
+  CANCELLED: {
+    category: "cancelled",
+    hint: "Run the command again to retry.",
+  },
   SETUP_COMMAND_FAILED: {
     category: "dependency",
     hint: "Check the command output above and run it manually.",

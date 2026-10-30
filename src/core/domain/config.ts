@@ -1,4 +1,5 @@
 import { createError } from "./errors.ts";
+import { findProvider, type ProviderDescriptor } from "./providers.ts";
 import { err, ok, type Result } from "./result.ts";
 
 /** Current config file format version. */
@@ -75,4 +76,79 @@ export const parseConfig = (raw: unknown, location: string): Result<PiTubeConfig
   }
 
   return ok({ version, defaults: parsedDefaults.data, providers: Object.fromEntries(parsedProviders) });
+};
+
+const API_KEY_PATTERN = /^providers\.([^.]+)\.api_key$/;
+const API_KEY_ENV_PATTERN = /^providers\.([^.]+)\.api_key_env$/;
+const ENV_NAME_PATTERN = /^[A-Z_][A-Z0-9_]*$/;
+
+/** Keys that `config get|set|list` accept. API keys are not among them: only `auth login` stores one. */
+export const configKeysFor = (descriptors: readonly ProviderDescriptor[]): readonly string[] => [
+  "defaults.provider",
+  "defaults.language",
+  ...descriptors.map((descriptor) => `providers.${descriptor.id}.api_key_env`),
+];
+
+/** Checks that `key` is one of `configKeysFor(descriptors)`; an API key path gets a hint to `auth login`. */
+export const checkConfigKey = (key: string, descriptors: readonly ProviderDescriptor[]): Result<string> => {
+  const trimmed = key.trim();
+  const apiKeyProvider = API_KEY_PATTERN.exec(trimmed)?.[1];
+  if (apiKeyProvider !== undefined) {
+    return err(
+      createError("INPUT_INVALID", "API keys cannot be read or set with `config`.", {
+        hint: `Use \`pi-tube auth login ${apiKeyProvider}\`; API keys are never passed as arguments.`,
+      }),
+    );
+  }
+  const keys = configKeysFor(descriptors);
+  if (keys.includes(trimmed)) return ok(trimmed);
+  return err(
+    createError("INPUT_INVALID", `Unknown config key \`${trimmed}\`.`, { hint: `Use one of: ${keys.join(", ")}.` }),
+  );
+};
+
+/** Value of a key from `configKeysFor`; `undefined` when unset. */
+export const getConfigValue = (config: PiTubeConfig, key: string): string | undefined => {
+  if (key === "defaults.provider") return config.defaults.provider;
+  if (key === "defaults.language") return config.defaults.language;
+  const providerId = API_KEY_ENV_PATTERN.exec(key)?.[1];
+  return providerId === undefined ? undefined : config.providers[providerId]?.api_key_env;
+};
+
+/** Returns `config` with `key` set to the normalized `value`; values are never echoed in errors. */
+export const applyConfigValue = (
+  config: PiTubeConfig,
+  key: string,
+  value: string,
+  descriptors: readonly ProviderDescriptor[],
+): Result<PiTubeConfig> => {
+  const checkedKey = checkConfigKey(key, descriptors);
+  if (!checkedKey.success) return checkedKey;
+  const trimmedValue = value.trim();
+  if (trimmedValue.length === 0) {
+    return err(createError("INPUT_INVALID", `A value for \`${checkedKey.data}\` is required.`));
+  }
+
+  if (checkedKey.data === "defaults.provider") {
+    const provider = findProvider(descriptors, trimmedValue);
+    if (!provider.success) return provider;
+    return ok({ ...config, defaults: { ...config.defaults, provider: provider.data.id } });
+  }
+  if (checkedKey.data === "defaults.language") {
+    return ok({ ...config, defaults: { ...config.defaults, language: trimmedValue.toLowerCase() } });
+  }
+
+  const providerId = API_KEY_ENV_PATTERN.exec(checkedKey.data)?.[1];
+  if (providerId === undefined) throw new Error(`configKeysFor returned an unhandled key: ${checkedKey.data}`);
+  if (!ENV_NAME_PATTERN.test(trimmedValue)) {
+    return err(
+      createError("INPUT_INVALID", `\`${checkedKey.data}\` must be an environment variable name.`, {
+        hint: "Use uppercase letters, digits and underscores, such as `MY_GROQ_KEY`.",
+      }),
+    );
+  }
+  return ok({
+    ...config,
+    providers: { ...config.providers, [providerId]: { ...config.providers[providerId], api_key_env: trimmedValue } },
+  });
 };

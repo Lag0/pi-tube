@@ -1,4 +1,4 @@
-import { type ErrorCategory, getErrorCategory, type PiTubeError } from "../../core/domain/errors.ts";
+import { type ErrorCategory, getErrorCategory, type PiTubeError } from "../../core/index.ts";
 
 /** Process exit code for each error category. */
 export const EXIT_CODE_BY_CATEGORY: Readonly<Record<ErrorCategory, number>> = {
