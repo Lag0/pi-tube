@@ -3,11 +3,11 @@ import { createError, toPiTubeError } from "../../core/index.ts";
 import { APP_VERSION, COMMAND_IDENTITY, getHelpDocument, HELP_TOPICS, type HelpTopic } from "./command-contract.ts";
 import { runAuth, runProviders } from "./commands/account.ts";
 import { runConfig, runDefaults } from "./commands/config.ts";
+import { runDownload } from "./commands/download.ts";
 import { runTranscribe } from "./commands/transcribe.ts";
 import { CliFailure, exitCodeFor, formatErrorForCli } from "./error-output.ts";
 import { type HelpDocument, renderHelpDocument } from "./help-renderer.ts";
 import type { CliDeps } from "./io.ts";
-import { createProgressReporter } from "./progress.ts";
 import { handleSetupCommand } from "./setup.ts";
 import { hintForCommand } from "./usage-hints.ts";
 
@@ -44,7 +44,7 @@ interface TranscribeOptions extends JsonCommandOptions {
   timestamps?: boolean;
 }
 
-interface DownloadOptions {
+interface DownloadOptions extends JsonCommandOptions {
   audio?: boolean;
   output?: string;
 }
@@ -169,7 +169,8 @@ function createProgram(setAction: (action: CliAction) => void): Command {
     .argument("[input]", "YouTube or Instagram URL")
     .argument("[extraPositionals...]", "extra URL inputs")
     .option("--audio", "Download audio only.")
-    .option("--output <dir>", "Output directory.")
+    .option("--output <dir>", "Output directory (default: ~/.pi-tube/downloads).")
+    .option("--json", "Print the result as JSON on stdout.")
     .action((input: string | undefined, extraPositionals: string[], options: DownloadOptions) => {
       setAction({ kind: "download", input, extraPositionals, options, rootOptions: program.opts<RootOptions>() });
     });
@@ -249,30 +250,6 @@ function parseAction(argv: string[]): CliAction {
   return action ?? { kind: "root", input: undefined, extraPositionals: [], options: program.opts<RootOptions>() };
 }
 
-async function runDownloadAction(
-  action: Extract<CliAction, { kind: "download" }>,
-  { app, io }: CliDeps,
-): Promise<number> {
-  const progress = createProgressReporter({ color: action.rootOptions.color !== false, stream: io.progressStream });
-  const startTime = Date.now();
-  try {
-    const result = await app.legacy.download({
-      input: action.input,
-      extraPositionals: action.extraPositionals,
-      audio: Boolean(action.options.audio),
-      outputDir: action.options.output,
-      onProgress: (step) => progress.update(step),
-    });
-    progress.succeed(result.outputPath, Date.now() - startTime);
-    io.writeOut(`[DOWNLOAD_FILE] ${result.outputPath}`);
-    io.writeOut(`[DOWNLOAD_FILE_URI] ${result.outputUri}`);
-    return 0;
-  } catch (error) {
-    progress.fail("Failed");
-    throw error;
-  }
-}
-
 function runSetupAction(action: Extract<CliAction, { kind: "setup" }>, { io, system }: CliDeps): number {
   const output = handleSetupCommand(action.subcommand, {
     global: action.options.global,
@@ -323,7 +300,14 @@ export const runCli = async (argv: readonly string[], deps: CliDeps): Promise<nu
           color: action.rootOptions.color !== false,
         });
       case "download":
-        return await runDownloadAction(action, deps);
+        return await runDownload(deps, {
+          input: action.input,
+          extraPositionals: action.extraPositionals,
+          audio: Boolean(action.options.audio),
+          output: action.options.output,
+          json: Boolean(action.options.json),
+          color: action.rootOptions.color !== false,
+        });
       case "providers":
         return await runProviders(deps, { json: Boolean(action.options.json) });
       case "auth":

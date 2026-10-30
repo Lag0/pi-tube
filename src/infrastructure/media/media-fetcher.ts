@@ -183,14 +183,15 @@ export const createMediaFetcher = (deps: MediaFetcherDeps): MediaFetcher => {
     },
 
     download: async (target, request, options) => {
-      const created = await makeDir(request.outputDir);
+      const outputDir = path.resolve(deps.cwd, request.outputDir);
+      const created = await makeDir(outputDir);
       if (!created.success) return created;
       const format =
         request.media === "audio"
           ? ["-f", "bestaudio/best", "-x", "--audio-format", "mp3"]
           : ["-f", "bestvideo*+bestaudio/best", "--merge-output-format", "mp4"];
       const stdout = await ytDlp(
-        ["-P", request.outputDir, "-o", DOWNLOAD_TEMPLATE, "--print", "after_move:filepath", ...format],
+        ["-P", outputDir, "-o", DOWNLOAD_TEMPLATE, "--print", "after_move:filepath", ...format],
         "download",
         target.url,
         MEDIA_TIMEOUT_MS,

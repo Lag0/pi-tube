@@ -1,5 +1,3 @@
-import path from "node:path";
-import { handleDownloadCommand, type ProgressStep } from "./cli/handlers.ts";
 import {
   type ConfigValue,
   type ConfigValueSet,
@@ -41,25 +39,6 @@ export interface AppEnvironment {
   readonly homedir: () => string;
 }
 
-/** Where a legacy command wrote its file. */
-export interface LegacyOutput {
-  readonly outputPath: string;
-  readonly outputUri: string;
-}
-
-export interface LegacyDownloadRequest {
-  readonly input?: string;
-  readonly extraPositionals: string[];
-  readonly audio: boolean;
-  readonly outputDir?: string;
-  readonly onProgress?: (step: ProgressStep) => void;
-}
-
-/** Download on the pre-v3 pipeline until it moves to the core. Failures throw. */
-export interface LegacyPipeline {
-  download(request: LegacyDownloadRequest): Promise<LegacyOutput>;
-}
-
 /** Test seams: fake providers, a fake media fetcher, or a fake process runner under the real fetcher. */
 export interface AppOverrides {
   readonly stt?: Readonly<Record<string, SttProvider>>;
@@ -78,10 +57,9 @@ export interface App {
   readonly listConfigValues: UseCase<Record<string, never>, ConfigValues>;
   readonly transcribe: UseCase<TranscribeInput, TranscribeOutput>;
   readonly downloadMedia: UseCase<DownloadMediaInput, DownloadMediaOutput>;
-  readonly legacy: LegacyPipeline;
 }
 
-/** Wires the core, the infrastructure and the legacy pipeline for one environment. */
+/** Wires the core and the infrastructure for one environment. */
 export const createApp = (environment: AppEnvironment, overrides: AppOverrides = {}): App => {
   const { env, cwd } = environment;
   const paths = resolvePiTubePaths(environment);
@@ -90,13 +68,6 @@ export const createApp = (environment: AppEnvironment, overrides: AppOverrides =
     overrides.media ?? createMediaFetcher({ env, cwd, tmpDir: paths.tmpDir, run: overrides.runProcess ?? runProcess });
   const accountDeps = { configStore, env, providers: PROVIDER_DESCRIPTORS };
   const configDeps = { configStore, providers: PROVIDER_DESCRIPTORS };
-
-  const legacy: LegacyPipeline = {
-    download: async (request) => {
-      const { outputPath, outputUri } = await handleDownloadCommand({ ...request, env, cwd });
-      return { outputPath, outputUri };
-    },
-  };
 
   return {
     providers: PROVIDER_DESCRIPTORS,
@@ -115,7 +86,6 @@ export const createApp = (environment: AppEnvironment, overrides: AppOverrides =
       store: createFileTranscriptStore(paths.outputDir),
       now: () => new Date(),
     }),
-    downloadMedia: createDownloadMedia({ media, defaultOutputDir: path.join(paths.home, "downloads") }),
-    legacy,
+    downloadMedia: createDownloadMedia({ media, defaultOutputDir: paths.downloadsDir }),
   };
 };

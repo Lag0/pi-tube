@@ -84,10 +84,6 @@ export const ERROR_CATALOG = {
     category: "source",
     hint: "Check that the video is public and opens in a browser, then retry.",
   },
-  INSTAGRAM_URL_INVALID: {
-    category: "source",
-    hint: "Use a public Instagram post, reel or video URL.",
-  },
   INSTAGRAM_AUTH_REQUIRED: {
     category: "source",
     hint: "pi-tube supports public Instagram URLs only.",
@@ -142,7 +138,7 @@ export const isErrorCode = (value: unknown): value is ErrorCode =>
 
 /**
  * Normalizes anything thrown into a `PiTubeError`. An `Error` carrying a known `code` and a string
- * `hint` (such as the legacy `CliError`) keeps both; anything else becomes `UNEXPECTED`, without a stack.
+ * `hint` (such as the CLI adapter's `CliFailure`) keeps both; anything else becomes `UNEXPECTED`, without a stack.
  */
 export const toPiTubeError = (error: unknown): PiTubeError => {
   if (error instanceof Error) {

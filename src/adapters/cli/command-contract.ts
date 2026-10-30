@@ -126,7 +126,8 @@ const DOWNLOAD_HELP_DOCUMENT: HelpDocument = {
   usage: [`${COMMAND_IDENTITY} download <url> [--audio] [--output <dir>]`],
   options: [
     { term: "--audio", description: "Download audio only instead of video." },
-    { term: "--output <dir>", description: "Output directory (default: ./downloads)." },
+    { term: "--output <dir>", description: "Output directory (default: ~/.pi-tube/downloads)." },
+    { term: "--json", description: "Print the result as JSON on stdout." },
   ],
   examples: [
     `${COMMAND_IDENTITY} download "https://youtube.com/watch?v=dQw4w9WgXcQ"`,

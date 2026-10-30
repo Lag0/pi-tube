@@ -9,8 +9,6 @@ const INHERITED_STDIN = /stdin:\s*"inherit"|stdio:\s*"inherit"|stdio:\s*\[\s*"in
 const INTERACTIVE_PASSTHROUGH = new Set(["src/infrastructure/interactive-command.ts"]);
 const SPAWNS_PROCESS = /["'](node:)?child_process["']|Bun\.spawn(Sync)?\b/;
 const SPAWNERS = new Set(["src/infrastructure/process/run-process.ts", "src/infrastructure/interactive-command.ts"]);
-// Removed in Task 7 of phase 1b.
-const LEGACY_SPAWNERS = new Set(["src/intake/tools/yt-dlp.ts", "src/download/service.ts"]);
 
 function listTypeScriptFiles(dir: string): string[] {
   return readdirSync(dir, { recursive: true, encoding: "utf8" })
@@ -34,7 +32,7 @@ describe("child process hygiene", () => {
     const offenders = listTypeScriptFiles(SRC_DIR)
       .filter((file) => SPAWNS_PROCESS.test(readFileSync(file, "utf8")))
       .map((file) => path.relative(process.cwd(), file).split(path.sep).join("/"))
-      .filter((file) => !SPAWNERS.has(file) && !LEGACY_SPAWNERS.has(file));
+      .filter((file) => !SPAWNERS.has(file));
 
     expect(offenders).toEqual([]);
   });
