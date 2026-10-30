@@ -7,10 +7,7 @@ interface YouTubeAdapterDeps {
   resolveMedia?: typeof resolveYouTubeWithYtDlp;
 }
 
-export async function resolveYouTubeSource(
-  input: string,
-  deps: YouTubeAdapterDeps = {},
-): Promise<ResolvedSource> {
+export async function resolveYouTubeSource(input: string, deps: YouTubeAdapterDeps = {}): Promise<ResolvedSource> {
   const parsed = tryParseHttpUrl(input);
   const normalizedUrl = parsed?.toString() ?? input;
 

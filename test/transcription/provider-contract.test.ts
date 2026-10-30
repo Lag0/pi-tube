@@ -1,9 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { ResolvedSource } from "../../src/intake/types.ts";
-import {
-  selectTranscriptionProvider,
-  transcribeFromResolvedSource,
-} from "../../src/transcription/service.ts";
+import { selectTranscriptionProvider, transcribeFromResolvedSource } from "../../src/transcription/service.ts";
 import type { ProviderRegistry } from "../../src/transcription/providers/index.ts";
 
 const sampleSource: ResolvedSource = {
@@ -54,7 +51,9 @@ function makeRegistry(): ProviderRegistry {
 
 describe("transcription provider contract", () => {
   test("selects provider with deterministic precedence: CLI > env > default", () => {
-    expect(selectTranscriptionProvider({ provider: "elevenlabs", env: { PI_TUBE_TRANSCRIPTION_PROVIDER: "deepgram" } })).toBe("elevenlabs");
+    expect(
+      selectTranscriptionProvider({ provider: "elevenlabs", env: { PI_TUBE_TRANSCRIPTION_PROVIDER: "deepgram" } }),
+    ).toBe("elevenlabs");
     expect(selectTranscriptionProvider({ env: { PI_TUBE_TRANSCRIPTION_PROVIDER: "elevenlabs" } })).toBe("elevenlabs");
     expect(selectTranscriptionProvider({})).toBe("deepgram");
   });

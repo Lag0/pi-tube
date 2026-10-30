@@ -13,7 +13,7 @@ export interface SetupOptions {
 
 function toCommandString(command: string, args: string[]): string {
   const parts = [command, ...args].map((part) =>
-    part.includes(" ") || part.includes('"') ? JSON.stringify(part) : part
+    part.includes(" ") || part.includes('"') ? JSON.stringify(part) : part,
   );
   return parts.join(" ");
 }
@@ -39,9 +39,7 @@ function runCommand(command: string, args: string[], options: SetupOptions): voi
   if (result.exitCode !== 0) {
     throw new CliError(`Failed to run setup command: \`${commandString}\`.`, {
       code: "SETUP_COMMAND_FAILED",
-      guidance: [
-        "Verify that Node.js and npx are available in your environment.",
-      ],
+      guidance: ["Verify that Node.js and npx are available in your environment."],
     });
   }
 }
@@ -127,10 +125,7 @@ function handleSetupSkills(options: SetupOptions): null {
   return null;
 }
 
-export function handleSetupCommand(
-  subcommand: string | undefined,
-  options: SetupOptions = {},
-): string | null {
+export function handleSetupCommand(subcommand: string | undefined, options: SetupOptions = {}): string | null {
   if (!subcommand) {
     throw new CliError("Missing or unsupported setup action.", {
       code: "CLI_CONTRACT_VIOLATION",

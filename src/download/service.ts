@@ -77,10 +77,7 @@ function createDefaultExecutor(env: Record<string, string | undefined>) {
       throw createDownloadFailedError(`yt-dlp download timed out after ${resolveTimeoutMs(env)}ms`);
     }
 
-    const [stdout, stderr] = await Promise.all([
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-    ]);
+    const [stdout, stderr] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text()]);
     return { exitCode: exitResult.exitCode, stdout, stderr };
   };
 }
@@ -114,12 +111,17 @@ function buildYtDlpArgs(input: string, media: DownloadMediaKind, outputDir: stri
 }
 
 function parseDownloadedPath(stdout: string): string | undefined {
-  const lines = stdout.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const lines = stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
   return lines.at(-1);
 }
 
 function isInstagramAuthRequiredFailure(detail: string): boolean {
-  return /(login required|requires login|you need to log in|challenge_required|checkpoint_required|private content|not available due to login)/i.test(detail);
+  return /(login required|requires login|you need to log in|challenge_required|checkpoint_required|private content|not available due to login)/i.test(
+    detail,
+  );
 }
 
 function maybeMockDownload(env: Record<string, string | undefined>): DownloadExecutionResult | undefined {
@@ -155,14 +157,15 @@ export async function downloadMedia(input: string, options: DownloadOptions = {}
   let result: DownloadExecutionResult;
 
   try {
-    result = maybeMockDownload(env) ?? await executor(args);
+    result = maybeMockDownload(env) ?? (await executor(args));
   } catch (error) {
     if (error instanceof CliError) throw error;
     throw createDownloadFailedError(error instanceof Error ? error.message : String(error));
   }
 
   if (result.exitCode !== 0) {
-    const detail = [result.stderr.trim(), result.stdout.trim()].filter(Boolean).join(" ").trim() || `exit code ${result.exitCode}`;
+    const detail =
+      [result.stderr.trim(), result.stdout.trim()].filter(Boolean).join(" ").trim() || `exit code ${result.exitCode}`;
     if (sourceKind === "instagram" && isInstagramAuthRequiredFailure(detail)) {
       throw createInstagramAuthRequiredError(input);
     }

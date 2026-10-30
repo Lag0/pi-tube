@@ -31,12 +31,7 @@ describe("No-Python runtime regression guard", () => {
   });
 
   test("runtime bootstrap modules do not shell toward Python tooling", () => {
-    const files = [
-      "src/index.ts",
-      "src/cli/build-cli.ts",
-      "src/cli/handlers.ts",
-      "src/legacy/compatibility.ts",
-    ];
+    const files = ["src/index.ts", "src/cli/build-cli.ts", "src/cli/handlers.ts", "src/legacy/compatibility.ts"];
 
     const content = files.map((file) => readFileSync(file, "utf8")).join("\n");
     expect(content).not.toMatch(/python|pipx|typer/i);

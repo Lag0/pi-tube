@@ -26,11 +26,7 @@ const YOUTUBE_HOSTS = new Set([
   "www.youtu.be",
 ]);
 
-const INSTAGRAM_HOSTS = new Set([
-  "instagram.com",
-  "www.instagram.com",
-  "m.instagram.com",
-]);
+const INSTAGRAM_HOSTS = new Set(["instagram.com", "www.instagram.com", "m.instagram.com"]);
 
 export function tryParseHttpUrl(input: string): URL | null {
   try {

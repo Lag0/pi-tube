@@ -1,19 +1,9 @@
-import {
-  CliError,
-  createTranscriptionProviderNotConfiguredError,
-} from "../errors/cli-errors.ts";
+import { CliError, createTranscriptionProviderNotConfiguredError } from "../errors/cli-errors.ts";
 import { readConfig } from "../config/store.ts";
 import type { PiTubeConfig } from "../config/types.ts";
 import type { ResolvedSource } from "../intake/types.ts";
-import {
-  getDefaultProviderRegistry,
-  resolveProvider,
-  type ProviderRegistry,
-} from "./providers/index.ts";
-import type {
-  TranscriptionExecutionResult,
-  TranscriptionProviderId,
-} from "./types.ts";
+import { getDefaultProviderRegistry, resolveProvider, type ProviderRegistry } from "./providers/index.ts";
+import type { TranscriptionExecutionResult, TranscriptionProviderId } from "./types.ts";
 
 export const DEFAULT_TRANSCRIPTION_PROVIDER: TranscriptionProviderId = "deepgram";
 export const TRANSCRIPTION_PROVIDER_ENV = "PI_TUBE_TRANSCRIPTION_PROVIDER";
@@ -52,11 +42,9 @@ function parseProviderId(value: string): TranscriptionProviderId {
   });
 }
 
-export function selectTranscriptionProvider(options: {
-  provider?: string;
-  config?: PiTubeConfig;
-  env?: Record<string, string | undefined>;
-} = {}): TranscriptionProviderId {
+export function selectTranscriptionProvider(
+  options: { provider?: string; config?: PiTubeConfig; env?: Record<string, string | undefined> } = {},
+): TranscriptionProviderId {
   const fromCli = options.provider?.trim().toLowerCase();
   if (fromCli) {
     return parseProviderId(fromCli);
@@ -99,11 +87,12 @@ function resolveProviderApiKey(
     }
   }
 
-  const defaultEnvKeys = providerId === "deepgram"
-    ? ["DEEPGRAM_API_KEY"]
-    : providerId === "groq"
-      ? ["GROQ_API_KEY"]
-      : ["ELEVENLABS_API_KEY", "ELEVEN_API_KEY"];
+  const defaultEnvKeys =
+    providerId === "deepgram"
+      ? ["DEEPGRAM_API_KEY"]
+      : providerId === "groq"
+        ? ["GROQ_API_KEY"]
+        : ["ELEVENLABS_API_KEY", "ELEVEN_API_KEY"];
   for (const envKey of defaultEnvKeys) {
     const fromDefaultEnv = env[envKey]?.trim();
     if (fromDefaultEnv) {
@@ -132,10 +121,7 @@ function hasProviderMockOverride(
   return Boolean(env.PI_TUBE_TEST_ELEVENLABS_RESPONSE || env.PI_TUBE_TEST_ELEVENLABS_ERROR);
 }
 
-function hasProviderCandidate(
-  providerId: TranscriptionProviderId,
-  providers: ProviderRegistry,
-): boolean {
+function hasProviderCandidate(providerId: TranscriptionProviderId, providers: ProviderRegistry): boolean {
   return Boolean(providers[providerId]);
 }
 
@@ -194,13 +180,14 @@ export async function transcribeFromResolvedSource(
   const providerConfigured = (providerId: TranscriptionProviderId): boolean => {
     return Boolean(
       credentialMap[providerId] ||
-      hasProviderMockOverride(providerId, env) ||
-      (usingInjectedProviders && hasProviderCandidate(providerId, registry)),
+        hasProviderMockOverride(providerId, env) ||
+        (usingInjectedProviders && hasProviderCandidate(providerId, registry)),
     );
   };
 
-  const candidates = [selectedProviderId, ...fallbackProvidersFor(selectedProviderId)]
-    .filter((providerId) => providerConfigured(providerId));
+  const candidates = [selectedProviderId, ...fallbackProvidersFor(selectedProviderId)].filter((providerId) =>
+    providerConfigured(providerId),
+  );
 
   if (candidates.length === 0) {
     throw new CliError("No transcription provider is configured with credentials.", {

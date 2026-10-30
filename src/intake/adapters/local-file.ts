@@ -1,9 +1,6 @@
 import { existsSync, statSync } from "node:fs";
 import path from "node:path";
-import {
-  createLocalFileNotFoundError,
-  createUnsupportedLocalFileExtensionError,
-} from "../../errors/cli-errors.ts";
+import { createLocalFileNotFoundError, createUnsupportedLocalFileExtensionError } from "../../errors/cli-errors.ts";
 import type { ResolvedSource } from "../types.ts";
 import { getLocalFileExtension } from "../policy.ts";
 

@@ -5,27 +5,21 @@ import os from "node:os";
 import path from "node:path";
 import { resolveYouTubeSource } from "../../src/intake/adapters/youtube.ts";
 import { resolveYouTubeWithYtDlp } from "../../src/intake/tools/yt-dlp.ts";
-import {
-  createYtDlpNotFoundError,
-  createYouTubeExtractFailedError,
-} from "../../src/errors/cli-errors.ts";
+import { createYtDlpNotFoundError, createYouTubeExtractFailedError } from "../../src/errors/cli-errors.ts";
 
 describe("yt-dlp boundary", () => {
   test("returns parsed media metadata on successful yt-dlp output", async () => {
-    const result = await resolveYouTubeWithYtDlp(
-      "https://youtube.com/watch?v=dQw4w9WgXcQ",
-      async () => ({
-        exitCode: 0,
-        stdout: JSON.stringify({
-          url: "https://cdn.example.com/video.mp4",
-          title: "Example",
-          timestamp: 1_700_000_000,
-          description:
-            "Links: https://example.com/first, https://example.com/second). See https://en.wikipedia.org/wiki/Mercury_(planet) too. Duplicate https://example.com/first",
-        }),
-        stderr: "",
+    const result = await resolveYouTubeWithYtDlp("https://youtube.com/watch?v=dQw4w9WgXcQ", async () => ({
+      exitCode: 0,
+      stdout: JSON.stringify({
+        url: "https://cdn.example.com/video.mp4",
+        title: "Example",
+        timestamp: 1_700_000_000,
+        description:
+          "Links: https://example.com/first, https://example.com/second). See https://en.wikipedia.org/wiki/Mercury_(planet) too. Duplicate https://example.com/first",
       }),
-    );
+      stderr: "",
+    }));
 
     expect(result.mediaUrl).toBe("https://cdn.example.com/video.mp4");
     expect(result.title).toBe("Example");
@@ -41,17 +35,14 @@ describe("yt-dlp boundary", () => {
   });
 
   test("falls back to upload_date when yt-dlp timestamp is absent", async () => {
-    const result = await resolveYouTubeWithYtDlp(
-      "https://youtube.com/watch?v=dQw4w9WgXcQ",
-      async () => ({
-        exitCode: 0,
-        stdout: JSON.stringify({
-          url: "https://cdn.example.com/video.mp4",
-          upload_date: "20240229",
-        }),
-        stderr: "",
+    const result = await resolveYouTubeWithYtDlp("https://youtube.com/watch?v=dQw4w9WgXcQ", async () => ({
+      exitCode: 0,
+      stdout: JSON.stringify({
+        url: "https://cdn.example.com/video.mp4",
+        upload_date: "20240229",
       }),
-    );
+      stderr: "",
+    }));
 
     expect(result.publishedAt).toBe("2024-02-29");
   });
@@ -157,17 +148,18 @@ describe("yt-dlp boundary", () => {
 describe("youtube adapter", () => {
   test("returns normalized source on successful yt-dlp extraction", async () => {
     const source = await resolveYouTubeSource("https://youtube.com/watch?v=abc123", {
-      resolveMedia: async () => ({
-        mediaUrl: "https://cdn.example.com/video.mp4",
-        title: "Demo Video",
-        publishedAt: "2024-02-29",
-        description: "Watch the launch at https://example.com/launch",
-        descriptionLinks: ["https://example.com/launch"],
-      } as Awaited<ReturnType<typeof resolveYouTubeWithYtDlp>> & {
-        publishedAt: string;
-        description: string;
-        descriptionLinks: string[];
-      }),
+      resolveMedia: async () =>
+        ({
+          mediaUrl: "https://cdn.example.com/video.mp4",
+          title: "Demo Video",
+          publishedAt: "2024-02-29",
+          description: "Watch the launch at https://example.com/launch",
+          descriptionLinks: ["https://example.com/launch"],
+        }) as Awaited<ReturnType<typeof resolveYouTubeWithYtDlp>> & {
+          publishedAt: string;
+          description: string;
+          descriptionLinks: string[];
+        },
     });
 
     expectSourceKind(source, "youtube");

@@ -1,10 +1,5 @@
 import { Command, CommanderError } from "commander";
-import {
-  APP_VERSION,
-  COMMAND_IDENTITY,
-  getHelpDocument,
-  type HelpTopic,
-} from "./command-contract.ts";
+import { APP_VERSION, COMMAND_IDENTITY, getHelpDocument, type HelpTopic } from "./command-contract.ts";
 import { renderHelpDocument, type HelpDocument } from "./help-renderer.ts";
 import {
   handleAuthLogin,
@@ -26,7 +21,13 @@ type CliAction =
   | { kind: "root"; input?: string; extraPositionals: string[]; options: RootOptions }
   | { kind: "version" }
   | { kind: "help"; positionals: string[]; noColor: boolean }
-  | { kind: "transcribe"; input?: string; extraPositionals: string[]; options: TranscribeOptions; rootOptions: RootOptions }
+  | {
+      kind: "transcribe";
+      input?: string;
+      extraPositionals: string[];
+      options: TranscribeOptions;
+      rootOptions: RootOptions;
+    }
   | { kind: "download"; input?: string; extraPositionals: string[]; options: DownloadOptions; rootOptions: RootOptions }
   | { kind: "auth"; action?: string; provider?: string; options: AuthOptions; rootOptions: RootOptions }
   | { kind: "defaults"; action?: string; value?: string; rootOptions: RootOptions }
@@ -109,17 +110,27 @@ function resolveHelpTopic(positionals: string[]): HelpTopic {
 function guidanceForCommand(command: string | undefined): string[] {
   switch (command) {
     case "transcribe":
-      return ["Use one of: `pi-tube transcribe <input>`, `pi-tube transcribe <input> --provider <deepgram|groq|elevenlabs>`, `pi-tube transcribe <input> --json`."];
+      return [
+        "Use one of: `pi-tube transcribe <input>`, `pi-tube transcribe <input> --provider <deepgram|groq|elevenlabs>`, `pi-tube transcribe <input> --json`.",
+      ];
     case "download":
-      return ["Use one of: `pi-tube download <url>`, `pi-tube download <url> --audio`, `pi-tube download <url> --output <dir>`."];
+      return [
+        "Use one of: `pi-tube download <url>`, `pi-tube download <url> --audio`, `pi-tube download <url> --output <dir>`.",
+      ];
     case "auth":
-      return ["Use one of: `pi-tube auth login <deepgram|groq|elevenlabs>`, `pi-tube auth status`, `pi-tube auth logout <deepgram|groq|elevenlabs>`."];
+      return [
+        "Use one of: `pi-tube auth login <deepgram|groq|elevenlabs>`, `pi-tube auth status`, `pi-tube auth logout <deepgram|groq|elevenlabs>`.",
+      ];
     case "defaults":
-      return ["Use one of: `pi-tube defaults provider <deepgram|groq|elevenlabs>`, `pi-tube defaults language <code>`, `pi-tube defaults show`."];
+      return [
+        "Use one of: `pi-tube defaults provider <deepgram|groq|elevenlabs>`, `pi-tube defaults language <code>`, `pi-tube defaults show`.",
+      ];
     case "setup":
       return ["Use one of: `pi-tube setup yt-dlp`, `pi-tube setup skills`, `pi-tube setup mcp`."];
     default:
-      return ["Use one of: `pi-tube transcribe <input>`, `pi-tube download <url>`, `pi-tube auth status`, `pi-tube defaults show`, `pi-tube setup yt-dlp`."];
+      return [
+        "Use one of: `pi-tube transcribe <input>`, `pi-tube download <url>`, `pi-tube auth status`, `pi-tube defaults show`, `pi-tube setup yt-dlp`.",
+      ];
   }
 }
 
@@ -307,7 +318,7 @@ function runAuthAction(action: Extract<CliAction, { kind: "auth" }>): number {
   switch (action.action) {
     case "login": {
       const apiKey = action.provider
-        ? action.options.key ?? process.env.PI_TUBE_TEST_AUTH_KEY ?? promptForApiKey(action.provider)
+        ? (action.options.key ?? process.env.PI_TUBE_TEST_AUTH_KEY ?? promptForApiKey(action.provider))
         : undefined;
       console.log(handleAuthLogin({ provider: action.provider, apiKey, options: { env: process.env } }));
       return 0;
@@ -358,7 +369,9 @@ function runSetupAction(action: Extract<CliAction, { kind: "setup" }>): number {
 }
 
 function runConfigAction(action: Extract<CliAction, { kind: "config" }>): number {
-  console.log(handleConfigCommand({ args: action.args, json: Boolean(action.options.json), options: { env: process.env } }));
+  console.log(
+    handleConfigCommand({ args: action.args, json: Boolean(action.options.json), options: { env: process.env } }),
+  );
   return 0;
 }
 

@@ -1,8 +1,4 @@
-import {
-  assertDirectMediaUrl,
-  getDirectMediaExtension,
-  normalizeDirectMediaUrl,
-} from "../policy.ts";
+import { assertDirectMediaUrl, getDirectMediaExtension, normalizeDirectMediaUrl } from "../policy.ts";
 import type { ResolvedSource } from "../types.ts";
 
 export async function resolveDirectUrlSource(input: string): Promise<ResolvedSource> {

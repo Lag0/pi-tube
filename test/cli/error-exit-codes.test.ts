@@ -41,26 +41,32 @@ describe("CLI error exits and formatting", () => {
 
     expect(result.exitCode).toBe(2);
     expect(stderr).toContain("[CLI_CONTRACT_VIOLATION]");
-    expect(stderr).toContain("guidance: Use one of: `pi-tube transcribe <input>`, `pi-tube transcribe <input> --provider <deepgram|groq|elevenlabs>`, `pi-tube transcribe <input> --json`.");
+    expect(stderr).toContain(
+      "guidance: Use one of: `pi-tube transcribe <input>`, `pi-tube transcribe <input> --provider <deepgram|groq|elevenlabs>`, `pi-tube transcribe <input> --json`.",
+    );
   });
 
   test("returns command-specific guidance for missing or unsupported command actions", () => {
     const cases: Array<{ args: string[]; expected: string }> = [
       {
         args: ["sample-input"],
-        expected: "guidance: Use one of: `pi-tube transcribe <input>`, `pi-tube download <url>`, `pi-tube auth status`, `pi-tube defaults show`, `pi-tube setup yt-dlp`.",
+        expected:
+          "guidance: Use one of: `pi-tube transcribe <input>`, `pi-tube download <url>`, `pi-tube auth status`, `pi-tube defaults show`, `pi-tube setup yt-dlp`.",
       },
       {
         args: ["auth"],
-        expected: "guidance: Use one of: `pi-tube auth login <deepgram|groq|elevenlabs>`, `pi-tube auth status`, `pi-tube auth logout <deepgram|groq|elevenlabs>`.",
+        expected:
+          "guidance: Use one of: `pi-tube auth login <deepgram|groq|elevenlabs>`, `pi-tube auth status`, `pi-tube auth logout <deepgram|groq|elevenlabs>`.",
       },
       {
         args: ["auth", "login"],
-        expected: "guidance: Use one of: `pi-tube auth login <deepgram|groq|elevenlabs>`, `pi-tube auth status`, `pi-tube auth logout <deepgram|groq|elevenlabs>`.",
+        expected:
+          "guidance: Use one of: `pi-tube auth login <deepgram|groq|elevenlabs>`, `pi-tube auth status`, `pi-tube auth logout <deepgram|groq|elevenlabs>`.",
       },
       {
         args: ["defaults"],
-        expected: "guidance: Use one of: `pi-tube defaults provider <deepgram|groq|elevenlabs>`, `pi-tube defaults language <code>`, `pi-tube defaults show`.",
+        expected:
+          "guidance: Use one of: `pi-tube defaults provider <deepgram|groq|elevenlabs>`, `pi-tube defaults language <code>`, `pi-tube defaults show`.",
       },
       {
         args: ["setup"],
@@ -68,11 +74,13 @@ describe("CLI error exits and formatting", () => {
       },
       {
         args: ["download"],
-        expected: "guidance: Use one of: `pi-tube download <url>`, `pi-tube download <url> --audio`, `pi-tube download <url> --output <dir>`.",
+        expected:
+          "guidance: Use one of: `pi-tube download <url>`, `pi-tube download <url> --audio`, `pi-tube download <url> --output <dir>`.",
       },
       {
         args: ["transcribe"],
-        expected: "guidance: Use one of: `pi-tube transcribe <input>`, `pi-tube transcribe <input> --provider <deepgram|groq|elevenlabs>`, `pi-tube transcribe <input> --json`.",
+        expected:
+          "guidance: Use one of: `pi-tube transcribe <input>`, `pi-tube transcribe <input> --provider <deepgram|groq|elevenlabs>`, `pi-tube transcribe <input> --json`.",
       },
     ];
 

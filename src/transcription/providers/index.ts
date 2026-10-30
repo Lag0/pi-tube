@@ -25,9 +25,7 @@ export const TRANSCRIPTION_PROVIDER_DEFINITIONS: ProviderDefinition[] = [
   { id: "elevenlabs", requiredEnv: ["ELEVENLABS_API_KEY", "ELEVEN_API_KEY"] },
 ];
 
-export function getDefaultProviderRegistry(
-  options: DefaultProviderRegistryOptions = {},
-): ProviderRegistry {
+export function getDefaultProviderRegistry(options: DefaultProviderRegistryOptions = {}): ProviderRegistry {
   return {
     deepgram: createDeepgramProvider({ apiKey: options.credentials?.deepgram?.apiKey }),
     groq: createGroqProvider({ apiKey: options.credentials?.groq?.apiKey }),

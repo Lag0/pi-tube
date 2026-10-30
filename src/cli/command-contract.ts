@@ -38,8 +38,14 @@ const ROOT_HELP_DOCUMENT: HelpDocument = {
     {
       title: "Defaults",
       rows: [
-        { term: `${COMMAND_IDENTITY} defaults provider <provider>`, description: "Set the default transcription provider." },
-        { term: `${COMMAND_IDENTITY} defaults language <code>`, description: "Set the default transcription language." },
+        {
+          term: `${COMMAND_IDENTITY} defaults provider <provider>`,
+          description: "Set the default transcription provider.",
+        },
+        {
+          term: `${COMMAND_IDENTITY} defaults language <code>`,
+          description: "Set the default transcription language.",
+        },
         { term: `${COMMAND_IDENTITY} defaults show`, description: "Show default preferences." },
       ],
     },
@@ -79,7 +85,9 @@ const ROOT_HELP_DOCUMENT: HelpDocument = {
 const TRANSCRIBE_HELP_DOCUMENT: HelpDocument = {
   title: `${COMMAND_IDENTITY} transcribe`,
   summary: "Transcribe a URL or local media file.",
-  usage: [`${COMMAND_IDENTITY} transcribe <input> [--provider <deepgram|groq|elevenlabs>] [--language <code>] [--timestamps] [--json]`],
+  usage: [
+    `${COMMAND_IDENTITY} transcribe <input> [--provider <deepgram|groq|elevenlabs>] [--language <code>] [--timestamps] [--json]`,
+  ],
   options: [
     { term: "--provider <deepgram|groq|elevenlabs>", description: "Select transcription provider." },
     { term: "--language <code>", description: "Optional language preference." },
@@ -118,9 +126,7 @@ const AUTH_HELP_DOCUMENT: HelpDocument = {
     `${COMMAND_IDENTITY} auth status`,
     `${COMMAND_IDENTITY} auth logout <deepgram|groq|elevenlabs>`,
   ],
-  options: [
-    { term: "--key <api_key>", description: "Provide API key non-interactively." },
-  ],
+  options: [{ term: "--key <api_key>", description: "Provide API key non-interactively." }],
   examples: [
     `${COMMAND_IDENTITY} auth login elevenlabs --key sk_...`,
     `${COMMAND_IDENTITY} auth status`,
@@ -173,10 +179,7 @@ const SETUP_HELP_DOCUMENT: HelpDocument = {
     { term: "--yes, -y", description: "Run supported setup commands non-interactively." },
     { term: "--no-prompt, --non-interactive", description: "Alias for non-interactive setup execution." },
   ],
-  examples: [
-    `${COMMAND_IDENTITY} setup yt-dlp`,
-    `${COMMAND_IDENTITY} setup skills --global --yes`,
-  ],
+  examples: [`${COMMAND_IDENTITY} setup yt-dlp`, `${COMMAND_IDENTITY} setup skills --global --yes`],
   notes: ["Interactive setup remains the default for humans."],
 };
 

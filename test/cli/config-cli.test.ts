@@ -3,12 +3,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { readOutputFileFromStdout } from "./output-file.ts";
-import {
-  getConfigValue,
-  listConfigValues,
-  resolveConfigPath,
-  setConfigValue,
-} from "../../src/config/store.ts";
+import { getConfigValue, listConfigValues, resolveConfigPath, setConfigValue } from "../../src/config/store.ts";
 
 const outputDir = mkdtempSync(path.join(os.tmpdir(), "pi-tube-cli-config-output-"));
 

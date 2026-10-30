@@ -1,9 +1,6 @@
 import { mkdirSync, rmSync } from "node:fs";
 import path from "node:path";
-import {
-  createTranscriptionProviderFailedError,
-  createYtDlpNotFoundError,
-} from "../../errors/cli-errors.ts";
+import { createTranscriptionProviderFailedError, createYtDlpNotFoundError } from "../../errors/cli-errors.ts";
 import type { ResolvedSource } from "../../intake/types.ts";
 import type { TranscriptionProviderId } from "../types.ts";
 
@@ -81,10 +78,7 @@ function parseDownloadedPath(stdout: string): string | undefined {
   return lines.length > 0 ? lines[lines.length - 1] : undefined;
 }
 
-async function downloadMediaForTranscription(
-  input: string,
-  providerId: TranscriptionProviderId,
-): Promise<string> {
+async function downloadMediaForTranscription(input: string, providerId: TranscriptionProviderId): Promise<string> {
   const mockedPath = process.env.PI_TUBE_TEST_YTDLP_DOWNLOAD_PATH?.trim();
   if (mockedPath) {
     return mockedPath;
@@ -139,10 +133,7 @@ async function downloadMediaForTranscription(
     throw createTranscriptionProviderFailedError(providerId, `yt-dlp media download timed out after ${timeoutMs}ms`);
   }
 
-  const [stdout, stderr] = await Promise.all([
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-  ]);
+  const [stdout, stderr] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text()]);
 
   if (exitResult.exitCode !== 0) {
     if (/not found|command not found|enoent/i.test(stderr)) {

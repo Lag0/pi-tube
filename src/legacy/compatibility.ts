@@ -5,18 +5,9 @@ const LEGACY_COMMAND_GUIDANCE: Record<string, string[]> = {
     "Legacy command detected: `pi-tube deepgram <input>`.",
     "Use `pi-tube transcribe <input> --provider deepgram`.",
   ],
-  groq: [
-    "Legacy command detected: `pi-tube groq <input>`.",
-    "Use `pi-tube transcribe <input> --provider groq`.",
-  ],
-  dl: [
-    "Legacy command detected: `pi-tube dl <url>`.",
-    "Use `pi-tube download <url>`.",
-  ],
-  providers: [
-    "Legacy command detected: `pi-tube providers`.",
-    "Use `pi-tube auth status`.",
-  ],
+  groq: ["Legacy command detected: `pi-tube groq <input>`.", "Use `pi-tube transcribe <input> --provider groq`."],
+  dl: ["Legacy command detected: `pi-tube dl <url>`.", "Use `pi-tube download <url>`."],
+  providers: ["Legacy command detected: `pi-tube providers`.", "Use `pi-tube auth status`."],
 };
 
 export function isLegacyCommand(command: string): boolean {

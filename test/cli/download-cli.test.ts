@@ -41,9 +41,12 @@ describe("download command", () => {
     const cwd = mkdtempSync(path.join(os.tmpdir(), "pi-tube-download-cli-"));
     const output = path.join(cwd, "custom", "reel.mp4");
     try {
-      const result = runCli(["download", "https://www.instagram.com/reel/abc123", "--output", path.join(cwd, "custom")], {
-        PI_TUBE_TEST_DOWNLOAD_FILE: output,
-      });
+      const result = runCli(
+        ["download", "https://www.instagram.com/reel/abc123", "--output", path.join(cwd, "custom")],
+        {
+          PI_TUBE_TEST_DOWNLOAD_FILE: output,
+        },
+      );
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout.toString()).toContain(`[DOWNLOAD_FILE] ${output}`);

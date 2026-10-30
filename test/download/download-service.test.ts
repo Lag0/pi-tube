@@ -72,15 +72,19 @@ describe("download service", () => {
   });
 
   test("fails when yt-dlp does not report a downloaded path", async () => {
-    await expect(downloadMedia("https://www.youtube.com/watch?v=abc123", {
-      executor: async () => ({ exitCode: 0, stdout: "", stderr: "" }),
-    })).rejects.toMatchObject({ code: "DOWNLOAD_FAILED" });
+    await expect(
+      downloadMedia("https://www.youtube.com/watch?v=abc123", {
+        executor: async () => ({ exitCode: 0, stdout: "", stderr: "" }),
+      }),
+    ).rejects.toMatchObject({ code: "DOWNLOAD_FAILED" });
   });
 
   test("maps Instagram auth failures", async () => {
-    await expect(downloadMedia("https://www.instagram.com/reel/private123", {
-      executor: async () => ({ exitCode: 1, stdout: "", stderr: "login required" }),
-    })).rejects.toMatchObject({ code: "INSTAGRAM_AUTH_REQUIRED" });
+    await expect(
+      downloadMedia("https://www.instagram.com/reel/private123", {
+        executor: async () => ({ exitCode: 1, stdout: "", stderr: "login required" }),
+      }),
+    ).rejects.toMatchObject({ code: "INSTAGRAM_AUTH_REQUIRED" });
   });
 
   test("builds deterministic yt-dlp arguments", () => {

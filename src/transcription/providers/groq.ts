@@ -8,11 +8,7 @@ import {
   createTranscriptionProviderRateLimitError,
   createTranscriptionProviderUnavailableError,
 } from "../../errors/cli-errors.ts";
-import type {
-  TranscriptionRequest,
-  TranscriptionResult,
-  TranscriptionSegment,
-} from "../types.ts";
+import type { TranscriptionRequest, TranscriptionResult, TranscriptionSegment } from "../types.ts";
 import type { TranscriptionProvider } from "./provider.ts";
 import { prepareProviderMediaInput } from "./media-input.ts";
 
@@ -52,11 +48,15 @@ function normalizeGroqSegments(rawSegments: unknown[]): TranscriptionSegment[] |
     }
 
     const fromMilliseconds =
-      typeof segment.start_ms === "number" && Number.isFinite(segment.start_ms) &&
-      typeof segment.end_ms === "number" && Number.isFinite(segment.end_ms);
+      typeof segment.start_ms === "number" &&
+      Number.isFinite(segment.start_ms) &&
+      typeof segment.end_ms === "number" &&
+      Number.isFinite(segment.end_ms);
     const fromSeconds =
-      typeof segment.start === "number" && Number.isFinite(segment.start) &&
-      typeof segment.end === "number" && Number.isFinite(segment.end);
+      typeof segment.start === "number" &&
+      Number.isFinite(segment.start) &&
+      typeof segment.end === "number" &&
+      Number.isFinite(segment.end);
 
     if (!fromMilliseconds && !fromSeconds) {
       continue;
@@ -65,9 +65,7 @@ function normalizeGroqSegments(rawSegments: unknown[]): TranscriptionSegment[] |
     const startMs = fromMilliseconds
       ? Math.round(segment.start_ms as number)
       : Math.round((segment.start as number) * 1000);
-    const endMs = fromMilliseconds
-      ? Math.round(segment.end_ms as number)
-      : Math.round((segment.end as number) * 1000);
+    const endMs = fromMilliseconds ? Math.round(segment.end_ms as number) : Math.round((segment.end as number) * 1000);
 
     if (endMs < startMs) {
       continue;
@@ -88,14 +86,15 @@ function parseGroqResponse(payload: unknown): {
     throw createTranscriptionProviderInvalidResponseError("groq");
   }
 
-  const text = typeof (payload as { text?: unknown }).text === "string" ? (payload as { text: string }).text.trim() : "";
+  const text =
+    typeof (payload as { text?: unknown }).text === "string" ? (payload as { text: string }).text.trim() : "";
   if (!text) {
     throw createTranscriptionProviderInvalidResponseError("groq");
   }
 
   const detectedLanguage =
     typeof (payload as { language?: unknown }).language === "string"
-      ? ((payload as { language: string }).language || undefined)
+      ? (payload as { language: string }).language || undefined
       : undefined;
   const rawSegments = Array.isArray((payload as { segments?: unknown[] }).segments)
     ? ((payload as { segments?: unknown[] }).segments ?? [])

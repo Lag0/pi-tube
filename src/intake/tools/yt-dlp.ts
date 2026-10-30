@@ -140,11 +140,7 @@ function normalizeUploadDate(value: unknown): string | undefined {
   const day = Number.parseInt(value.slice(6, 8), 10);
   const date = new Date(Date.UTC(year, month - 1, day));
 
-  if (
-    date.getUTCFullYear() !== year ||
-    date.getUTCMonth() !== month - 1 ||
-    date.getUTCDate() !== day
-  ) {
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) {
     return undefined;
   }
 
@@ -188,7 +184,9 @@ function extractDescriptionLinks(description: string | undefined): string[] | un
 function isLikelyImage(format: ParsedFormatLike): boolean {
   const ext = isString(format.ext) ? format.ext.toLowerCase() : "";
   const note = isString(format.format_note) ? format.format_note.toLowerCase() : "";
-  return ext === "jpg" || ext === "jpeg" || ext === "png" || ext === "webp" || ext === "gif" || note.includes("storyboard");
+  return (
+    ext === "jpg" || ext === "jpeg" || ext === "png" || ext === "webp" || ext === "gif" || note.includes("storyboard")
+  );
 }
 
 function isSupportedProtocol(format: ParsedFormatLike): boolean {
@@ -211,7 +209,9 @@ function pickPreferredMediaUrl(parsed: Record<string, unknown>): string | undefi
     return parsed.url;
   }
 
-  const requestedFormats = Array.isArray(parsed.requested_formats) ? (parsed.requested_formats as ParsedFormatLike[]) : [];
+  const requestedFormats = Array.isArray(parsed.requested_formats)
+    ? (parsed.requested_formats as ParsedFormatLike[])
+    : [];
   const requestedCandidates = requestedFormats.filter(hasUsableMediaUrl);
   const requestedAudio = requestedCandidates.find(isAudioOnly);
   if (requestedAudio?.url) {
@@ -353,7 +353,8 @@ export async function resolveInstagramWithYtDlp(
       throw createYtDlpNotFoundError();
     }
 
-    const detail = [result.stderr.trim(), result.stdout.trim()].filter(Boolean).join(" ").trim() || `exit code ${result.exitCode}`;
+    const detail =
+      [result.stderr.trim(), result.stdout.trim()].filter(Boolean).join(" ").trim() || `exit code ${result.exitCode}`;
     if (isInstagramAuthRequiredFailure(detail)) {
       throw createInstagramAuthRequiredError(input);
     }

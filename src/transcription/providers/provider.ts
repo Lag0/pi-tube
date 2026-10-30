@@ -1,8 +1,4 @@
-import type {
-  TranscriptionProviderId,
-  TranscriptionRequest,
-  TranscriptionResult,
-} from "../types.ts";
+import type { TranscriptionProviderId, TranscriptionRequest, TranscriptionResult } from "../types.ts";
 
 export interface TranscriptionProvider {
   readonly id: TranscriptionProviderId;

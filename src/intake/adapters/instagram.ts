@@ -7,10 +7,7 @@ interface InstagramAdapterDeps {
   resolveMedia?: typeof resolveInstagramWithYtDlp;
 }
 
-export async function resolveInstagramSource(
-  input: string,
-  deps: InstagramAdapterDeps = {},
-): Promise<ResolvedSource> {
+export async function resolveInstagramSource(input: string, deps: InstagramAdapterDeps = {}): Promise<ResolvedSource> {
   const parsed = tryParseHttpUrl(input);
   const normalizedUrl = parsed?.toString() ?? input;
 

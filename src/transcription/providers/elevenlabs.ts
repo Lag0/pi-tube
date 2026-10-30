@@ -7,11 +7,7 @@ import {
   createTranscriptionProviderRateLimitError,
   createTranscriptionProviderUnavailableError,
 } from "../../errors/cli-errors.ts";
-import type {
-  TranscriptionRequest,
-  TranscriptionResult,
-  TranscriptionSegment,
-} from "../types.ts";
+import type { TranscriptionRequest, TranscriptionResult, TranscriptionSegment } from "../types.ts";
 import type { TranscriptionProvider } from "./provider.ts";
 import { prepareProviderMediaInput } from "./media-input.ts";
 
@@ -60,8 +56,10 @@ function normalizeElevenLabsSegments(words: unknown[]): TranscriptionSegment[] |
     }
 
     if (
-      typeof word.start !== "number" || !Number.isFinite(word.start) ||
-      typeof word.end !== "number" || !Number.isFinite(word.end)
+      typeof word.start !== "number" ||
+      !Number.isFinite(word.start) ||
+      typeof word.end !== "number" ||
+      !Number.isFinite(word.end)
     ) {
       continue;
     }
@@ -87,9 +85,8 @@ function parseElevenLabsResponse(payload: unknown): {
     throw createTranscriptionProviderInvalidResponseError("elevenlabs");
   }
 
-  const text = typeof (payload as { text?: unknown }).text === "string"
-    ? (payload as { text: string }).text.trim()
-    : "";
+  const text =
+    typeof (payload as { text?: unknown }).text === "string" ? (payload as { text: string }).text.trim() : "";
   if (!text) {
     throw createTranscriptionProviderInvalidResponseError("elevenlabs");
   }

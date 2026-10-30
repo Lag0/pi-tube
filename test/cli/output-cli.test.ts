@@ -38,9 +38,9 @@ describe("CLI output contract", () => {
     expect(stdout).toContain("[OUTPUT_FILE]");
     expect(stdout).toContain("[OUTPUT_FILE_URI]");
     expect(path.basename(outputPath)).toMatch(/^\d{4}-\d{2}-\d{2}-demo(-\d+)?\.md$/);
-    expect(fileContent).toContain("---\nschema_version: \"1.1.0\"");
-    expect(fileContent).toContain("source_kind: \"direct_url\"");
-    expect(fileContent).toContain("provider: \"deepgram\"");
+    expect(fileContent).toContain('---\nschema_version: "1.1.0"');
+    expect(fileContent).toContain('source_kind: "direct_url"');
+    expect(fileContent).toContain('provider: "deepgram"');
     expect(fileContent).toContain("## Summary");
     expect(fileContent).toContain("### Key Points");
     expect(fileContent).not.toContain("## Transcript");
