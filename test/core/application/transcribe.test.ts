@@ -141,7 +141,10 @@ describe("credentials and fallback", () => {
     const result = await run(transcribe, { provider: "groq" });
 
     expect(result.success ? undefined : result.error.code).toBe("PROVIDER_RATE_LIMIT");
-    expect(result.success ? "" : result.error.hint).toContain("deepgram");
+    // Only other configured providers: not the chosen groq, not the unconfigured elevenlabs.
+    expect(result.success ? "" : result.error.hint).toBe(
+      "Retry later, or choose another configured provider: deepgram.",
+    );
     expect(stt.deepgram.requests).toHaveLength(0);
   });
 });

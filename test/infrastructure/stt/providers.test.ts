@@ -183,3 +183,34 @@ describe("registry", () => {
     expect(Object.keys(createSttProviders())).toEqual(PROVIDER_DESCRIPTORS.map((descriptor) => descriptor.id));
   });
 });
+
+describe("SDK request options", () => {
+  test("Deepgram's { error } response, the way SDK 4.x reports HTTP failures, is mapped", async () => {
+    const provider = createDeepgramProvider({
+      createClient: () => {
+        const answer = async () => ({ result: null, error: { status: 429, message: "Too Many Requests" } });
+        return { transcribeUrl: answer, transcribeFile: answer };
+      },
+    });
+
+    const result = await provider.transcribe(urlRequest);
+
+    expect(result.success ? undefined : result.error.code).toBe("PROVIDER_RATE_LIMIT");
+  });
+
+  test("Groq gets the per-request timeout and two retries", async () => {
+    const recorded = recorder();
+    const groq = HARNESSES.find((harness) => harness.id === "groq");
+    await groq?.build({ kind: "resolve", payload: groq.success }, recorded, 5000).transcribe(urlRequest);
+
+    expect(recorded.calls[0]?.options).toMatchObject({ timeout: 5000, maxRetries: 2 });
+  });
+
+  test("ElevenLabs gets the per-request timeout in seconds and two retries", async () => {
+    const recorded = recorder();
+    const elevenlabs = HARNESSES.find((harness) => harness.id === "elevenlabs");
+    await elevenlabs?.build({ kind: "resolve", payload: elevenlabs.success }, recorded, 5000).transcribe(urlRequest);
+
+    expect(recorded.calls[0]?.options).toMatchObject({ timeoutInSeconds: 5, maxRetries: 2 });
+  });
+});
