@@ -20,7 +20,7 @@ wheels/
 .DS_Store
 
 # Output
-output/
+/output/
 
 .firecrawl/
 .tmp-repos
@@ -30,4 +30,4 @@ node_modules
 package-lock.json
 skills-lock.json
 .worktrees/
-downloads/
+/downloads/
