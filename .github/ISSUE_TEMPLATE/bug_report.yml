@@ -1,0 +1,56 @@
+name: Bug report
+description: Something in pi-tube does not work as documented.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. For security problems, do not use this form: follow SECURITY.md.
+        Redact API keys, cookies and private URLs before posting.
+  - type: input
+    id: version
+    attributes:
+      label: pi-tube version
+      description: Output of `pi-tube --version`.
+      placeholder: "2.2.1"
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - macOS
+        - Linux
+        - Windows
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: surface
+    attributes:
+      label: Command or MCP tool
+      description: The exact command (or MCP tool and client) you ran.
+      placeholder: "pi-tube transcribe https://www.youtube.com/watch?v=... --provider groq"
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The smallest set of steps that shows the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual behavior
+      description: What you expected, what happened, and the full error output (code, message, guidance).
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Diagnostics
+      description: Output of `pi-tube doctor --json` when available (3.0 and later).
+      render: json
