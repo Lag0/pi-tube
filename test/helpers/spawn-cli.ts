@@ -31,7 +31,7 @@ export const spawnCli = (
   options: { cwd?: string } = {},
 ): SpawnCliResult => {
   const result = Bun.spawnSync({
-    cmd: ["bun", "run", "--bun", BIN, ...args],
+    cmd: ["bun", "run", "--bun", "--no-env-file", BIN, ...args],
     stdout: "pipe",
     stderr: "pipe",
     cwd: options.cwd,

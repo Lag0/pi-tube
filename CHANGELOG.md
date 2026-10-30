@@ -37,4 +37,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **Breaking:** `auth login --key` is removed, so API keys never land in shell history or process lists. In a terminal, `auth login <provider>` asks for the key without echoing it; scripts and agents pipe it with `--stdin` (`printf '%s' "$GROQ_API_KEY" | pi-tube auth login groq --stdin`). Without a terminal and without `--stdin`, it fails at once with `INPUT_INVALID` instead of waiting for input.
 - **Breaking:** without `HOME` (the Windows default) pi-tube uses the OS home directory for `~/.pi-tube` instead of `./.pi-tube` in the working directory.
 
+### Security
+
+- pi-tube no longer loads a `.env` file from the current directory, so running it inside another project cannot pick up that project's secrets or test hooks. The bin runs `bun --no-env-file`, which needs Bun 1.3.3 or newer (`engines.bun` is now `>=1.3.3`).
+- CI checks out the repository without persisting the GitHub token in the git config.
+
 Releases up to 2.2.1 predate this file: see the [npm version history](https://www.npmjs.com/package/@syxs/pi-tube?activeTab=versions) and the git log.
