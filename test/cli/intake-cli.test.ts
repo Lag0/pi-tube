@@ -126,7 +126,7 @@ describe("CLI intake integration", () => {
 
       expect(result.exitCode).toBe(0);
       expect(stdout).toContain('source_kind: "local_file"');
-      expect(stdout).toContain(`source_reference: "${filePath}"`);
+      expect(stdout).toContain(`source_reference: ${JSON.stringify(filePath)}`);
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
     }

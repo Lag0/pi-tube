@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { describe, expect, test } from "vitest";
 import { downloadInternalsForTests, downloadMedia } from "../../src/download/service.ts";
 
@@ -24,7 +25,7 @@ describe("download service", () => {
       expect(result.sourceKind).toBe("youtube");
       expect(result.media).toBe("video");
       expect(result.outputPath).toBe(path.join(cwd, "downloads", "video.mp4"));
-      expect(result.outputUri).toBe(`file://${path.join(cwd, "downloads", "video.mp4")}`);
+      expect(result.outputUri).toBe(pathToFileURL(path.join(cwd, "downloads", "video.mp4")).href);
       expect(calls[0]).toContain("bestvideo*+bestaudio/best");
       expect(calls[0]).toContain("--merge-output-format");
       expect(calls[0]).toContain(path.join(cwd, "downloads"));
