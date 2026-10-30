@@ -19,6 +19,7 @@ import {
   type LoginOutput,
   type LogoutInput,
   type LogoutOutput,
+  type ProviderDescriptor,
   type ProviderListing,
   type UseCase,
 } from "./core/index.ts";
@@ -66,6 +67,7 @@ export interface LegacyPipeline {
 
 /** The composition root's product: everything an adapter may call. */
 export interface App {
+  readonly providers: readonly ProviderDescriptor[];
   readonly listProviders: UseCase<Record<string, never>, ProviderListing>;
   readonly loginProvider: UseCase<LoginInput, LoginOutput>;
   readonly logoutProvider: UseCase<LogoutInput, LogoutOutput>;
@@ -99,6 +101,7 @@ export const createApp = (environment: AppEnvironment): App => {
   };
 
   return {
+    providers: PROVIDER_DESCRIPTORS,
     listProviders: createListProviders(accountDeps),
     loginProvider: createLoginProvider(accountDeps),
     logoutProvider: createLogoutProvider(accountDeps),

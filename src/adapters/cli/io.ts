@@ -6,6 +6,10 @@ export interface CliIo {
   readonly writeErr: (text: string) => void;
   /** Terminal stream for the progress spinner; absent when stderr is not a TTY. */
   readonly progressStream?: NodeJS.WriteStream;
+  /** Reads all of stdin. Only `--stdin` calls it, so a closed or absent stdin never blocks other commands. */
+  readonly readStdin: () => Promise<string>;
+  /** Hidden-input prompt; present only when stdin is a TTY. Resolves `undefined` when cancelled. */
+  readonly promptSecret?: (question: string) => Promise<string | undefined>;
 }
 
 /** Host facilities the CLI needs beyond IO. */

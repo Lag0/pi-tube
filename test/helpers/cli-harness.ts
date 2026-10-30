@@ -9,6 +9,10 @@ export interface CliRunOptions {
   /** Merged over a hermetic env (temp HOME and config path); `process.env` is never inherited. */
   readonly env?: Record<string, string | undefined>;
   readonly system?: Partial<CliSystem>;
+  /** Content of stdin for `--stdin`; reading it sets `stdinRead`. */
+  readonly stdin?: string;
+  /** Answer to the hidden prompt; its presence simulates a terminal. */
+  readonly secret?: string;
 }
 
 export interface CliRunResult {
@@ -17,6 +21,7 @@ export interface CliRunResult {
   readonly stderr: string;
   /** Interactive commands the CLI asked to run, as `command arg...`. */
   readonly systemCalls: readonly string[];
+  readonly stdinRead: boolean;
 }
 
 /** Runs the CLI in this process with captured IO and a fake system; the temp HOME is removed afterwards. */
@@ -25,9 +30,16 @@ export const runCliInProcess = async (argv: string[], options: CliRunOptions = {
   const stdout: string[] = [];
   const stderr: string[] = [];
   const systemCalls: string[] = [];
+  let stdinRead = false;
+  const { secret } = options;
   const io: CliIo = {
     writeOut: (text) => stdout.push(`${text}\n`),
     writeErr: (text) => stderr.push(`${text}\n`),
+    readStdin: async () => {
+      stdinRead = true;
+      return options.stdin ?? "";
+    },
+    ...(secret === undefined ? {} : { promptSecret: async () => secret }),
   };
   const system: CliSystem = {
     platform: process.platform,
@@ -45,7 +57,7 @@ export const runCliInProcess = async (argv: string[], options: CliRunOptions = {
       io,
       system,
     });
-    return { exitCode, stdout: stdout.join(""), stderr: stderr.join(""), systemCalls };
+    return { exitCode, stdout: stdout.join(""), stderr: stderr.join(""), systemCalls, stdinRead };
   } finally {
     rmSync(home, { recursive: true, force: true });
   }

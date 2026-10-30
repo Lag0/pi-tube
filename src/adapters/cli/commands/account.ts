@@ -1,4 +1,4 @@
-import { createError } from "../../../core/index.ts";
+import { createError, findProvider, type ProviderDescriptor } from "../../../core/index.ts";
 import { CliFailure, unwrapOrFail } from "../error-output.ts";
 import type { CliDeps } from "../io.ts";
 import { hintForCommand } from "../usage-hints.ts";
@@ -6,7 +6,7 @@ import { hintForCommand } from "../usage-hints.ts";
 export interface AuthCommand {
   readonly action?: string;
   readonly provider?: string;
-  readonly key?: string;
+  readonly stdin: boolean;
   readonly json: boolean;
 }
 
@@ -17,9 +17,20 @@ const requireProvider = (provider: string | undefined): string => {
   throw new CliFailure(createError("INPUT_INVALID", "Missing provider.", { hint: hintForCommand("auth") }));
 };
 
-const promptForApiKey = (provider: string): string | undefined => {
-  if (typeof prompt !== "function") return undefined;
-  return prompt(`Paste ${provider} API key:`) ?? undefined;
+/** Reads the key from stdin (`--stdin`) or a hidden prompt; never from argv, and never waits on a non-TTY stdin. */
+const readApiKey = async (deps: CliDeps, descriptor: ProviderDescriptor, fromStdin: boolean): Promise<string> => {
+  if (fromStdin) return deps.io.readStdin();
+  if (deps.io.promptSecret) {
+    const entered = await deps.io.promptSecret(`Paste ${descriptor.id} API key (input hidden): `);
+    if (entered === undefined) throw new CliFailure(createError("INPUT_INVALID", "API key entry cancelled."));
+    return entered;
+  }
+  const envName = descriptor.credentialEnvNames[0] ?? "the provider API key env var";
+  throw new CliFailure(
+    createError("INPUT_INVALID", "No API key input: stdin is not a terminal.", {
+      hint: `Pipe the key with \`pi-tube auth login ${descriptor.id} --stdin\`, or set ${envName} in the environment.`,
+    }),
+  );
 };
 
 /** `pi-tube providers`: which providers have a key and where it comes from. Never prints a key. */
@@ -55,13 +66,9 @@ export const runProviders = async (deps: CliDeps, options: { readonly json: bool
 };
 
 const runLogin = async (deps: CliDeps, command: AuthCommand): Promise<number> => {
-  const provider = requireProvider(command.provider);
-  const apiKey = command.key ?? promptForApiKey(provider);
-  if (apiKey === undefined) {
-    throw new CliFailure(createError("INPUT_INVALID", "Missing API key.", { hint: hintForCommand("auth") }));
-  }
-
-  const login = unwrapOrFail(await deps.app.loginProvider({ provider, apiKey }));
+  const descriptor = unwrapOrFail(findProvider(deps.app.providers, requireProvider(command.provider)));
+  const apiKey = await readApiKey(deps, descriptor, command.stdin);
+  const login = unwrapOrFail(await deps.app.loginProvider({ provider: descriptor.id, apiKey }));
   if (command.json) {
     writeJson(deps, {
       provider: login.provider,

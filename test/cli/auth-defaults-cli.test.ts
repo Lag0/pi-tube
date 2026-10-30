@@ -19,8 +19,8 @@ afterEach(() => {
   rmSync(configDir, { recursive: true, force: true });
 });
 
-const run = (args: string[], env: Record<string, string> = {}) =>
-  runCliInProcess(args, { env: { PI_TUBE_CONFIG_PATH: configPath, ...env } });
+const run = (args: string[], env: Record<string, string> = {}, stdin?: string) =>
+  runCliInProcess(args, { env: { PI_TUBE_CONFIG_PATH: configPath, ...env }, stdin });
 
 describe("auth commands", () => {
   test("validates auth login provider before asking for an API key", async () => {
@@ -33,7 +33,7 @@ describe("auth commands", () => {
   });
 
   test("logs in, reports status without the key, and logs out", async () => {
-    const login = await run(["auth", "login", "elevenlabs", "--key", SECRET]);
+    const login = await run(["auth", "login", "elevenlabs", "--stdin"], {}, SECRET);
     expect(login.exitCode).toBe(0);
     expect(login.stdout).toBe(`[AUTH_LOGIN] provider=elevenlabs status=configured config_path=${configPath}\n`);
     expect(JSON.parse(readFileSync(configPath, "utf8")).providers.elevenlabs.api_key).toBe(SECRET);
@@ -58,7 +58,7 @@ describe("auth commands", () => {
   });
 
   test("warns when an env var overrides the stored key", async () => {
-    const login = await run(["auth", "login", "groq", "--key", "gsk_config_key"], { GROQ_API_KEY: "gsk_env_key" });
+    const login = await run(["auth", "login", "groq", "--stdin"], { GROQ_API_KEY: "gsk_env_key" }, "gsk_config_key");
 
     expect(login.exitCode).toBe(0);
     expect(login.stderr).toBe("warning: GROQ_API_KEY in env overrides the key in config.json.\n");
@@ -76,7 +76,7 @@ describe("auth commands", () => {
   });
 
   test("emits JSON for login and logout", async () => {
-    const login = await run(["auth", "login", "groq", "--key", "gsk_1", "--json"], { GROQ_API_KEY: "gsk_env" });
+    const login = await run(["auth", "login", "groq", "--stdin", "--json"], { GROQ_API_KEY: "gsk_env" }, "gsk_1");
     const logout = await run(["auth", "logout", "groq", "--json"]);
 
     expect(JSON.parse(login.stdout)).toEqual({
@@ -119,12 +119,12 @@ describe("defaults commands", () => {
 });
 
 describe("unreadable config", () => {
-  test.each([[["config", "list"]], [["auth", "login", "groq", "--key", "k"]], [["defaults", "provider", "groq"]]])(
+  test.each([[["config", "list"]], [["auth", "login", "groq", "--stdin"]], [["defaults", "provider", "groq"]]])(
     "%j fails with CONFIG_INVALID and leaves the file untouched",
     async (args) => {
       writeFileSync(configPath, TRUNCATED);
 
-      const result = await run(args);
+      const result = await run(args, {}, "gsk_valid_key");
 
       expect(result.exitCode).toBe(6);
       expect(result.stderr).toContain("[CONFIG_INVALID]");

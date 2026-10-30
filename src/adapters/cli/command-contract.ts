@@ -140,17 +140,22 @@ const AUTH_HELP_DOCUMENT: HelpDocument = {
   title: `${COMMAND_IDENTITY} auth`,
   summary: "Manage transcription provider API keys.",
   usage: [
-    `${COMMAND_IDENTITY} auth login <deepgram|groq|elevenlabs>`,
-    `${COMMAND_IDENTITY} auth status`,
-    `${COMMAND_IDENTITY} auth logout <deepgram|groq|elevenlabs>`,
+    `${COMMAND_IDENTITY} auth login <deepgram|groq|elevenlabs> [--stdin] [--json]`,
+    `${COMMAND_IDENTITY} auth status [--json]`,
+    `${COMMAND_IDENTITY} auth logout <deepgram|groq|elevenlabs> [--json]`,
   ],
-  options: [{ term: "--key <api_key>", description: "Provide API key non-interactively." }],
+  options: [
+    { term: "--stdin", description: "Read the API key from stdin instead of the hidden prompt." },
+    { term: "--json", description: "Output deterministic JSON format." },
+  ],
   examples: [
-    `${COMMAND_IDENTITY} auth login elevenlabs --key sk_...`,
+    `${COMMAND_IDENTITY} auth login elevenlabs`,
+    `printf '%s' "$GROQ_API_KEY" | ${COMMAND_IDENTITY} auth login groq --stdin`,
     `${COMMAND_IDENTITY} auth status`,
     `${COMMAND_IDENTITY} auth logout elevenlabs`,
   ],
   notes: [
+    "API keys are never accepted as arguments, so they stay out of shell history and process lists.",
     "API keys are never printed; `pi-tube providers` shows where each key comes from.",
     "Config is written to `~/.pi-tube/config.json` with restricted permissions.",
     "Environment variables take precedence over stored keys and need no setup command.",

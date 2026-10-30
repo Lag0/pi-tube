@@ -49,7 +49,7 @@ interface DownloadOptions {
 }
 
 interface AuthOptions extends JsonCommandOptions {
-  key?: string;
+  stdin?: boolean;
 }
 
 interface SetupCommandOptions {
@@ -163,7 +163,7 @@ function createProgram(setAction: (action: CliAction) => void): Command {
     .description("Manage provider API keys.")
     .argument("[action]", "login, status, or logout")
     .argument("[provider]", "deepgram, groq or elevenlabs")
-    .option("--key <api_key>", "API key for non-interactive login.")
+    .option("--stdin", "Read the API key from stdin instead of a hidden prompt.")
     .option("--json", "Output deterministic JSON format.")
     .action((action: string | undefined, provider: string | undefined, options: AuthOptions) => {
       setAction({ kind: "auth", action, provider, options, rootOptions: program.opts<RootOptions>() });
@@ -325,7 +325,7 @@ export const runCli = async (argv: readonly string[], deps: CliDeps): Promise<nu
         return await runAuth(deps, {
           action: action.action,
           provider: action.provider,
-          key: action.options.key,
+          stdin: Boolean(action.options.stdin),
           json: Boolean(action.options.json),
         });
       case "defaults":
