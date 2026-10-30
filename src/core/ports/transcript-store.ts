@@ -8,5 +8,7 @@ export interface SavedTranscript {
 
 /** Writes rendered transcripts; never overwrites an existing file. */
 export interface TranscriptStore {
+  /** Checks that transcripts can be written, before any paid work starts. */
+  prepare(): Promise<Result<void>>;
   save(input: { readonly fileName: string; readonly content: string }): Promise<Result<SavedTranscript>>;
 }

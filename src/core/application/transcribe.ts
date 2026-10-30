@@ -108,6 +108,10 @@ export const createTranscribe =
       config.data.defaults.language,
     )?.toLowerCase();
 
+    // A bad output dir fails here, before the paid provider call.
+    const writable = await deps.store.prepare();
+    if (!writable.success) return writable;
+
     options?.onProgress?.({ label: "Resolving source..." });
     const source = await deps.media.resolve(input.input, options);
     if (!source.success) return source;
@@ -137,9 +141,6 @@ export const createTranscribe =
       },
       { generatedAt: deps.now().toISOString(), includeTimestamps: input.timestamps },
     );
-    const stillReady = ensureNotAborted(options?.signal);
-    if (!stillReady.success) return stillReady;
-
     options?.onProgress?.({ label: "Saving output..." });
     const saved = await deps.store.save({
       fileName: transcriptFileName({ artifact, now: deps.now(), format: input.format }),

@@ -1,4 +1,5 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { constants } from "node:fs";
+import { access, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { createError, type PiTubeError } from "../../core/domain/errors.ts";
@@ -11,7 +12,9 @@ const errnoOf = (error: unknown): string =>
   error instanceof Error && "code" in error && typeof error.code === "string" ? error.code : "unknown error";
 
 const storageError = (target: string, error: unknown): PiTubeError =>
-  createError("STORAGE_IO_FAILED", `Cannot write \`${target}\` (${errnoOf(error)}).`);
+  createError("STORAGE_IO_FAILED", `Cannot write \`${target}\` (${errnoOf(error)}).`, {
+    hint: "Check that your user can write to the transcripts directory, or set PI_TUBE_OUTPUT_DIR to another directory.",
+  });
 
 const candidateName = (fileName: string, attempt: number): string => {
   if (attempt === 1) return fileName;
@@ -24,6 +27,15 @@ const candidateName = (fileName: string, attempt: number): string => {
  * timestamp; `wx` makes the check and the write one step, so two runs never overwrite each other.
  */
 export const createFileTranscriptStore = (outputDir: string): TranscriptStore => ({
+  prepare: async () => {
+    try {
+      await mkdir(outputDir, { recursive: true, mode: 0o700 });
+      await access(outputDir, constants.W_OK);
+      return ok(undefined);
+    } catch (error) {
+      return err(storageError(outputDir, error));
+    }
+  },
   save: async ({ fileName, content }) => {
     try {
       await mkdir(outputDir, { recursive: true, mode: 0o700 });

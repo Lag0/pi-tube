@@ -205,7 +205,7 @@ describe("audio and output", () => {
   test("an output dir that is a file is STORAGE_IO_FAILED", async () => {
     const blocker = path.join(outputDir, "blocker");
     writeFileSync(blocker, "x");
-    const { deps } = setup({ env: { GROQ_API_KEY: "gq" } });
+    const { deps, stt } = setup({ env: { GROQ_API_KEY: "gq" } });
 
     const result = await createTranscribe({ ...deps, store: createFileTranscriptStore(blocker) })({
       input: INPUT,
@@ -214,6 +214,29 @@ describe("audio and output", () => {
     });
 
     expect(result.success ? undefined : result.error.code).toBe("STORAGE_IO_FAILED");
+    expect(result.success ? "" : result.error.hint).toContain("PI_TUBE_OUTPUT_DIR");
+    // Checked before the paid call, so a bad output dir never costs a transcription.
+    expect(stt.groq.requests).toHaveLength(0);
+  });
+
+  test("a Ctrl-C that lands after the provider answered still saves the paid transcript", async () => {
+    const { deps, stt } = setup({ env: { GROQ_API_KEY: "gq" } });
+    const controller = new AbortController();
+    const answersThenCancel = {
+      ...createFakeSttProvider("groq"),
+      transcribe: async () => {
+        controller.abort();
+        return { success: true as const, data: { text: "paid text", segments: [] } };
+      },
+    };
+
+    const result = await createTranscribe({ ...deps, stt: { ...stt, groq: answersThenCancel } })(
+      { input: INPUT, timestamps: false, format: "markdown" },
+      { signal: controller.signal },
+    );
+
+    expect(result.success).toBe(true);
+    expect(readdirSync(outputDir)).toHaveLength(1);
   });
 });
 
