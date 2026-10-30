@@ -31,3 +31,8 @@ export type ResolvedSource =
       absolutePath: string;
       extension: string;
     };
+
+/** Audio handed to a speech-to-text provider: a local file or a URL the provider fetches itself. */
+export type AudioInput =
+  | { readonly kind: "file"; readonly path: string }
+  | { readonly kind: "url"; readonly url: string };

@@ -1,17 +1,8 @@
 import { createError } from "../domain/errors.ts";
+import type { OperationOptions } from "../domain/operation.ts";
 import { err, ok, type Result } from "../domain/result.ts";
 
-/** A progress step reported by a long operation. */
-export interface ProgressEvent {
-  readonly label: string;
-  readonly detail?: string;
-}
-
-/** Options every use case accepts: cancellation and progress reporting. */
-export interface OperationOptions {
-  readonly signal?: AbortSignal;
-  readonly onProgress?: (event: ProgressEvent) => void;
-}
+export type { OperationOptions, ProgressEvent } from "../domain/operation.ts";
 
 /** A core operation: business failures come back as a failed `Result`, never as exceptions. */
 export type UseCase<I, O> = (input: I, options?: OperationOptions) => Promise<Result<O>>;

@@ -54,4 +54,6 @@ export {
   resolveCredential,
 } from "./domain/providers.ts";
 export { err, type Failure, ok, type Result, type Success } from "./domain/result.ts";
+export type { AudioInput, ResolvedSource } from "./domain/source.ts";
 export type { ConfigStore } from "./ports/config-store.ts";
+export type { SttCapabilities, SttProvider, SttRequest, SttTranscript } from "./ports/stt-provider.ts";
