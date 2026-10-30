@@ -75,6 +75,18 @@ describe("auth login key input", () => {
     expect(existsSync(configPath)).toBe(false);
   });
 
+  test.each([["--key=sk-3"], ["--stdin=sk-1"], ["-ksk-3"], ["--key sk-3"]])(
+    "%s is refused without echoing the attached value",
+    async (flag) => {
+      const result = await login([flag]);
+
+      expect(result.exitCode).toBe(2);
+      expect(result.stderr).toContain("[INPUT_INVALID]");
+      expect(result.stderr).toContain("API keys are never passed as arguments");
+      expect(existsSync(configPath)).toBe(false);
+    },
+  );
+
   test("an unknown provider fails before asking for the key", async () => {
     const result = await runCliInProcess(["auth", "login", "openai", "--stdin"], {
       env: { PI_TUBE_CONFIG_PATH: configPath },

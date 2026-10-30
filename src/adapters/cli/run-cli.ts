@@ -96,8 +96,31 @@ function resolveHelpTopic(positionals: string[]): HelpTopic {
   return "root";
 }
 
+const KEY_ARGUMENT_HINT =
+  "API keys are never passed as arguments: use the hidden prompt, or pipe the key with `--stdin`.";
+
+/**
+ * Commander quotes the offending token whole, so `--key=<secret>` or `-k<secret>` would reach stderr.
+ * Keeps only the flag name of every quoted option token.
+ */
+const redactOptionValues = (message: string): { readonly message: string; readonly redacted: boolean } => {
+  let redacted = false;
+  const cleaned = message.replace(
+    /'(--[^'=\s]+)[=\s][^']*'|'(-[^-'\s])[^']+'/g,
+    (_token, longFlag: string | undefined, shortFlag: string | undefined) => {
+      redacted = true;
+      return `'${longFlag ?? shortFlag}'`;
+    },
+  );
+  return { message: cleaned, redacted };
+};
+
 function commanderErrorToCliFailure(error: CommanderError, argv: readonly string[]): CliFailure {
-  return new CliFailure(createError("INPUT_INVALID", error.message, { hint: hintForCommand(argv[0]) }));
+  const { message, redacted } = redactOptionValues(error.message);
+  const isKeyAttempt = message.includes("'--key'") || (argv[0] === "auth" && redacted);
+  return new CliFailure(
+    createError("INPUT_INVALID", message, { hint: isKeyAttempt ? KEY_ARGUMENT_HINT : hintForCommand(argv[0]) }),
+  );
 }
 
 function createProgram(setAction: (action: CliAction) => void): Command {
