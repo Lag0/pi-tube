@@ -18,6 +18,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Dependencies are pinned to exact versions.
 - yt-dlp child processes no longer inherit stdin.
+- Ctrl-C or SIGTERM during `transcribe` or `download` cancels the operation: yt-dlp and its children are stopped, temporary audio is removed, nothing partial is saved, and pi-tube exits with 130 (`[CANCELLED]`). A second Ctrl-C kills pi-tube at once.
 - **Breaking:** error codes are renamed so the CLI and the upcoming MCP server share them: `CLI_CONTRACT_VIOLATION` → `INPUT_INVALID`, `CLI_NOT_IMPLEMENTED` → `NOT_IMPLEMENTED`, `CLI_UNEXPECTED` → `UNEXPECTED`, and `TRANSCRIPTION_PROVIDER_*` → `PROVIDER_*`. `INTAKE_CLASSIFICATION_FAILED` and `YOUTUBE_URL_INVALID`, which could never be raised, are removed.
 - **Breaking:** the exit code now depends on the error category instead of always being 2:
 

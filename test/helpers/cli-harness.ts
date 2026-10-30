@@ -15,6 +15,8 @@ export interface CliRunOptions {
   readonly secret?: string;
   /** Fake providers, media fetcher or process runner handed to the composition root. */
   readonly fakes?: AppOverrides;
+  /** Aborts the run, as Ctrl-C does through `main`. */
+  readonly signal?: AbortSignal;
 }
 
 export interface CliRunResult {
@@ -58,6 +60,7 @@ export const runCliInProcess = async (argv: string[], options: CliRunOptions = {
       app: createApp({ env, cwd: process.cwd(), homedir: () => home }, options.fakes),
       io,
       system,
+      signal: options.signal,
     });
     return { exitCode, stdout: stdout.join(""), stderr: stderr.join(""), systemCalls, stdinRead };
   } finally {
