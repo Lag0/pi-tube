@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
@@ -223,7 +223,9 @@ describe("download", () => {
 
     expect(result.success ? result.data.path : undefined).toBe(file);
     expect(result.success ? result.data.uri.startsWith("file://") : undefined).toBe(true);
-    expect(requests[0]?.args).toEqual(expect.arrayContaining(["-x", "--audio-format", "mp3", "-P", outputDir]));
+    expect(requests[0]?.args).toEqual(
+      expect.arrayContaining(["-x", "--audio-format", "mp3", "-P", `home:${outputDir}`]),
+    );
     expect(requests[0]?.args.slice(-2)).toEqual(["--", YOUTUBE]);
   });
 
@@ -250,4 +252,64 @@ describe("download", () => {
 
     expect(result.success ? undefined : result.error.code).toBe("STORAGE_IO_FAILED");
   });
+});
+
+describe("hardening", () => {
+  test("every yt-dlp run ignores yt-dlp config files, so a ./yt-dlp.conf cannot inject options", async () => {
+    const { requests, run } = fakeRun((request) => {
+      if (request.args.includes("--dump-single-json"))
+        return exited(JSON.stringify({ url: "https://m.example.com/a" }));
+      return exited(`${path.join(root, "a.mp4")}\n`);
+    });
+    const fetcher = fetcherWith(run);
+
+    await fetcher.resolve(YOUTUBE);
+    await fetcher.download({ url: YOUTUBE, kind: "youtube" }, { media: "video", outputDir: root });
+
+    for (const request of requests) expect(request.args).toContain("--ignore-config");
+  });
+
+  test("a failed or cancelled download leaves no partial file in the output dir", async () => {
+    const outputDir = path.join(root, "out");
+    const { requests, run } = fakeRun((request) => {
+      const temp = request.args.find((arg) => arg.startsWith("temp:"))?.slice("temp:".length) ?? outputDir;
+      mkdirSync(temp, { recursive: true });
+      writeFileSync(path.join(temp, "Demo [abc].f401.mp4.part"), "partial");
+      return { outcome: "aborted", exitCode: null, stdout: "", stderr: "" };
+    });
+
+    const result = await fetcherWith(run).download({ url: YOUTUBE, kind: "youtube" }, { media: "video", outputDir });
+
+    expect(result.success ? undefined : result.error.code).toBe("CANCELLED");
+    expect(requests[0]?.args).toEqual(expect.arrayContaining(["-P", `home:${outputDir}`]));
+    expect(existsSync(outputDir) ? readdirSync(outputDir) : []).toEqual([]);
+    expect(existsSync(tmpDir) ? readdirSync(tmpDir) : []).toEqual([]);
+  });
+
+  test.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
+    "release never rejects, even when the temp dir cannot be removed",
+    async () => {
+      const { run } = fakeRun((request) => {
+        const template = request.args[request.args.indexOf("-o") + 1] ?? "";
+        const file = template.replace("%(id)s.%(ext)s", "abc.m4a");
+        mkdirSync(path.dirname(file), { recursive: true });
+        writeFileSync(file, "audio");
+        return exited(`${file}\n`);
+      });
+      const fetched = await fetcherWith(run).fetchAudio({
+        kind: "youtube",
+        originalInput: YOUTUBE,
+        normalizedUrl: YOUTUBE,
+        mediaUrl: "https://media.example.com/a.m4a",
+      });
+      if (!fetched.success) throw new Error("fetchAudio failed");
+      chmodSync(tmpDir, 0o500);
+
+      try {
+        await expect(fetched.data.release()).resolves.toBeUndefined();
+      } finally {
+        chmodSync(tmpDir, 0o700);
+      }
+    },
+  );
 });

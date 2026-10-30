@@ -24,12 +24,12 @@ const fakeDownloader = (outcome?: Partial<ProcessResult>) => {
   const run = async (request: ProcessRequest): Promise<ProcessResult> => {
     requests.push(request);
     if (outcome) return { outcome: "exited", exitCode: 1, stdout: "", stderr: "", ...outcome };
-    const dir = request.args[request.args.indexOf("-P") + 1] ?? "";
+    const dir = (request.args[request.args.indexOf("-P") + 1] ?? "").replace(/^home:/, "");
     return { outcome: "exited", exitCode: 0, stdout: `${path.join(dir, "Demo [abc123].mp4")}\n`, stderr: "" };
   };
   const outputDirOf = (index = 0): string | undefined => {
     const args = requests[index]?.args ?? [];
-    return args[args.indexOf("-P") + 1];
+    return args[args.indexOf("-P") + 1]?.replace(/^home:/, "");
   };
   return { requests, run, outputDirOf };
 };

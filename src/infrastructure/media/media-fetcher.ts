@@ -41,7 +41,9 @@ export interface MediaFetcherDeps {
 const errnoOf = (error: unknown): string =>
   error instanceof Error && "code" in error && typeof error.code === "string" ? error.code : "unknown error";
 
-const removeDir = (dir: string): Promise<void> => rm(dir, { recursive: true, force: true });
+// Best-effort: a temp dir that cannot be removed (a Windows antivirus lock) must not fail a finished operation.
+const removeDir = (dir: string): Promise<void> =>
+  rm(dir, { recursive: true, force: true, maxRetries: 3 }).catch(() => undefined);
 
 const makeDir = async (dir: string): Promise<Result<void>> => {
   try {
@@ -186,18 +188,33 @@ export const createMediaFetcher = (deps: MediaFetcherDeps): MediaFetcher => {
       const outputDir = path.resolve(deps.cwd, request.outputDir);
       const created = await makeDir(outputDir);
       if (!created.success) return created;
+      // yt-dlp keeps .part and fragment files in the temp path, so a failed or cancelled run leaves nothing in outputDir.
+      const tempDir = path.join(deps.tmpDir, randomUUID());
+      const tempCreated = await makeDir(tempDir);
+      if (!tempCreated.success) return tempCreated;
       const format =
         request.media === "audio"
           ? ["-f", "bestaudio/best", "-x", "--audio-format", "mp3"]
           : ["-f", "bestvideo*+bestaudio/best", "--merge-output-format", "mp4"];
       const stdout = await ytDlp(
-        ["-P", outputDir, "-o", DOWNLOAD_TEMPLATE, "--print", "after_move:filepath", ...format],
+        [
+          "-P",
+          `home:${outputDir}`,
+          "-P",
+          `temp:${tempDir}`,
+          "-o",
+          DOWNLOAD_TEMPLATE,
+          "--print",
+          "after_move:filepath",
+          ...format,
+        ],
         "download",
         target.url,
         MEDIA_TIMEOUT_MS,
         options,
         target.kind === "instagram",
       );
+      await removeDir(tempDir);
       if (!stdout.success) return stdout;
       const filePath = parseDownloadedPath(stdout.data);
       if (!filePath)

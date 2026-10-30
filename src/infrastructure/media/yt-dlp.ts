@@ -19,7 +19,8 @@ export const MEDIA_TIMEOUT_MS = 1_800_000;
 export const YTDLP_TIMEOUT_ENV = "PI_TUBE_YTDLP_TIMEOUT_MS";
 export const AUDIO_FORMAT_SELECTOR = "bestaudio[ext=m4a]/bestaudio/best";
 export const DOWNLOAD_TEMPLATE = "%(title).200B [%(id)s].%(ext)s";
-const BASE_ARGS = ["--no-warnings", "--no-playlist"] as const;
+// `--ignore-config`: a yt-dlp.conf in the cwd or output dir must never inject options such as `--exec`.
+const BASE_ARGS = ["--ignore-config", "--no-warnings", "--no-playlist"] as const;
 
 const malformedOutput = (): PiTubeError => createError("YTDLP_OUTPUT_INVALID", "yt-dlp returned malformed output.");
 
