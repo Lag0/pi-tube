@@ -112,7 +112,8 @@ describe("yt-dlp boundary", () => {
     expect(result.title).toBe("Example");
   });
 
-  test("fails fast when yt-dlp process hangs", async () => {
+  // The fake yt-dlp is a `#!/bin/sh` script found through a `:`-separated PATH; Windows runs neither.
+  test.skipIf(process.platform === "win32")("fails fast when yt-dlp process hangs", async () => {
     const tempDir = mkdtempSync(path.join(os.tmpdir(), "pi-tube-ytdlp-timeout-"));
     const mockYtDlpPath = path.join(tempDir, "yt-dlp");
     writeFileSync(mockYtDlpPath, "#!/bin/sh\nsleep 60\n");

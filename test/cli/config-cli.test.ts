@@ -36,7 +36,7 @@ describe("config store", () => {
       env: { HOME: "/tmp/pi-tube-home" },
     });
 
-    expect(configPath).toBe("/tmp/pi-tube-home/.pi-tube/config.json");
+    expect(configPath).toBe(path.join("/tmp/pi-tube-home", ".pi-tube", "config.json"));
   });
 
   test("supports deterministic set/get/list and stable serialization", () => {

@@ -13,8 +13,11 @@ describe("CLI entrypoint", () => {
   test("bin/pi-tube.ts exists and is runnable", () => {
     expect(existsSync("bin/pi-tube.ts")).toBe(true);
 
-    const mode = statSync("bin/pi-tube.ts").mode;
-    expect((mode & 0o111) > 0).toBe(true);
+    // Windows has no POSIX execute bits; the spawn below still proves the entrypoint runs there.
+    if (process.platform !== "win32") {
+      const mode = statSync("bin/pi-tube.ts").mode;
+      expect((mode & 0o111) > 0).toBe(true);
+    }
 
     const result = runCli(["--help"]);
     expect(result.exitCode).toBe(0);

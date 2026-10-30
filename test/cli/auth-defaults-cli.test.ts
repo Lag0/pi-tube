@@ -54,7 +54,10 @@ describe("auth and defaults commands", () => {
         providers: { elevenlabs: { api_key?: string } };
       };
       expect(config.providers.elevenlabs.api_key).toBe("sk_eleven_secret_1234");
-      expect((statSync(configPath).mode & 0o777).toString(8)).toBe("600");
+      // Windows has no POSIX permission bits to assert on.
+      if (process.platform !== "win32") {
+        expect((statSync(configPath).mode & 0o777).toString(8)).toBe("600");
+      }
 
       const status = runCli(["auth", "status"], env);
       expect(status.exitCode).toBe(0);

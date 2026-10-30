@@ -325,7 +325,8 @@ describe("deepgram provider", () => {
     }
   });
 
-  test("fails fast when yt-dlp download stalls for youtube sources", async () => {
+  // The fake yt-dlp is a `#!/bin/sh` script found through a `:`-separated PATH; Windows runs neither.
+  test.skipIf(process.platform === "win32")("fails fast when yt-dlp download stalls for youtube sources", async () => {
     const tempDir = mkdtempSync(path.join(os.tmpdir(), "pi-tube-deepgram-provider-timeout-"));
     const mockYtDlpPath = path.join(tempDir, "yt-dlp");
     writeFileSync(mockYtDlpPath, "#!/bin/sh\nsleep 60\n");
