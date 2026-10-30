@@ -9,8 +9,8 @@ import {
   createTranscriptionProviderUnavailableError,
 } from "../../errors/cli-errors.ts";
 import type { TranscriptionRequest, TranscriptionResult, TranscriptionSegment } from "../types.ts";
-import type { TranscriptionProvider } from "./provider.ts";
 import { prepareProviderMediaInput } from "./media-input.ts";
+import type { TranscriptionProvider } from "./provider.ts";
 
 interface DeepgramSdkErrorLike {
   message?: string;

@@ -9,6 +9,7 @@ function runCli(args: string[]) {
 }
 
 function stripAnsi(value: string): string {
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: strips ANSI escapes from CLI output
   return value.replace(/\u001b\[[0-9;]*m/g, "");
 }
 

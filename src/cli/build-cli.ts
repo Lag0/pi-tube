@@ -1,6 +1,6 @@
 import { Command, CommanderError } from "commander";
+import { CliError, formatCliError } from "../errors/cli-errors.ts";
 import { APP_VERSION, COMMAND_IDENTITY, getHelpDocument, type HelpTopic } from "./command-contract.ts";
-import { renderHelpDocument, type HelpDocument } from "./help-renderer.ts";
 import {
   handleAuthLogin,
   handleAuthLogout,
@@ -13,9 +13,9 @@ import {
   handleDownloadCommand,
   persistBaselineIntakeResult,
 } from "./handlers.ts";
-import { handleSetupCommand } from "./setup.ts";
-import { CliError, formatCliError } from "../errors/cli-errors.ts";
+import { type HelpDocument, renderHelpDocument } from "./help-renderer.ts";
 import { createProgressReporter } from "./progress.ts";
+import { handleSetupCommand } from "./setup.ts";
 
 type CliAction =
   | { kind: "root"; input?: string; extraPositionals: string[]; options: RootOptions }

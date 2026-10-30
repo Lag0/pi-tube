@@ -1,11 +1,11 @@
-import { describe, expect, test } from "vitest";
-import { expectSourceKind } from "../helpers/resolved-source.ts";
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { describe, expect, test } from "vitest";
+import { createYouTubeExtractFailedError, createYtDlpNotFoundError } from "../../src/errors/cli-errors.ts";
 import { resolveYouTubeSource } from "../../src/intake/adapters/youtube.ts";
 import { resolveYouTubeWithYtDlp } from "../../src/intake/tools/yt-dlp.ts";
-import { createYtDlpNotFoundError, createYouTubeExtractFailedError } from "../../src/errors/cli-errors.ts";
+import { expectSourceKind } from "../helpers/resolved-source.ts";
 
 describe("yt-dlp boundary", () => {
   test("returns parsed media metadata on successful yt-dlp output", async () => {

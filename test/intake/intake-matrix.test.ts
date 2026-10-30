@@ -1,11 +1,11 @@
-import { describe, expect, test } from "vitest";
-import { expectSourceKind } from "../helpers/resolved-source.ts";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { resolveSource } from "../../src/intake/resolver.ts";
-import { resolveYouTubeSource } from "../../src/intake/adapters/youtube.ts";
+import { describe, expect, test } from "vitest";
 import { createInstagramAuthRequiredError } from "../../src/errors/cli-errors.ts";
+import { resolveYouTubeSource } from "../../src/intake/adapters/youtube.ts";
+import { resolveSource } from "../../src/intake/resolver.ts";
+import { expectSourceKind } from "../helpers/resolved-source.ts";
 
 describe("intake source matrix", () => {
   test("resolves valid YouTube URL through resolver boundary", async () => {

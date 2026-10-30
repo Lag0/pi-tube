@@ -1,7 +1,7 @@
 import Groq, { toFile } from "groq-sdk";
 import type { TranscriptionCreateParams } from "groq-sdk/resources/audio/transcriptions";
 import {
-  CliError,
+  type CliError,
   createTranscriptionProviderAuthError,
   createTranscriptionProviderFailedError,
   createTranscriptionProviderInvalidResponseError,
@@ -9,8 +9,8 @@ import {
   createTranscriptionProviderUnavailableError,
 } from "../../errors/cli-errors.ts";
 import type { TranscriptionRequest, TranscriptionResult, TranscriptionSegment } from "../types.ts";
-import type { TranscriptionProvider } from "./provider.ts";
 import { prepareProviderMediaInput } from "./media-input.ts";
+import type { TranscriptionProvider } from "./provider.ts";
 
 type ProviderFetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 

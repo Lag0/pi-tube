@@ -1,9 +1,9 @@
 import { describe, expect, test } from "vitest";
-import type { ResolvedSource } from "../../src/intake/types.ts";
-import { transcribeFromResolvedSource } from "../../src/transcription/service.ts";
-import type { ProviderRegistry } from "../../src/transcription/providers/index.ts";
 import type { PiTubeConfig } from "../../src/config/types.ts";
 import { createTranscriptionProviderFailedError } from "../../src/errors/cli-errors.ts";
+import type { ResolvedSource } from "../../src/intake/types.ts";
+import type { ProviderRegistry } from "../../src/transcription/providers/index.ts";
+import { transcribeFromResolvedSource } from "../../src/transcription/service.ts";
 
 const source: ResolvedSource = {
   kind: "direct_url",

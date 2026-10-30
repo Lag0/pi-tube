@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
-import { expectSourceKind } from "../helpers/resolved-source.ts";
 import { resolveDirectUrlSource } from "../../src/intake/adapters/direct-url.ts";
+import { expectSourceKind } from "../helpers/resolved-source.ts";
 
 describe("direct URL adapter", () => {
   test("accepts and normalizes supported direct media URLs", async () => {

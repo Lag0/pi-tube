@@ -1,6 +1,6 @@
 import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
 import {
-  CliError,
+  type CliError,
   createTranscriptionProviderAuthError,
   createTranscriptionProviderFailedError,
   createTranscriptionProviderInvalidResponseError,
@@ -8,8 +8,8 @@ import {
   createTranscriptionProviderUnavailableError,
 } from "../../errors/cli-errors.ts";
 import type { TranscriptionRequest, TranscriptionResult, TranscriptionSegment } from "../types.ts";
-import type { TranscriptionProvider } from "./provider.ts";
 import { prepareProviderMediaInput } from "./media-input.ts";
+import type { TranscriptionProvider } from "./provider.ts";
 
 interface ElevenLabsSpeechToTextPayload {
   modelId: string;

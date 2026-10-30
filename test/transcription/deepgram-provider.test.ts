@@ -1,8 +1,8 @@
-import { describe, expect, test } from "vitest";
 import { Buffer } from "node:buffer";
 import { chmodSync, existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { describe, expect, test } from "vitest";
 import { createDeepgramProvider } from "../../src/transcription/providers/deepgram.ts";
 import type { TranscriptionRequest } from "../../src/transcription/types.ts";
 

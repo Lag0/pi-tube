@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import type { ResolvedSource } from "../../src/intake/types.ts";
-import { selectTranscriptionProvider, transcribeFromResolvedSource } from "../../src/transcription/service.ts";
 import type { ProviderRegistry } from "../../src/transcription/providers/index.ts";
+import { selectTranscriptionProvider, transcribeFromResolvedSource } from "../../src/transcription/service.ts";
 
 const sampleSource: ResolvedSource = {
   kind: "direct_url",

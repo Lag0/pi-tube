@@ -1,10 +1,10 @@
-import { describe, expect, test } from "vitest";
-import { expectSourceKind } from "../helpers/resolved-source.ts";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { resolveSource } from "../../src/intake/resolver.ts";
+import { describe, expect, test } from "vitest";
 import { CliError } from "../../src/errors/cli-errors.ts";
+import { resolveSource } from "../../src/intake/resolver.ts";
+import { expectSourceKind } from "../helpers/resolved-source.ts";
 
 describe("source resolver", () => {
   test("classifies a YouTube URL through the youtube adapter", async () => {

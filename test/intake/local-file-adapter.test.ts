@@ -1,9 +1,9 @@
-import { describe, expect, test } from "vitest";
-import { expectSourceKind } from "../helpers/resolved-source.ts";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { describe, expect, test } from "vitest";
 import { resolveLocalFileSource } from "../../src/intake/adapters/local-file.ts";
+import { expectSourceKind } from "../helpers/resolved-source.ts";
 
 describe("local file adapter", () => {
   test("normalizes and validates supported local media files", async () => {

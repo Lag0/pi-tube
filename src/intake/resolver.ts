@@ -1,9 +1,9 @@
-import { classifyInput } from "./policy.ts";
-import { resolveYouTubeSource } from "./adapters/youtube.ts";
-import { resolveInstagramSource } from "./adapters/instagram.ts";
-import { resolveDirectUrlSource } from "./adapters/direct-url.ts";
-import { resolveLocalFileSource } from "./adapters/local-file.ts";
 import { CliError, createUnsupportedUrlNotDirectMediaError } from "../errors/cli-errors.ts";
+import { resolveDirectUrlSource } from "./adapters/direct-url.ts";
+import { resolveInstagramSource } from "./adapters/instagram.ts";
+import { resolveLocalFileSource } from "./adapters/local-file.ts";
+import { resolveYouTubeSource } from "./adapters/youtube.ts";
+import { classifyInput } from "./policy.ts";
 import type { ResolvedSource, SourceClassification } from "./types.ts";
 
 interface ResolverDeps {

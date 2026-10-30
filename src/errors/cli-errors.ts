@@ -1,4 +1,4 @@
-import { getErrorCatalogEntry, type ErrorCode } from "./catalog.ts";
+import { type ErrorCode, getErrorCatalogEntry } from "./catalog.ts";
 
 export class CliError extends Error {
   public readonly code: ErrorCode;

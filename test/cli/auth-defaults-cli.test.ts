@@ -1,7 +1,7 @@
-import { describe, expect, test } from "vitest";
 import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { describe, expect, test } from "vitest";
 
 function withConfig<T>(fn: (env: Record<string, string>, configPath: string, configDir: string) => T): T {
   const configDir = mkdtempSync(path.join(os.tmpdir(), "pi-tube-auth-defaults-"));

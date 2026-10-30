@@ -1,7 +1,7 @@
-import { describe, expect, test } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { describe, expect, test } from "vitest";
 import { downloadInternalsForTests, downloadMedia } from "../../src/download/service.ts";
 
 function tempDir(): string {
@@ -17,7 +17,7 @@ describe("download service", () => {
         cwd,
         executor: async (args) => {
           calls.push(args);
-          return { exitCode: 0, stdout: path.join(cwd, "downloads", "video.mp4") + "\n", stderr: "" };
+          return { exitCode: 0, stdout: `${path.join(cwd, "downloads", "video.mp4")}\n`, stderr: "" };
         },
       });
 
@@ -63,7 +63,7 @@ describe("download service", () => {
         outputDir: "custom-media",
         executor: async (args) => {
           expect(args).toContain(path.join(cwd, "custom-media"));
-          return { exitCode: 0, stdout: path.join(cwd, "custom-media", "reel.mp4") + "\n", stderr: "" };
+          return { exitCode: 0, stdout: `${path.join(cwd, "custom-media", "reel.mp4")}\n`, stderr: "" };
         },
       });
     } finally {

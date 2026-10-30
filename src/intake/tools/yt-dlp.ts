@@ -2,9 +2,9 @@ import {
   CliError,
   createInstagramAuthRequiredError,
   createInstagramExtractFailedError,
+  createYouTubeExtractFailedError,
   createYtDlpMalformedOutputError,
   createYtDlpNotFoundError,
-  createYouTubeExtractFailedError,
 } from "../../errors/cli-errors.ts";
 
 export interface YtDlpResult {

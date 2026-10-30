@@ -1,8 +1,8 @@
-import { CliError, createTranscriptionProviderNotConfiguredError } from "../errors/cli-errors.ts";
 import { readConfig } from "../config/store.ts";
 import type { PiTubeConfig } from "../config/types.ts";
+import { CliError, createTranscriptionProviderNotConfiguredError } from "../errors/cli-errors.ts";
 import type { ResolvedSource } from "../intake/types.ts";
-import { getDefaultProviderRegistry, resolveProvider, type ProviderRegistry } from "./providers/index.ts";
+import { getDefaultProviderRegistry, type ProviderRegistry, resolveProvider } from "./providers/index.ts";
 import type { TranscriptionExecutionResult, TranscriptionProviderId } from "./types.ts";
 
 export const DEFAULT_TRANSCRIPTION_PROVIDER: TranscriptionProviderId = "deepgram";

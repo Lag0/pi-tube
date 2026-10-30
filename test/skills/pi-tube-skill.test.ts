@@ -1,5 +1,5 @@
-import { describe, expect, test } from "vitest";
 import { readFileSync } from "node:fs";
+import { describe, expect, test } from "vitest";
 
 function readSkillFile(path: string): string {
   return readFileSync(path, "utf8");

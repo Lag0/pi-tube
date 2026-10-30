@@ -1,24 +1,24 @@
-import { CliError } from "../errors/cli-errors.ts";
+import {
+  type ConfigStoreOptions,
+  getConfigValue,
+  isConfigProviderId,
+  listConfigValues,
+  readConfig,
+  resolveConfigPath,
+  setConfigValue,
+  writeConfig,
+} from "../config/store.ts";
+import { CONFIG_KEYS, CONFIG_PROVIDER_IDS, type ConfigKey, type ConfigProviderId } from "../config/types.ts";
 import { downloadMedia } from "../download/service.ts";
 import type { DownloadResult } from "../download/types.ts";
+import { CliError } from "../errors/cli-errors.ts";
 import { resolveSource } from "../intake/resolver.ts";
 import { buildOutputArtifact } from "../output/build-artifact.ts";
 import { renderJson } from "../output/json.ts";
 import { renderMarkdown } from "../output/markdown.ts";
-import { persistOutputArtifact, type PersistedOutputArtifact } from "./persist-output.ts";
-import {
-  getConfigValue,
-  isConfigProviderId,
-  readConfig,
-  listConfigValues,
-  resolveConfigPath,
-  setConfigValue,
-  writeConfig,
-  type ConfigStoreOptions,
-} from "../config/store.ts";
-import { CONFIG_KEYS, CONFIG_PROVIDER_IDS, type ConfigKey, type ConfigProviderId } from "../config/types.ts";
-import { transcribeFromResolvedSource, type TranscriptionServiceOptions } from "../transcription/service.ts";
+import { type TranscriptionServiceOptions, transcribeFromResolvedSource } from "../transcription/service.ts";
 import type { TranscriptionExecutionResult } from "../transcription/types.ts";
+import { type PersistedOutputArtifact, persistOutputArtifact } from "./persist-output.ts";
 
 export interface ProgressStep {
   label: string;

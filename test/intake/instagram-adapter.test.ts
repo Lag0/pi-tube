@@ -1,8 +1,8 @@
 import { describe, expect, test } from "vitest";
-import { expectSourceKind } from "../helpers/resolved-source.ts";
+import { createInstagramAuthRequiredError, createInstagramExtractFailedError } from "../../src/errors/cli-errors.ts";
 import { resolveInstagramSource } from "../../src/intake/adapters/instagram.ts";
 import { resolveInstagramWithYtDlp } from "../../src/intake/tools/yt-dlp.ts";
-import { createInstagramAuthRequiredError, createInstagramExtractFailedError } from "../../src/errors/cli-errors.ts";
+import { expectSourceKind } from "../helpers/resolved-source.ts";
 
 describe("instagram yt-dlp boundary", () => {
   test("returns parsed media metadata on successful yt-dlp output", async () => {

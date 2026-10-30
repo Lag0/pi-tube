@@ -1,6 +1,6 @@
-import { describe, expect, test } from "vitest";
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
+import { describe, expect, test } from "vitest";
 import { ERROR_CATALOG } from "../../src/errors/catalog.ts";
 import {
   CliError,

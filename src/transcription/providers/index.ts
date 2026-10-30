@@ -1,7 +1,7 @@
 import type { TranscriptionProviderId } from "../types.ts";
 import { createDeepgramProvider } from "./deepgram.ts";
-import { createGroqProvider } from "./groq.ts";
 import { createElevenLabsProvider } from "./elevenlabs.ts";
+import { createGroqProvider } from "./groq.ts";
 import type { TranscriptionProvider } from "./provider.ts";
 
 export type ProviderRegistry = Partial<Record<TranscriptionProviderId, TranscriptionProvider>>;
