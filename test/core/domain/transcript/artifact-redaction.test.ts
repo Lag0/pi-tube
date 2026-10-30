@@ -73,3 +73,27 @@ describe("persisted URLs", () => {
     expect(toPersistedUrl("not a url")).toBe("not a url");
   });
 });
+
+describe("URL credentials", () => {
+  test("user:password@ never reaches a saved transcript", () => {
+    const withCredentials = "https://alice:s3cret@cdn.example.com/a.mp3?sig=1";
+    const direct = artifactFor({
+      kind: "direct_url",
+      originalInput: withCredentials,
+      normalizedUrl: withCredentials,
+      mediaUrl: withCredentials,
+      extension: "mp3",
+    });
+    const youtube = artifactFor({
+      kind: "youtube",
+      originalInput: "https://bob:pw@www.youtube.com/watch?v=abc",
+      normalizedUrl: "https://bob:pw@www.youtube.com/watch?v=abc",
+      mediaUrl: "https://rr1.googlevideo.com/videoplayback?sig=abc",
+    });
+
+    for (const artifact of [direct, youtube]) {
+      expect(renderJson(artifact) + renderMarkdown(artifact)).not.toMatch(/s3cret|alice|bob:pw/);
+    }
+    expect(youtube.source.normalized_url).toBe("https://www.youtube.com/watch?v=abc");
+  });
+});

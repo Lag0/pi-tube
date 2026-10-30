@@ -20,10 +20,22 @@ export interface BuildOutputArtifactOptions {
   includeTimestamps?: boolean;
 }
 
-/** Drops query and fragment, which can carry signatures or tokens; a string that is not a URL is returned as is. */
-export function toPersistedUrl(url: string): string {
+/** Drops `user:password@`; a string that is not a URL is returned as is. */
+export function withoutCredentials(url: string): string {
   try {
     const parsed = new URL(url);
+    parsed.username = "";
+    parsed.password = "";
+    return parsed.toString();
+  } catch {
+    return url;
+  }
+}
+
+/** Drops credentials, query and fragment, which can carry signatures or tokens; a non-URL is returned as is. */
+export function toPersistedUrl(url: string): string {
+  try {
+    const parsed = new URL(withoutCredentials(url));
     parsed.search = "";
     parsed.hash = "";
     return parsed.toString();
@@ -38,8 +50,8 @@ function mapSource(source: ResolvedSource): OutputArtifactSource {
     case "youtube":
       return {
         kind: source.kind,
-        original_input: source.originalInput,
-        normalized_url: source.normalizedUrl,
+        original_input: withoutCredentials(source.originalInput),
+        normalized_url: withoutCredentials(source.normalizedUrl),
         title: source.title,
         published_at: source.publishedAt,
         description: source.description,
@@ -48,8 +60,8 @@ function mapSource(source: ResolvedSource): OutputArtifactSource {
     case "instagram":
       return {
         kind: source.kind,
-        original_input: source.originalInput,
-        normalized_url: source.normalizedUrl,
+        original_input: withoutCredentials(source.originalInput),
+        normalized_url: withoutCredentials(source.normalizedUrl),
         title: source.title,
       };
     case "direct_url":
