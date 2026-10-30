@@ -364,6 +364,7 @@ describe("deepgram provider", () => {
 
       await expect(provider.transcribe(youtubeRequest)).rejects.toMatchObject({
         code: "TRANSCRIPTION_PROVIDER_FAILED",
+        message: expect.stringContaining("timed out after 20ms"),
       });
     } finally {
       if (originalPath === undefined) {

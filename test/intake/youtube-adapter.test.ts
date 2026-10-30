@@ -127,6 +127,7 @@ describe("yt-dlp boundary", () => {
     try {
       await expect(resolveYouTubeWithYtDlp("https://youtube.com/watch?v=dQw4w9WgXcQ")).rejects.toMatchObject({
         code: "YOUTUBE_EXTRACT_FAILED",
+        message: expect.stringContaining("timed out after 20ms"),
       });
     } finally {
       if (originalPath === undefined) {
