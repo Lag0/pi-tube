@@ -4,6 +4,7 @@ import {
   getErrorCategory,
   type PiTubeError,
   type Result,
+  toSafeLine,
 } from "../../core/index.ts";
 
 /** Thrown inside the CLI adapter to stop a command with a `PiTubeError`; `runCli` prints it and exits. */
@@ -38,5 +39,9 @@ export const EXIT_CODE_BY_CATEGORY: Readonly<Record<ErrorCategory, number>> = {
 
 export const exitCodeFor = (error: PiTubeError): number => EXIT_CODE_BY_CATEGORY[getErrorCategory(error.code)];
 
+/**
+ * Two lines, `[CODE] message` and `hint: ...`. Messages can carry page titles and yt-dlp stderr, so both lines go
+ * through `toSafeLine`: a page cannot drive the terminal or add lines.
+ */
 export const formatErrorForCli = (error: PiTubeError): string =>
-  `[${error.code}] ${error.message}\nhint: ${error.hint}`;
+  `[${error.code}] ${toSafeLine(error.message)}\nhint: ${toSafeLine(error.hint)}`;

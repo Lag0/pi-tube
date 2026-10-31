@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { chmod, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { DEFAULT_CONFIG, type PiTubeConfig, parseConfig } from "../../core/domain/config.ts";
+import { type ConfigScalar, DEFAULT_CONFIG, type PiTubeConfig, parseConfig } from "../../core/domain/config.ts";
 import { createError } from "../../core/domain/errors.ts";
 import { err, ok, type Result } from "../../core/domain/result.ts";
 import type { ConfigStore } from "../../core/ports/config-store.ts";
@@ -44,7 +44,7 @@ const loadConfig = async (configFile: string): Promise<Result<LoadedConfig>> => 
 };
 
 /** Overlays `fields` on `base`, keeping unknown keys and their order; an `undefined` field is removed. */
-const withFields = (base: unknown, fields: Readonly<Record<string, string | undefined>>): RawConfig => {
+const withFields = (base: unknown, fields: Readonly<Record<string, ConfigScalar | undefined>>): RawConfig => {
   const source = isRecord(base) ? base : {};
   const pairs: Array<[string, unknown]> = [];
   for (const [key, value] of Object.entries(source)) {
@@ -69,11 +69,25 @@ const mergeConfig = (raw: RawConfig, config: PiTubeConfig): RawConfig => {
       }),
     ]),
   );
+  // A source section is written only when the file already has it or one of its fields is set.
+  const sourceSections: ReadonlyArray<[string, Readonly<Record<string, ConfigScalar | undefined>>]> = [
+    ["network", { allow_private_hosts: config.network?.allow_private_hosts }],
+    ["cookies", { file: config.cookies?.file }],
+    ["local_files", { max_bytes: config.local_files?.max_bytes }],
+  ];
+  const sections = Object.fromEntries(
+    sourceSections
+      .filter(
+        ([name, fields]) => Object.hasOwn(raw, name) || Object.values(fields).some((value) => value !== undefined),
+      )
+      .map(([name, fields]) => [name, withFields(raw[name], fields)]),
+  );
   return {
     ...raw,
     version: config.version,
     defaults: withFields(raw.defaults, { provider: config.defaults.provider, language: config.defaults.language }),
     providers,
+    ...sections,
   };
 };
 

@@ -10,8 +10,7 @@ const artifactWithTitle = (title: string) => {
     kind: "youtube",
     originalInput: "https://youtu.be/abc",
     normalizedUrl: "https://www.youtube.com/watch?v=abc",
-    mediaUrl: "https://example.com/m.m4a",
-    title,
+    metadata: { platform: "Youtube", title },
   };
   return buildOutputArtifact({ source, provider: "groq", transcript: "x" });
 };

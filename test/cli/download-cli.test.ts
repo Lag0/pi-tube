@@ -18,17 +18,23 @@ afterEach(() => {
   rmSync(home, { recursive: true, force: true });
 });
 
-/** A yt-dlp stand-in: answers `outcome`, or prints a file inside the `-P` directory. */
-const fakeDownloader = (outcome?: Partial<ProcessResult>) => {
+/**
+ * A yt-dlp stand-in: answers the metadata run with `metadata`, and the download run with `outcome` or a file
+ * inside the `-P` directory.
+ */
+const fakeDownloader = (outcome?: Partial<ProcessResult>, metadata: Record<string, unknown> = { id: "abc123" }) => {
   const requests: ProcessRequest[] = [];
   const run = async (request: ProcessRequest): Promise<ProcessResult> => {
     requests.push(request);
+    if (request.args.includes("--dump-single-json")) {
+      return { outcome: "exited", exitCode: 0, stdout: JSON.stringify(metadata), stderr: "" };
+    }
     if (outcome) return { outcome: "exited", exitCode: 1, stdout: "", stderr: "", ...outcome };
     const dir = (request.args[request.args.indexOf("-P") + 1] ?? "").replace(/^home:/, "");
     return { outcome: "exited", exitCode: 0, stdout: `${path.join(dir, "Demo [abc123].mp4")}\n`, stderr: "" };
   };
   const outputDirOf = (index = 0): string | undefined => {
-    const args = requests[index]?.args ?? [];
+    const args = requests.filter((request) => request.args.includes("-P"))[index]?.args ?? [];
     return args[args.indexOf("-P") + 1]?.replace(/^home:/, "");
   };
   return { requests, run, outputDirOf };
@@ -54,7 +60,7 @@ describe("download command", () => {
     const result = await download([YOUTUBE, "--audio"], downloader);
 
     expect(result.exitCode).toBe(0);
-    expect(downloader.requests[0]?.args).toEqual(expect.arrayContaining(["-x", "--audio-format", "mp3"]));
+    expect(downloader.requests[1]?.args).toEqual(expect.arrayContaining(["-x", "--audio-format", "mp3"]));
   });
 
   test("an absolute --output is used as is", async () => {
@@ -90,6 +96,18 @@ describe("download command", () => {
       source_kind: "youtube",
       media: "audio",
     });
+  });
+
+  test("downloads from a best-effort site", async () => {
+    const downloader = fakeDownloader(undefined, { id: "1", extractor_key: "Vimeo" });
+    const result = await download(["https://vimeo.com/1", "--json"], downloader);
+
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout).source_kind).toBe("site");
+    expect(downloader.requests.map((request) => request.args.at(-1))).toEqual([
+      "https://vimeo.com/1",
+      "https://vimeo.com/1",
+    ]);
   });
 
   test("validates the required URL", async () => {

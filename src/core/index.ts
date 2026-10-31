@@ -22,9 +22,11 @@ export {
 } from "./application/config.ts";
 export {
   createDownloadMedia,
+  type DownloadMediaDeps,
   type DownloadMediaInput,
   type DownloadMediaOutput,
 } from "./application/download-media.ts";
+export { createGetMediaInfo, type GetMediaInfoDeps } from "./application/get-media-info.ts";
 export { ensureNotAborted, type OperationOptions, type ProgressEvent, type UseCase } from "./application/operation.ts";
 export {
   type AccountDeps,
@@ -42,6 +44,7 @@ export {
 } from "./application/transcribe.ts";
 export {
   CONFIG_VERSION,
+  type ConfigScalar,
   configKeysFor,
   DEFAULT_CONFIG,
   type EnvironmentVariables,
@@ -57,6 +60,7 @@ export {
   type PiTubeError,
   toPiTubeError,
 } from "./domain/errors.ts";
+export { describeSource, type MediaInfo } from "./domain/media-info.ts";
 export {
   findProvider,
   type KeySource,
@@ -67,14 +71,35 @@ export {
   resolveCredential,
 } from "./domain/providers.ts";
 export { err, type Failure, ok, type Result, type Success } from "./domain/result.ts";
-export type { AudioInput, ResolvedSource } from "./domain/source.ts";
+export {
+  type AudioInput,
+  type Chapter,
+  type DirectUrlSource,
+  isSiteSource,
+  type LiveStatus,
+  type LocalFileSource,
+  type MediaMetadata,
+  type ResolvedSource,
+  type SiteKind,
+  type SiteSource,
+  type SourceKind,
+  type SourceTier,
+} from "./domain/source.ts";
+export { tierOf } from "./domain/source-policy.ts";
+export {
+  COOKIES_FILE_ENV,
+  DEFAULT_MAX_LOCAL_FILE_BYTES,
+  MAX_LOCAL_FILE_BYTES_LIMIT,
+  resolveSourceSettings,
+  type SourceSettings,
+} from "./domain/source-settings.ts";
+export { toSafeLine } from "./domain/text.ts";
 export type { OutputArtifact } from "./domain/transcript/contract.ts";
 export { sourceReferenceOf } from "./domain/transcript/render-markdown.ts";
 export type { ConfigStore } from "./ports/config-store.ts";
 export type {
   DownloadedMedia,
   DownloadRequest,
-  DownloadTarget,
   FetchedAudio,
   MediaFetcher,
 } from "./ports/media-fetcher.ts";

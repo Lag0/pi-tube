@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
@@ -69,6 +69,11 @@ describe("cancellation", () => {
       copyFileSync(path.resolve("test", "fixtures-process", "fake-yt-dlp.sh"), path.join(FAKE_YTDLP_DIR, "yt-dlp"));
       chmodSync(path.join(FAKE_YTDLP_DIR, "yt-dlp"), 0o755);
       const outputDir = path.join(workDir, "media");
+      // The bin resolves hosts before yt-dlp runs; allowing private hosts skips that, so this test never uses DNS.
+      writeFileSync(
+        path.join(workDir, "config.json"),
+        JSON.stringify({ version: 1, network: { allow_private_hosts: true } }),
+      );
       const startedAt = Date.now();
 
       const child = spawn(

@@ -23,11 +23,13 @@ const youtubeMetadataResult = {
     kind: "youtube" as const,
     originalInput: "https://youtube.com/watch?v=abc123",
     normalizedUrl: "https://youtube.com/watch?v=abc123",
-    mediaUrl: "https://cdn.example.com/audio.m4a",
-    title: "Launch Video",
-    publishedAt: "2024-02-29",
-    description: "Launch notes: https://example.com/notes",
-    descriptionLinks: ["https://example.com/notes"],
+    metadata: {
+      platform: "Youtube",
+      title: "Launch Video",
+      publishedAt: "2024-02-29",
+      description: "Launch notes: https://example.com/notes",
+      descriptionLinks: ["https://example.com/notes"],
+    },
   },
 };
 

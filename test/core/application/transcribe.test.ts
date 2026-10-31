@@ -243,24 +243,201 @@ describe("audio and output", () => {
   });
 });
 
+describe("source settings", () => {
+  test("resolve and fetchAudio receive the settings resolved from config and env", async () => {
+    const { media, transcribe } = setup({
+      env: { GROQ_API_KEY: "gq", PI_TUBE_COOKIES_FILE: "/a/cookies.txt" },
+      config: config({ network: { allow_private_hosts: true }, local_files: { max_bytes: 10 } }),
+    });
+
+    const result = await run(transcribe);
+
+    expect(result.success).toBe(true);
+    const expected = {
+      allowPrivateHosts: true,
+      maxLocalFileBytes: 10,
+      cookies: { file: "/a/cookies.txt", origin: "env" },
+    };
+    expect(media.calls.settings).toEqual([expected, expected]);
+  });
+
+  test("a relative PI_TUBE_COOKIES_FILE fails before the source is resolved", async () => {
+    const { media, transcribe } = setup({ env: { GROQ_API_KEY: "gq", PI_TUBE_COOKIES_FILE: "cookies.txt" } });
+
+    const result = await run(transcribe);
+
+    expect(result.success ? undefined : result.error.code).toBe("COOKIES_FILE_INVALID");
+    expect(media.calls.resolve).toHaveLength(0);
+  });
+});
+
+describe("site sources", () => {
+  test("the progress detail of an untitled site is its platform", async () => {
+    const vimeo = "https://vimeo.com/1";
+    const media = createFakeMediaFetcher({
+      source: { kind: "site", originalInput: vimeo, normalizedUrl: vimeo, metadata: { platform: "Vimeo" } },
+      audio: { kind: "url", url: "https://cdn.example.com/v.mp3" },
+    });
+    const { deps } = setup({ env: { GROQ_API_KEY: "gq" } });
+    const transcribe = createTranscribe({ ...deps, media: media.fetcher });
+    const details: Array<string | undefined> = [];
+
+    const result = await transcribe(
+      { input: vimeo, timestamps: false, format: "markdown" },
+      { onProgress: (event) => details.push(event.detail) },
+    );
+
+    expect(result.success).toBe(true);
+    expect(details).toContain("(Vimeo)");
+  });
+});
+
+describe("live streams", () => {
+  const liveSource = (liveStatus: "is_live" | "is_upcoming" | "was_live") => ({
+    kind: "youtube" as const,
+    originalInput: "https://www.youtube.com/watch?v=live",
+    normalizedUrl: "https://www.youtube.com/watch?v=live",
+    metadata: { platform: "Youtube", title: "Live show", liveStatus },
+  });
+
+  test("a live stream in progress is refused before any download or provider call", async () => {
+    const { stt, deps } = setup({ env: { GROQ_API_KEY: "gq" } });
+    const media = createFakeMediaFetcher({ source: liveSource("is_live") });
+    const transcribe = createTranscribe({ ...deps, media: media.fetcher });
+
+    const result = await run(transcribe);
+
+    expect(result.success ? undefined : result.error.code).toBe("SOURCE_LIVE_NOT_ENDED");
+    expect(media.calls.fetchAudio).toHaveLength(0);
+    expect(stt.groq.requests).toHaveLength(0);
+  });
+
+  test("a finished live stream is transcribed", async () => {
+    const { stt, deps } = setup({ env: { GROQ_API_KEY: "gq" } });
+    const media = createFakeMediaFetcher({
+      source: liveSource("was_live"),
+      audio: { kind: "url", url: "https://cdn.example.com/v.mp3" },
+    });
+    const transcribe = createTranscribe({ ...deps, media: media.fetcher });
+
+    const result = await run(transcribe);
+
+    expect(result.success).toBe(true);
+    expect(stt.groq.requests).toHaveLength(1);
+  });
+
+  test("download refuses an upcoming live stream without downloading", async () => {
+    const media = createFakeMediaFetcher({ source: liveSource("is_upcoming") });
+    const download = createDownloadMedia({
+      configStore: createInMemoryConfigStore(config()),
+      env: {},
+      media: media.fetcher,
+      defaultOutputDir: outputDir,
+    });
+
+    const result = await download({ input: "https://www.youtube.com/watch?v=live", media: "audio" });
+
+    expect(result.success ? undefined : result.error.code).toBe("SOURCE_LIVE_NOT_ENDED");
+    expect(media.calls.download).toHaveLength(0);
+  });
+});
+
+describe("progress detail", () => {
+  test("a page title reaches the progress line without control characters", async () => {
+    const page = "https://vimeo.com/1";
+    const media = createFakeMediaFetcher({
+      source: {
+        kind: "site",
+        originalInput: page,
+        normalizedUrl: page,
+        metadata: { platform: "Vimeo", title: "Evil\u001b[2J\ntitle" },
+      },
+      audio: { kind: "url", url: "https://cdn.example.com/v.mp3" },
+    });
+    const { deps } = setup({ env: { GROQ_API_KEY: "gq" } });
+    const transcribe = createTranscribe({ ...deps, media: media.fetcher });
+    const details: Array<string | undefined> = [];
+
+    await transcribe(
+      { input: page, timestamps: false, format: "markdown" },
+      { onProgress: (event) => details.push(event.detail) },
+    );
+
+    expect(details).toContain("(Evil [2J title)");
+  });
+});
+
 describe("downloadMedia", () => {
+  test("a best-effort site is resolved, then downloaded from the resolved source", async () => {
+    const vimeo = "https://vimeo.com/1";
+    const source = {
+      kind: "site" as const,
+      originalInput: vimeo,
+      normalizedUrl: vimeo,
+      metadata: { platform: "Vimeo" },
+    };
+    const media = createFakeMediaFetcher({ source });
+    const download = createDownloadMedia({
+      configStore: createInMemoryConfigStore(config()),
+      env: {},
+      media: media.fetcher,
+      defaultOutputDir: outputDir,
+    });
+
+    const result = await download({ input: vimeo, media: "video" });
+
+    expect(result.success ? result.data.sourceKind : undefined).toBe("site");
+    expect(media.calls.resolve).toEqual([vimeo]);
+    expect(media.calls.download[0]?.source).toEqual(source);
+  });
+
   test("a direct media URL is DOWNLOAD_FAILED and nothing is downloaded", async () => {
     const media = createFakeMediaFetcher();
-    const download = createDownloadMedia({ media: media.fetcher, defaultOutputDir: outputDir });
+    const download = createDownloadMedia({
+      configStore: createInMemoryConfigStore(config()),
+      env: {},
+      media: media.fetcher,
+      defaultOutputDir: outputDir,
+    });
 
     const result = await download({ input: INPUT, media: "audio" });
 
-    expect(result.success ? undefined : result.error.code).toBe("DOWNLOAD_FAILED");
+    expect(result.success ? undefined : result.error).toMatchObject({
+      code: "DOWNLOAD_FAILED",
+      message: "`download` takes a page URL that yt-dlp supports; direct media URLs and local files are already files.",
+    });
+    expect(media.calls.resolve).toHaveLength(0);
     expect(media.calls.download).toHaveLength(0);
   });
 
   test("without outputDir it downloads into the default directory", async () => {
     const media = createFakeMediaFetcher();
-    const download = createDownloadMedia({ media: media.fetcher, defaultOutputDir: outputDir });
+    const download = createDownloadMedia({
+      configStore: createInMemoryConfigStore(config()),
+      env: {},
+      media: media.fetcher,
+      defaultOutputDir: outputDir,
+    });
 
     const result = await download({ input: "https://www.youtube.com/watch?v=abc", media: "video" });
 
     expect(result.success ? result.data : undefined).toMatchObject({ sourceKind: "youtube", media: "video" });
     expect(media.calls.download[0]?.request.outputDir).toBe(outputDir);
+  });
+
+  test("passes the resolved source settings to the fetcher", async () => {
+    const media = createFakeMediaFetcher();
+    const download = createDownloadMedia({
+      configStore: createInMemoryConfigStore(config({ network: { allow_private_hosts: true } })),
+      env: {},
+      media: media.fetcher,
+      defaultOutputDir: outputDir,
+    });
+
+    const result = await download({ input: "https://www.youtube.com/watch?v=abc", media: "audio" });
+
+    expect(result.success).toBe(true);
+    const expected = { allowPrivateHosts: true, maxLocalFileBytes: 1073741824 };
+    expect(media.calls.settings).toEqual([expected, expected]);
   });
 });

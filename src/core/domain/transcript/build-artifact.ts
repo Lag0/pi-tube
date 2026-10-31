@@ -1,4 +1,5 @@
-import type { ResolvedSource } from "../source.ts";
+import { type Chapter, isSiteSource, type ResolvedSource } from "../source.ts";
+import { tierOf } from "../source-policy.ts";
 import type { OutputArtifact, OutputArtifactSegment, OutputArtifactSource } from "./contract.ts";
 import { OUTPUT_SCHEMA_VERSION } from "./contract.ts";
 import type { TranscriptionExecutionResult } from "./types.ts";
@@ -7,6 +8,7 @@ interface SegmentLike {
   startMs: number;
   endMs: number;
   text: string;
+  chapter?: number;
 }
 
 const SEGMENT_COMPACTION_THRESHOLD = 400;
@@ -44,29 +46,38 @@ export function toPersistedUrl(url: string): string {
   }
 }
 
-// The yt-dlp media URL of YouTube and Instagram is signed and expires, so it is never persisted.
+// A page source carries no media URL: the one yt-dlp resolves is signed and expires, so pi-tube never keeps it.
 function mapSource(source: ResolvedSource): OutputArtifactSource {
   switch (source.kind) {
     case "youtube":
-      return {
-        kind: source.kind,
-        original_input: withoutCredentials(source.originalInput),
-        normalized_url: withoutCredentials(source.normalizedUrl),
-        title: source.title,
-        published_at: source.publishedAt,
-        description: source.description,
-        description_links: source.descriptionLinks,
-      };
     case "instagram":
+    case "site": {
+      const { metadata } = source;
       return {
         kind: source.kind,
+        tier: tierOf(source.kind),
+        platform: metadata.platform,
+        media_id: metadata.mediaId,
         original_input: withoutCredentials(source.originalInput),
         normalized_url: withoutCredentials(source.normalizedUrl),
-        title: source.title,
+        canonical_url: metadata.canonicalUrl === undefined ? undefined : withoutCredentials(metadata.canonicalUrl),
+        title: metadata.title,
+        published_at: metadata.publishedAt,
+        description: metadata.description,
+        description_links: metadata.descriptionLinks ? [...metadata.descriptionLinks] : undefined,
+        duration_seconds: metadata.durationSeconds,
+        live_status: metadata.liveStatus,
+        chapters: metadata.chapters?.map((chapter) => ({
+          title: chapter.title,
+          start_ms: chapter.startMs,
+          end_ms: chapter.endMs,
+        })),
       };
+    }
     case "direct_url":
       return {
         kind: source.kind,
+        tier: tierOf(source.kind),
         original_input: toPersistedUrl(source.originalInput),
         normalized_url: toPersistedUrl(source.normalizedUrl),
         media_url: toPersistedUrl(source.mediaUrl),
@@ -75,6 +86,7 @@ function mapSource(source: ResolvedSource): OutputArtifactSource {
     case "local_file":
       return {
         kind: source.kind,
+        tier: tierOf(source.kind),
         original_input: source.originalInput,
         absolute_path: source.absolutePath,
         extension: source.extension,
@@ -82,9 +94,19 @@ function mapSource(source: ResolvedSource): OutputArtifactSource {
   }
 }
 
+/** Index of the last chapter that starts at or before `startMs`; undefined before the first one. */
+function chapterAt(chapters: readonly Chapter[], startMs: number): number | undefined {
+  let found: number | undefined;
+  chapters.forEach((chapter, index) => {
+    if (chapter.startMs <= startMs) found = index;
+  });
+  return found;
+}
+
 function mapSegments(
   segments: SegmentLike[] | undefined,
   includeTimestamps: boolean,
+  chapters: readonly Chapter[],
 ): OutputArtifactSegment[] | undefined {
   if (!includeTimestamps) {
     return undefined;
@@ -109,6 +131,7 @@ function mapSegments(
       startMs: segment.startMs,
       endMs: segment.endMs,
       text: segment.text.trim(),
+      chapter: chapterAt(chapters, segment.startMs),
     }));
 
   const compacted = normalized.length >= SEGMENT_COMPACTION_THRESHOLD ? compactDenseSegments(normalized) : normalized;
@@ -117,6 +140,7 @@ function mapSegments(
     start_ms: segment.startMs,
     end_ms: segment.endMs,
     text: segment.text.trim(),
+    ...(segment.chapter === undefined ? {} : { chapter: segment.chapter }),
   }));
 }
 
@@ -149,6 +173,7 @@ function compactDenseSegments(segments: SegmentLike[]): SegmentLike[] {
         startMs: segment.startMs,
         endMs: segment.endMs,
         text: token,
+        chapter: segment.chapter,
         wordCount: tokenWordCount,
         lastToken: token,
       };
@@ -161,6 +186,7 @@ function compactDenseSegments(segments: SegmentLike[]): SegmentLike[] {
     const sentenceBoundary =
       /[.!?]$/.test(current.lastToken) && current.wordCount >= SEGMENT_COMPACTION_MIN_SENTENCE_WORDS;
     const shouldBreak =
+      segment.chapter !== current.chapter ||
       gapMs > SEGMENT_COMPACTION_MAX_GAP_MS ||
       projectedDurationMs > SEGMENT_COMPACTION_MAX_DURATION_MS ||
       reachedWordTarget ||
@@ -171,11 +197,13 @@ function compactDenseSegments(segments: SegmentLike[]): SegmentLike[] {
         startMs: current.startMs,
         endMs: current.endMs,
         text: current.text,
+        chapter: current.chapter,
       });
       current = {
         startMs: segment.startMs,
         endMs: segment.endMs,
         text: token,
+        chapter: segment.chapter,
         wordCount: tokenWordCount,
         lastToken: token,
       };
@@ -196,6 +224,7 @@ function compactDenseSegments(segments: SegmentLike[]): SegmentLike[] {
       startMs: current.startMs,
       endMs: current.endMs,
       text: current.text,
+      chapter: current.chapter,
     });
   }
 
@@ -258,6 +287,7 @@ export function buildOutputArtifact(
   const segments = mapSegments(
     (result as TranscriptionExecutionResult & { segments?: SegmentLike[] }).segments,
     includeTimestamps,
+    isSiteSource(result.source) ? (result.source.metadata.chapters ?? []) : [],
   );
   const segmentCount = segments?.length ?? 0;
   const summary = summarize(result, segmentCount, includeTimestamps);

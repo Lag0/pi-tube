@@ -3,6 +3,8 @@ export function hintForCommand(command: string | undefined): string {
   switch (command) {
     case "transcribe":
       return "Use one of: `pi-tube transcribe <input>`, `pi-tube transcribe <input> --provider <deepgram|groq|elevenlabs>`, `pi-tube transcribe <input> --json`.";
+    case "info":
+      return "Use one of: `pi-tube info <input>`, `pi-tube info <input> --json`.";
     case "download":
       return "Use one of: `pi-tube download <url>`, `pi-tube download <url> --audio`, `pi-tube download <url> --output <dir>`.";
     case "auth":

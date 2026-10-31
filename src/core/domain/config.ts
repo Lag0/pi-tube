@@ -1,6 +1,7 @@
 import { createError } from "./errors.ts";
 import { findProvider, type ProviderDescriptor } from "./providers.ts";
 import { err, ok, type Result } from "./result.ts";
+import { isAbsolutePath, MAX_LOCAL_FILE_BYTES_LIMIT } from "./source-settings.ts";
 
 /** Current config file format version. */
 export const CONFIG_VERSION = 1;
@@ -14,7 +15,10 @@ export interface ProviderConfig {
   readonly api_key_env?: string;
 }
 
-/** The user config file (`~/.pi-tube/config.json`), as the core sees it. */
+/** A config value as `config get|set|list` see it, with the type it has in the file. */
+export type ConfigScalar = string | number | boolean;
+
+/** The user config file (`~/.pi-tube/config.json`), as the core sees it. An absent section means its defaults. */
 export interface PiTubeConfig {
   readonly version: number;
   readonly defaults: {
@@ -22,6 +26,9 @@ export interface PiTubeConfig {
     readonly language?: string;
   };
   readonly providers: Readonly<Record<string, ProviderConfig>>;
+  readonly network?: { readonly allow_private_hosts?: boolean };
+  readonly cookies?: { readonly file?: string };
+  readonly local_files?: { readonly max_bytes?: number };
 }
 
 /** Config used when the file does not exist yet. */
@@ -45,6 +52,52 @@ const readStringFields = <F extends string>(
     if (trimmed.length > 0) parsed[field] = trimmed;
   }
   return ok(parsed);
+};
+
+const isMaxBytes = (value: unknown): value is number =>
+  typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= MAX_LOCAL_FILE_BYTES_LIMIT;
+
+type Fail = (fieldPath: string, expected: string) => Result<never>;
+
+/** Parses one optional source section; an absent section stays absent. */
+const parseSection = <T>(
+  value: unknown,
+  name: string,
+  fail: Fail,
+  parse: (section: Record<string, unknown>) => Result<T>,
+): Result<T | undefined> => {
+  if (value === undefined) return ok(undefined);
+  if (!isRecord(value)) return fail(name, "an object");
+  return parse(value);
+};
+
+const parseSourceSections = (
+  raw: Record<string, unknown>,
+  fail: Fail,
+): Result<Pick<PiTubeConfig, "network" | "cookies" | "local_files">> => {
+  const network = parseSection(raw.network, "network", fail, (section) => {
+    const allow = section.allow_private_hosts;
+    if (allow !== undefined && typeof allow !== "boolean") return fail("network.allow_private_hosts", "a boolean");
+    return ok(allow === undefined ? {} : { allow_private_hosts: allow });
+  });
+  if (!network.success) return network;
+  const cookies = parseSection(raw.cookies, "cookies", fail, (section) =>
+    readStringFields(section, ["file"], "cookies", fail),
+  );
+  if (!cookies.success) return cookies;
+  const localFiles = parseSection(raw.local_files, "local_files", fail, (section) => {
+    const maxBytes = section.max_bytes;
+    if (maxBytes !== undefined && !isMaxBytes(maxBytes)) {
+      return fail("local_files.max_bytes", `an integer from 1 to ${MAX_LOCAL_FILE_BYTES_LIMIT}`);
+    }
+    return ok(maxBytes === undefined ? {} : { max_bytes: maxBytes });
+  });
+  if (!localFiles.success) return localFiles;
+  return ok({
+    ...(network.data ? { network: network.data } : {}),
+    ...(cookies.data ? { cookies: cookies.data } : {}),
+    ...(localFiles.data ? { local_files: localFiles.data } : {}),
+  });
 };
 
 /**
@@ -75,7 +128,14 @@ export const parseConfig = (raw: unknown, location: string): Result<PiTubeConfig
     parsedProviders.push([id, parsedEntry.data]);
   }
 
-  return ok({ version, defaults: parsedDefaults.data, providers: Object.fromEntries(parsedProviders) });
+  const sections = parseSourceSections(raw, fail);
+  if (!sections.success) return sections;
+  return ok({
+    version,
+    defaults: parsedDefaults.data,
+    providers: Object.fromEntries(parsedProviders),
+    ...sections.data,
+  });
 };
 
 const API_KEY_PATTERN = /^providers\.([^.]+)\.api_key$/;
@@ -86,6 +146,9 @@ const ENV_NAME_PATTERN = /^[A-Z_][A-Z0-9_]*$/;
 export const configKeysFor = (descriptors: readonly ProviderDescriptor[]): readonly string[] => [
   "defaults.provider",
   "defaults.language",
+  "network.allow_private_hosts",
+  "cookies.file",
+  "local_files.max_bytes",
   ...descriptors.map((descriptor) => `providers.${descriptor.id}.api_key_env`),
 ];
 
@@ -108,9 +171,12 @@ export const checkConfigKey = (key: string, descriptors: readonly ProviderDescri
 };
 
 /** Value of a key from `configKeysFor`; `undefined` when unset. */
-export const getConfigValue = (config: PiTubeConfig, key: string): string | undefined => {
+export const getConfigValue = (config: PiTubeConfig, key: string): ConfigScalar | undefined => {
   if (key === "defaults.provider") return config.defaults.provider;
   if (key === "defaults.language") return config.defaults.language;
+  if (key === "network.allow_private_hosts") return config.network?.allow_private_hosts;
+  if (key === "cookies.file") return config.cookies?.file;
+  if (key === "local_files.max_bytes") return config.local_files?.max_bytes;
   const providerId = API_KEY_ENV_PATTERN.exec(key)?.[1];
   return providerId === undefined ? undefined : config.providers[providerId]?.api_key_env;
 };
@@ -136,6 +202,39 @@ export const applyConfigValue = (
   }
   if (checkedKey.data === "defaults.language") {
     return ok({ ...config, defaults: { ...config.defaults, language: trimmedValue.toLowerCase() } });
+  }
+  if (checkedKey.data === "network.allow_private_hosts") {
+    const normalized = trimmedValue.toLowerCase();
+    if (normalized !== "true" && normalized !== "false") {
+      return err(
+        createError("INPUT_INVALID", "`network.allow_private_hosts` must be true or false.", {
+          hint: "Use `true` or `false`.",
+        }),
+      );
+    }
+    return ok({ ...config, network: { ...config.network, allow_private_hosts: normalized === "true" } });
+  }
+  if (checkedKey.data === "cookies.file") {
+    if (!isAbsolutePath(trimmedValue)) {
+      return err(
+        createError("INPUT_INVALID", "`cookies.file` must be an absolute path.", {
+          hint: "Use an absolute path, such as /Users/me/cookies.txt or C:\\Users\\me\\cookies.txt.",
+        }),
+      );
+    }
+    return ok({ ...config, cookies: { ...config.cookies, file: trimmedValue } });
+  }
+  if (checkedKey.data === "local_files.max_bytes") {
+    const maxBytes = /^\d+$/.test(trimmedValue) ? Number(trimmedValue) : Number.NaN;
+    if (!isMaxBytes(maxBytes)) {
+      return err(
+        createError(
+          "INPUT_INVALID",
+          `\`local_files.max_bytes\` must be a whole number of bytes from 1 to ${MAX_LOCAL_FILE_BYTES_LIMIT}.`,
+        ),
+      );
+    }
+    return ok({ ...config, local_files: { ...config.local_files, max_bytes: maxBytes } });
   }
 
   const providerId = API_KEY_ENV_PATTERN.exec(checkedKey.data)?.[1];

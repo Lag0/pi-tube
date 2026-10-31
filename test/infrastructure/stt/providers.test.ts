@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { DeepgramError } from "@deepgram/sdk";
 import { afterAll, describe, expect, test } from "vitest";
 import type { SttProvider, SttRequest } from "../../../src/core/ports/stt-provider.ts";
 import { createDeepgramProvider } from "../../../src/infrastructure/stt/deepgram.ts";
@@ -49,17 +50,22 @@ const HARNESSES: readonly Harness[] = [
         ],
       },
     },
-    receivesSignal: false,
+    receivesSignal: true,
     build: (behavior, recorded, timeoutMs) =>
       createDeepgramProvider({
         timeoutMs,
         createClient: (apiKey) => {
           recorded.keys.push(apiKey);
-          const answer = (payload: unknown, options: unknown) => {
-            recorded.calls.push({ payload, options });
-            return settle(behavior).then((result) => ({ result, error: null }));
+          return {
+            transcribeUrl: (request, options) => {
+              recorded.calls.push({ payload: request, options });
+              return settle(behavior);
+            },
+            transcribeFile: (file, request, options) => {
+              recorded.calls.push({ payload: request, options, source: file });
+              return settle(behavior);
+            },
           };
-          return { transcribeUrl: answer, transcribeFile: answer };
         },
       }),
   },
@@ -185,17 +191,45 @@ describe("registry", () => {
 });
 
 describe("SDK request options", () => {
-  test("Deepgram's { error } response, the way SDK 4.x reports HTTP failures, is mapped", async () => {
+  test.each([
+    [401, "PROVIDER_AUTH"],
+    [429, "PROVIDER_RATE_LIMIT"],
+  ])("Deepgram's thrown DeepgramError with status %i is %s", async (statusCode, code) => {
     const provider = createDeepgramProvider({
       createClient: () => {
-        const answer = async () => ({ result: null, error: { status: 429, message: "Too Many Requests" } });
-        return { transcribeUrl: answer, transcribeFile: answer };
+        const fail = async () => {
+          throw new DeepgramError({ message: "failed", statusCode });
+        };
+        return { transcribeUrl: fail, transcribeFile: fail };
       },
     });
 
     const result = await provider.transcribe(urlRequest);
 
-    expect(result.success ? undefined : result.error.code).toBe("PROVIDER_RATE_LIMIT");
+    expect(result.success ? undefined : result.error.code).toBe(code);
+  });
+
+  test("Deepgram gets the per-request timeout in seconds and two retries", async () => {
+    const recorded = recorder();
+    const deepgram = HARNESSES.find((harness) => harness.id === "deepgram");
+    await deepgram?.build({ kind: "resolve", payload: deepgram.success }, recorded, 5000).transcribe(urlRequest);
+
+    expect(recorded.calls[0]?.options).toMatchObject({ timeoutInSeconds: 5, maxRetries: 2 });
+  });
+
+  test("cancelling a Deepgram request aborts the SDK's signal", async () => {
+    const recorded = recorder();
+    const deepgram = HARNESSES.find((harness) => harness.id === "deepgram");
+    const controller = new AbortController();
+    const pending = deepgram?.build({ kind: "hang" }, recorded).transcribe(urlRequest, { signal: controller.signal });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    controller.abort();
+    const result = await pending;
+
+    const options = recorded.calls[0]?.options as { abortSignal?: AbortSignal } | undefined;
+    expect(result?.success ? undefined : result?.error.code).toBe("CANCELLED");
+    expect(options?.abortSignal?.aborted).toBe(true);
   });
 
   test("Groq gets the per-request timeout and two retries", async () => {

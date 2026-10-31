@@ -4,6 +4,7 @@ import { APP_VERSION, COMMAND_IDENTITY, getHelpDocument, HELP_TOPICS, type HelpT
 import { runAuth, runProviders } from "./commands/account.ts";
 import { runConfig, runDefaults } from "./commands/config.ts";
 import { runDownload } from "./commands/download.ts";
+import { runInfo } from "./commands/info.ts";
 import { runTranscribe } from "./commands/transcribe.ts";
 import { CliFailure, exitCodeFor, formatErrorForCli } from "./error-output.ts";
 import { type HelpDocument, renderHelpDocument } from "./help-renderer.ts";
@@ -23,6 +24,7 @@ type CliAction =
       rootOptions: RootOptions;
     }
   | { kind: "download"; input?: string; extraPositionals: string[]; options: DownloadOptions; rootOptions: RootOptions }
+  | { kind: "info"; input?: string; extraPositionals: string[]; options: JsonCommandOptions; rootOptions: RootOptions }
   | { kind: "providers"; options: JsonCommandOptions }
   | { kind: "auth"; action?: string; provider?: string; options: AuthOptions; rootOptions: RootOptions }
   | { kind: "defaults"; action?: string; value?: string; rootOptions: RootOptions }
@@ -164,9 +166,19 @@ function createProgram(setAction: (action: CliAction) => void): Command {
     });
 
   program
+    .command("info")
+    .description("Show media metadata without transcribing.")
+    .argument("[input]", "URL or local media file")
+    .argument("[extraPositionals...]", "extra inputs")
+    .option("--json", "Print the media info as JSON on stdout.")
+    .action((input: string | undefined, extraPositionals: string[], options: JsonCommandOptions) => {
+      setAction({ kind: "info", input, extraPositionals, options, rootOptions: program.opts<RootOptions>() });
+    });
+
+  program
     .command("download")
-    .description("Download YouTube/Instagram media.")
-    .argument("[input]", "YouTube or Instagram URL")
+    .description("Download media from a page yt-dlp supports.")
+    .argument("[input]", "page URL")
     .argument("[extraPositionals...]", "extra URL inputs")
     .option("--audio", "Download audio only.")
     .option("--output <dir>", "Output directory (default: ~/.pi-tube/downloads).")
@@ -305,6 +317,13 @@ export const runCli = async (argv: readonly string[], deps: CliDeps): Promise<nu
           extraPositionals: action.extraPositionals,
           audio: Boolean(action.options.audio),
           output: action.options.output,
+          json: Boolean(action.options.json),
+          color: action.rootOptions.color !== false,
+        });
+      case "info":
+        return await runInfo(deps, {
+          input: action.input,
+          extraPositionals: action.extraPositionals,
           json: Boolean(action.options.json),
           color: action.rootOptions.color !== false,
         });

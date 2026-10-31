@@ -4,6 +4,7 @@ import {
   type ConfigValues,
   createDownloadMedia,
   createGetConfigValue,
+  createGetMediaInfo,
   createListConfigValues,
   createListProviders,
   createLoginProvider,
@@ -18,6 +19,7 @@ import {
   type LogoutInput,
   type LogoutOutput,
   type MediaFetcher,
+  type MediaInfo,
   type ProviderDescriptor,
   type ProviderListing,
   type SttProvider,
@@ -26,6 +28,7 @@ import {
   type UseCase,
 } from "./core/index.ts";
 import { createFileConfigStore } from "./infrastructure/config/file-config-store.ts";
+import type { LookupHost } from "./infrastructure/media/host-guard.ts";
 import { createMediaFetcher } from "./infrastructure/media/media-fetcher.ts";
 import { createFileTranscriptStore } from "./infrastructure/output/file-transcript-store.ts";
 import { resolvePiTubePaths } from "./infrastructure/paths.ts";
@@ -39,11 +42,12 @@ export interface AppEnvironment {
   readonly homedir: () => string;
 }
 
-/** Test seams: fake providers, a fake media fetcher, or a fake process runner under the real fetcher. */
+/** Test seams: fake providers, a fake media fetcher, or a fake process runner and DNS under the real fetcher. */
 export interface AppOverrides {
   readonly stt?: Readonly<Record<string, SttProvider>>;
   readonly media?: MediaFetcher;
   readonly runProcess?: (request: ProcessRequest) => Promise<ProcessResult>;
+  readonly lookup?: LookupHost;
 }
 
 /** The composition root's product: everything an adapter may call. */
@@ -57,6 +61,7 @@ export interface App {
   readonly listConfigValues: UseCase<Record<string, never>, ConfigValues>;
   readonly transcribe: UseCase<TranscribeInput, TranscribeOutput>;
   readonly downloadMedia: UseCase<DownloadMediaInput, DownloadMediaOutput>;
+  readonly getMediaInfo: UseCase<{ readonly input: string }, MediaInfo>;
 }
 
 /** Wires the core and the infrastructure for one environment. */
@@ -65,7 +70,14 @@ export const createApp = (environment: AppEnvironment, overrides: AppOverrides =
   const paths = resolvePiTubePaths(environment);
   const configStore = createFileConfigStore(paths.configFile);
   const media =
-    overrides.media ?? createMediaFetcher({ env, cwd, tmpDir: paths.tmpDir, run: overrides.runProcess ?? runProcess });
+    overrides.media ??
+    createMediaFetcher({
+      env,
+      cwd,
+      tmpDir: paths.tmpDir,
+      run: overrides.runProcess ?? runProcess,
+      ...(overrides.lookup ? { lookup: overrides.lookup } : {}),
+    });
   const accountDeps = { configStore, env, providers: PROVIDER_DESCRIPTORS };
   const configDeps = { configStore, providers: PROVIDER_DESCRIPTORS };
 
@@ -86,6 +98,7 @@ export const createApp = (environment: AppEnvironment, overrides: AppOverrides =
       store: createFileTranscriptStore(paths.outputDir),
       now: () => new Date(),
     }),
-    downloadMedia: createDownloadMedia({ media, defaultOutputDir: paths.downloadsDir }),
+    downloadMedia: createDownloadMedia({ configStore, env, media, defaultOutputDir: paths.downloadsDir }),
+    getMediaInfo: createGetMediaInfo({ configStore, env, media }),
   };
 };

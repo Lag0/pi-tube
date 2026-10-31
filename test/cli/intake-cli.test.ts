@@ -75,11 +75,34 @@ describe("CLI intake integration", () => {
     expect(output).not.toContain("cdn.example.com");
   });
 
-  test("fails an unsupported non-direct URL", async () => {
-    const result = await run("https://example.com/blog-post");
+  test("a page yt-dlp cannot read is SOURCE_UNSUPPORTED", async () => {
+    const result = await run("https://example.com/blog-post", {
+      metadataFailure: { stderr: "ERROR: Unsupported URL: https://example.com/blog-post" },
+    });
 
     expect(result.exitCode).toBe(5);
-    expect(result.stderr).toContain("[UNSUPPORTED_URL_NOT_DIRECT_MEDIA]");
+    expect(result.stderr).toContain("[SOURCE_UNSUPPORTED]");
+  });
+
+  test("a live stream in progress exits 5 with a retry-later hint", async () => {
+    const result = await run("https://www.youtube.com/watch?v=live1", {
+      metadata: { id: "live1", extractor_key: "Youtube", title: "Live", live_status: "is_live" },
+    });
+
+    expect(result.exitCode).toBe(5);
+    expect(result.stderr).toContain("[SOURCE_LIVE_NOT_ENDED]");
+    expect(result.stderr).toContain("Retry once the stream has ended");
+  });
+
+  test("transcribes a best-effort site through yt-dlp", async () => {
+    const result = await run("https://vimeo.com/1", {
+      metadata: { id: "1", extractor_key: "Vimeo", title: "Vimeo Mock" },
+    });
+    const output = readOutputFileFromStdout(result.stdout);
+
+    expect(result.exitCode).toBe(0);
+    expect(output).toContain('source_kind: "site"');
+    expect(output).toContain("- Title: Vimeo Mock");
   });
 
   test("fails an auth-required Instagram URL with guidance", async () => {
@@ -88,8 +111,8 @@ describe("CLI intake integration", () => {
     });
 
     expect(result.exitCode).toBe(5);
-    expect(result.stderr).toContain("[INSTAGRAM_AUTH_REQUIRED]");
-    expect(result.stderr).toContain("supports public Instagram URLs only");
+    expect(result.stderr).toContain("[SOURCE_AUTH_REQUIRED]");
+    expect(result.stderr).toContain("pi-tube config set cookies.file");
   });
 
   test("maps Instagram extraction failures to INSTAGRAM_EXTRACT_FAILED", async () => {

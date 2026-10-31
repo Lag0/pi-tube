@@ -1,3 +1,4 @@
+import { toSafeLine } from "../text.ts";
 import type { OutputArtifact, OutputArtifactSource } from "./contract.ts";
 
 /** The one URL or path that identifies the source in the frontmatter and in CLI JSON output. */
@@ -42,8 +43,15 @@ function formatTimestamp(milliseconds: number): string {
 
 function buildSourceMetadataLines(artifact: OutputArtifact): string[] {
   const links = artifact.source.description_links ?? [];
+  const chapters = artifact.source.chapters ?? [];
   const hasMetadata = Boolean(
-    artifact.source.title || artifact.source.published_at || artifact.source.description || links.length > 0,
+    artifact.source.title ||
+      artifact.source.platform ||
+      artifact.source.published_at ||
+      artifact.source.duration_seconds ||
+      artifact.source.description ||
+      links.length > 0 ||
+      chapters.length > 0,
   );
 
   if (!hasMetadata) {
@@ -56,8 +64,16 @@ function buildSourceMetadataLines(artifact: OutputArtifact): string[] {
     lines.push(`- Title: ${artifact.source.title}`);
   }
 
+  if (artifact.source.platform) {
+    lines.push(`- Platform: ${artifact.source.platform}`);
+  }
+
   if (artifact.source.published_at) {
     lines.push(`- Published at: ${artifact.source.published_at}`);
+  }
+
+  if (artifact.source.duration_seconds) {
+    lines.push(`- Duration: ${formatTimestamp(artifact.source.duration_seconds * 1000)}`);
   }
 
   if (artifact.source.description) {
@@ -68,6 +84,30 @@ function buildSourceMetadataLines(artifact: OutputArtifact): string[] {
     lines.push("", "### Description Links", ...links.map((link) => `- ${link}`));
   }
 
+  if (chapters.length > 0) {
+    lines.push(
+      "",
+      "### Chapters",
+      ...chapters.map((chapter) => `- [${formatTimestamp(chapter.start_ms)}] ${toSafeLine(chapter.title)}`),
+    );
+  }
+
+  return lines;
+}
+
+/** One line per segment, with a `####` heading before the first segment of each chapter. */
+function buildSegmentLines(artifact: OutputArtifact): string[] {
+  const chapters = artifact.source.chapters ?? [];
+  const lines: string[] = [];
+  let currentChapter: number | undefined;
+  for (const segment of artifact.transcript.segments ?? []) {
+    if (segment.chapter !== undefined && segment.chapter !== currentChapter) {
+      const chapter = chapters[segment.chapter];
+      if (chapter) lines.push(`#### ${toSafeLine(chapter.title)}`);
+    }
+    currentChapter = segment.chapter;
+    lines.push(`- [${formatTimestamp(segment.start_ms)} - ${formatTimestamp(segment.end_ms)}] ${segment.text}`);
+  }
   return lines;
 }
 
@@ -76,14 +116,7 @@ export function renderMarkdown(artifact: OutputArtifact): string {
   const segments = artifact.transcript.segments ?? [];
   const segmentLines =
     includeTranscriptHeader && segments.length > 0
-      ? [
-          "",
-          "### Timestamped Segments",
-          ...segments.map(
-            (segment) =>
-              `- [${formatTimestamp(segment.start_ms)} - ${formatTimestamp(segment.end_ms)}] ${segment.text}`,
-          ),
-        ]
+      ? ["", "### Timestamped Segments", ...buildSegmentLines(artifact)]
       : [];
   const transcriptHeaderLines = includeTranscriptHeader ? ["", "## Transcript"] : [];
 

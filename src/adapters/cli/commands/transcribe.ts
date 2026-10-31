@@ -26,6 +26,8 @@ export const toTranscribeJson = (output: TranscribeOutput) => {
       kind: artifact.source.kind,
       reference: sourceReferenceOf(artifact.source),
       title: artifact.source.title ?? null,
+      platform: artifact.source.platform ?? null,
+      tier: artifact.source.tier,
     },
     requested_language: artifact.transcription.requested_language ?? null,
     detected_language: artifact.transcription.detected_language ?? null,

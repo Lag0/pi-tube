@@ -18,7 +18,7 @@ const usageError = (message: string): CliFailure =>
 
 /** `pi-tube download <url>`: into `~/.pi-tube/downloads` unless `--output` says otherwise. */
 export const runDownload = async (deps: CliDeps, command: DownloadCommand): Promise<number> => {
-  if (!command.input?.trim()) throw usageError("`download` expects a YouTube or Instagram URL.");
+  if (!command.input?.trim()) throw usageError("`download` expects a page URL.");
   if (command.extraPositionals.length > 0) throw usageError("`download` accepts exactly one URL input.");
 
   const progress = createProgressReporter({ color: command.color, stream: deps.io.progressStream });

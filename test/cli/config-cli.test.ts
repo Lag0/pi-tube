@@ -45,6 +45,9 @@ describe("config command", () => {
         `config_path=${configPath}`,
         "defaults.provider=groq",
         "defaults.language=(unset)",
+        "network.allow_private_hosts=(unset)",
+        "cookies.file=(unset)",
+        "local_files.max_bytes=(unset)",
         "providers.deepgram.api_key_env=(unset)",
         "providers.groq.api_key_env=(unset)",
         "providers.elevenlabs.api_key_env=(unset)",
@@ -66,10 +69,33 @@ describe("config command", () => {
       values: {
         "defaults.provider": null,
         "defaults.language": null,
+        "network.allow_private_hosts": null,
+        "cookies.file": null,
+        "local_files.max_bytes": null,
         "providers.deepgram.api_key_env": null,
         "providers.groq.api_key_env": "MY_GROQ",
         "providers.elevenlabs.api_key_env": null,
       },
+    });
+  });
+
+  test("source keys keep their type in JSON and print as text", async () => {
+    const set = await run(["config", "set", "network.allow_private_hosts", "true", "--json"]);
+    expect(JSON.parse(set.stdout)).toEqual({
+      key: "network.allow_private_hosts",
+      value: true,
+      config_path: configPath,
+    });
+
+    await run(["config", "set", "local_files.max_bytes", "1048576"]);
+    const get = await run(["config", "get", "local_files.max_bytes"]);
+    expect(get.stdout).toBe(`[CONFIG_GET] key=local_files.max_bytes value=1048576 config_path=${configPath}\n`);
+
+    const list = await run(["config", "list", "--json"]);
+    expect(JSON.parse(list.stdout).values).toMatchObject({
+      "network.allow_private_hosts": true,
+      "cookies.file": null,
+      "local_files.max_bytes": 1048576,
     });
   });
 

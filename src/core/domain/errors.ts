@@ -32,6 +32,10 @@ export const ERROR_CATALOG = {
     category: "config",
     hint: "Check that your user can read and write the config file and its directory.",
   },
+  COOKIES_FILE_INVALID: {
+    category: "config",
+    hint: "Point `cookies.file` (or PI_TUBE_COOKIES_FILE) at a readable cookies.txt in Netscape format, given as an absolute path.",
+  },
   CANCELLED: {
     category: "cancelled",
     hint: "Run the command again to retry.",
@@ -76,17 +80,29 @@ export const ERROR_CATALOG = {
     category: "provider",
     hint: "Retry; if it keeps failing, pass `--provider` with another configured provider.",
   },
-  UNSUPPORTED_URL_NOT_DIRECT_MEDIA: {
+  SOURCE_UNSUPPORTED: {
     category: "source",
-    hint: "Pass a YouTube or Instagram URL, a direct media URL (.mp3, .mp4, ...) or a local file.",
+    hint: "Pass a page from a site yt-dlp supports (`yt-dlp --list-extractors`), a direct media URL (.mp3, .mp4, ...) or a local file.",
+  },
+  SOURCE_HOST_BLOCKED: {
+    category: "source",
+    hint: "pi-tube refuses private, loopback and link-local addresses. If you trust this host, run `pi-tube config set network.allow_private_hosts true`.",
+  },
+  SOURCE_LIVE_NOT_ENDED: {
+    category: "source",
+    hint: "Retry once the stream has ended and its recording is available; pi-tube transcribes finished streams only.",
+  },
+  SOURCE_EXTRACT_FAILED: {
+    category: "source",
+    hint: "Check that the page opens in a browser and update yt-dlp (`yt-dlp -U`, `brew upgrade yt-dlp` or `pipx upgrade yt-dlp`); support for this site is best-effort.",
   },
   YOUTUBE_EXTRACT_FAILED: {
     category: "source",
     hint: "Check that the video is public and opens in a browser, then retry.",
   },
-  INSTAGRAM_AUTH_REQUIRED: {
+  SOURCE_AUTH_REQUIRED: {
     category: "source",
-    hint: "pi-tube supports public Instagram URLs only.",
+    hint: "Export cookies for this site from a browser where you are logged in to a cookies.txt file (Netscape format), then run `pi-tube config set cookies.file <absolute path>` or set PI_TUBE_COOKIES_FILE.",
   },
   INSTAGRAM_EXTRACT_FAILED: {
     category: "source",
@@ -96,13 +112,17 @@ export const ERROR_CATALOG = {
     category: "source",
     hint: "Check the file path and retry.",
   },
+  LOCAL_FILE_TOO_LARGE: {
+    category: "source",
+    hint: "Raise the limit with `pi-tube config set local_files.max_bytes <bytes>` (at most 2147483647), or use a shorter file.",
+  },
   LOCAL_FILE_UNSUPPORTED_EXTENSION: {
     category: "source",
     hint: "Use an audio or video file (.mp3, .wav, .m4a, .mp4, .mov, ...).",
   },
   DOWNLOAD_FAILED: {
     category: "source",
-    hint: "Check that the URL is a public YouTube or Instagram video and retry.",
+    hint: "Check that the page opens in a browser and retry; `download` takes a page URL that yt-dlp supports.",
   },
 } as const satisfies Record<string, ErrorCatalogEntry>;
 

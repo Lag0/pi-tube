@@ -2,7 +2,10 @@ import type { EnvironmentVariables } from "../domain/config.ts";
 import { createError, type PiTubeError } from "../domain/errors.ts";
 import { type ProviderDescriptor, resolveCredential, selectProvider } from "../domain/providers.ts";
 import { err, ok } from "../domain/result.ts";
-import type { ResolvedSource } from "../domain/source.ts";
+import { isSiteSource, type ResolvedSource } from "../domain/source.ts";
+import { ensureFinishedMedia } from "../domain/source-policy.ts";
+import { resolveSourceSettings } from "../domain/source-settings.ts";
+import { toSafeLine } from "../domain/text.ts";
 import { buildOutputArtifact } from "../domain/transcript/build-artifact.ts";
 import type { OutputArtifact } from "../domain/transcript/contract.ts";
 import { transcriptFileName } from "../domain/transcript/file-name.ts";
@@ -55,7 +58,8 @@ const firstNonEmpty = (...values: ReadonlyArray<string | undefined>): string | u
   values.map((value) => value?.trim()).find((value) => value !== undefined && value.length > 0);
 
 const sourceDetail = (source: ResolvedSource): string => {
-  if (source.kind === "youtube" || source.kind === "instagram") return source.title ?? source.kind;
+  // The title comes from the page: the progress line is printed to the terminal.
+  if (isSiteSource(source)) return toSafeLine(source.metadata.title ?? source.metadata.platform);
   return source.kind === "local_file" ? source.kind : "direct url";
 };
 
@@ -89,6 +93,8 @@ export const createTranscribe =
     if (!ready.success) return ready;
     const config = await deps.configStore.read();
     if (!config.success) return config;
+    const settings = resolveSourceSettings(config.data, deps.env);
+    if (!settings.success) return settings;
 
     const selected = selectProvider({
       explicit: input.provider,
@@ -113,10 +119,12 @@ export const createTranscribe =
     if (!writable.success) return writable;
 
     options?.onProgress?.({ label: "Resolving source..." });
-    const source = await deps.media.resolve(input.input, options);
+    const source = await deps.media.resolve(input.input, settings.data, options);
     if (!source.success) return source;
+    const finished = ensureFinishedMedia(source.data);
+    if (!finished.success) return finished;
     options?.onProgress?.({ label: "Transcribing audio...", detail: `(${sourceDetail(source.data)})` });
-    const audio = await deps.media.fetchAudio(source.data, options);
+    const audio = await deps.media.fetchAudio(source.data, settings.data, options);
     if (!audio.success) return audio;
 
     let transcript: Awaited<ReturnType<SttProvider["transcribe"]>>;

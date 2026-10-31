@@ -24,7 +24,7 @@ describe("json renderer", () => {
     });
     const payload = JSON.parse(renderJson(artifact)) as Record<string, unknown>;
 
-    expect(payload.schema_version).toBe("1.1.0");
+    expect(payload.schema_version).toBe("1.2.0");
     expect(payload.generated_at).toBe("2026-03-02T23:40:00.000Z");
     expect(Object.keys(payload)).toEqual([
       "schema_version",
@@ -67,11 +67,13 @@ describe("json renderer", () => {
           kind: "youtube",
           originalInput: "https://youtube.com/watch?v=abc123",
           normalizedUrl: "https://youtube.com/watch?v=abc123",
-          mediaUrl: "https://cdn.example.com/audio.m4a",
-          title: "Launch Video",
-          publishedAt: "2024-02-29",
-          description: "Launch notes: https://example.com/notes",
-          descriptionLinks: ["https://example.com/notes"],
+          metadata: {
+            platform: "Youtube",
+            title: "Launch Video",
+            publishedAt: "2024-02-29",
+            description: "Launch notes: https://example.com/notes",
+            descriptionLinks: ["https://example.com/notes"],
+          },
         },
       },
       { generatedAt: "2026-03-02T23:40:00.000Z" },

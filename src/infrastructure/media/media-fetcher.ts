@@ -6,7 +6,7 @@ import type { EnvironmentVariables } from "../../core/domain/config.ts";
 import { createError } from "../../core/domain/errors.ts";
 import type { OperationOptions } from "../../core/domain/operation.ts";
 import { err, ok, type Result } from "../../core/domain/result.ts";
-import type { ResolvedSource } from "../../core/domain/source.ts";
+import type { ResolvedSource, SiteKind } from "../../core/domain/source.ts";
 import {
   classifyInput,
   getLocalFileExtension,
@@ -14,9 +14,12 @@ import {
   normalizeDirectMediaUrl,
   tryParseHttpUrl,
 } from "../../core/domain/source-policy.ts";
+import type { SourceSettings } from "../../core/domain/source-settings.ts";
 import type { MediaFetcher } from "../../core/ports/media-fetcher.ts";
 import { errnoOf } from "../errno.ts";
 import { type ProcessRequest, type ProcessResult, runProcess } from "../process/run-process.ts";
+import { prepareCookies } from "./cookies.ts";
+import { checkHost, defaultLookup, type LookupHost } from "./host-guard.ts";
 import {
   AUDIO_FORMAT_SELECTOR,
   DOWNLOAD_TEMPLATE,
@@ -24,7 +27,7 @@ import {
   MEDIA_TIMEOUT_MS,
   METADATA_TIMEOUT_MS,
   parseDownloadedPath,
-  parseYtDlpOutput,
+  parseYtDlpInfo,
   resolveYtDlpTimeoutMs,
   withUrl,
   type YtDlpPurpose,
@@ -37,7 +40,15 @@ export interface MediaFetcherDeps {
   /** Parent of the per-run temp dirs that hold downloaded audio. */
   readonly tmpDir: string;
   readonly run?: (request: ProcessRequest) => Promise<ProcessResult>;
+  /** Host resolution for the SSRF guard; tests pass a fake so no test resolves real DNS. */
+  readonly lookup?: LookupHost;
 }
+
+const METADATA_PURPOSE: Readonly<Record<SiteKind, YtDlpPurpose>> = {
+  youtube: "youtube_metadata",
+  instagram: "instagram_metadata",
+  site: "site_metadata",
+};
 
 // Best-effort: a temp dir that cannot be removed (a Windows antivirus lock) must not fail a finished operation.
 const removeDir = (dir: string): Promise<void> =>
@@ -56,47 +67,73 @@ const makeDir = async (dir: string, hint?: string): Promise<Result<void>> => {
   }
 };
 
-const resolveLocalFile = async (input: string, cwd: string): Promise<Result<ResolvedSource>> => {
+/** `stat` follows symlinks, so the type and size checks apply to the file a link points to. */
+const resolveLocalFile = async (
+  input: string,
+  cwd: string,
+  settings: SourceSettings,
+): Promise<Result<ResolvedSource>> => {
   const absolutePath = path.resolve(cwd, input);
-  const isFile = await stat(absolutePath).then(
-    (stats) => stats.isFile(),
-    () => false,
-  );
-  if (!isFile) return err(createError("LOCAL_FILE_NOT_FOUND", `Local file not found: \`${absolutePath}\`.`));
+  const stats = await stat(absolutePath).catch(() => undefined);
+  if (!stats) return err(createError("LOCAL_FILE_NOT_FOUND", `Local file not found: \`${absolutePath}\`.`));
+  if (!stats.isFile()) return err(createError("LOCAL_FILE_NOT_FOUND", `\`${absolutePath}\` is not a regular file.`));
   const extension = getLocalFileExtension(absolutePath);
   if (!extension) {
     return err(
       createError("LOCAL_FILE_UNSUPPORTED_EXTENSION", `Local file extension is not supported: \`${absolutePath}\`.`),
     );
   }
-  return ok({ kind: "local_file", originalInput: input, absolutePath, extension });
+  if (stats.size > settings.maxLocalFileBytes) {
+    return err(
+      createError(
+        "LOCAL_FILE_TOO_LARGE",
+        `Local file \`${absolutePath}\` is ${stats.size} bytes; the limit is ${settings.maxLocalFileBytes} bytes.`,
+      ),
+    );
+  }
+  return ok({ kind: "local_file", originalInput: input, absolutePath, extension, sizeBytes: stats.size });
 };
 
 /** `MediaFetcher` on yt-dlp, run through the hardened process runner. */
 export const createMediaFetcher = (deps: MediaFetcherDeps): MediaFetcher => {
   const run = deps.run ?? runProcess;
+  const lookupHost = deps.lookup ?? defaultLookup;
 
+  // The only path to yt-dlp: every run passes the host guard, then gets a temporary copy of the user's cookies,
+  // removed whatever the outcome.
   const ytDlp = async (
     args: readonly string[],
     purpose: YtDlpPurpose,
     url: string,
     defaultTimeoutMs: number,
+    settings: SourceSettings,
     options: OperationOptions | undefined,
-    isInstagram: boolean,
   ): Promise<Result<string>> => {
-    const timeoutMs = resolveYtDlpTimeoutMs(deps.env, defaultTimeoutMs);
-    const result = await run({
-      command: "yt-dlp",
-      args: withUrl(args, url),
-      env: deps.env,
-      timeoutMs,
-      signal: options?.signal,
-    });
-    return interpretYtDlpRun(result, purpose, { url, timeoutMs, isInstagram });
+    const allowed = await checkHost(url, settings, lookupHost, purpose);
+    if (!allowed.success) return allowed;
+    const cookies = await prepareCookies(settings, deps.tmpDir);
+    if (!cookies.success) return cookies;
+    try {
+      const timeoutMs = resolveYtDlpTimeoutMs(deps.env, defaultTimeoutMs);
+      const result = await run({
+        command: "yt-dlp",
+        args: withUrl([...cookies.data.args, ...args], url),
+        env: deps.env,
+        timeoutMs,
+        signal: options?.signal,
+      });
+      return interpretYtDlpRun(result, purpose, {
+        url,
+        timeoutMs,
+        ...(settings.cookies ? { cookies: settings.cookies.origin } : {}),
+      });
+    } finally {
+      await cookies.data.cleanup();
+    }
   };
 
   return {
-    resolve: async (rawInput, options) => {
+    resolve: async (rawInput, settings, options) => {
       const input = rawInput.trim();
       if (input.length === 0) return err(createError("INPUT_INVALID", "Input cannot be empty."));
 
@@ -104,31 +141,24 @@ export const createMediaFetcher = (deps: MediaFetcherDeps): MediaFetcher => {
       const url = tryParseHttpUrl(input);
       switch (classification) {
         case "youtube":
-        case "instagram": {
+        case "instagram":
+        case "site": {
           const normalizedUrl = url?.toString() ?? input;
-          const isYouTube = classification === "youtube";
+          // `--ignore-no-formats-error`: an upcoming live, or a page whose formats need a login, still reports its
+          // metadata; the guards and the audio download then fail with the precise error. `--flat-playlist`: a
+          // playlist or channel is listed, not extracted entry by entry, so it is refused at once.
           const stdout = await ytDlp(
-            isYouTube ? ["--dump-single-json", "-f", AUDIO_FORMAT_SELECTOR] : ["--dump-single-json"],
-            isYouTube ? "youtube_metadata" : "instagram_metadata",
+            ["--dump-single-json", "--ignore-no-formats-error", "--flat-playlist"],
+            METADATA_PURPOSE[classification],
             normalizedUrl,
             METADATA_TIMEOUT_MS,
+            settings,
             options,
-            !isYouTube,
           );
           if (!stdout.success) return stdout;
-          const media = parseYtDlpOutput(stdout.data, isYouTube);
-          if (!media.success) return media;
-          return ok(
-            isYouTube
-              ? { kind: "youtube", originalInput: input, normalizedUrl, ...media.data }
-              : {
-                  kind: "instagram",
-                  originalInput: input,
-                  normalizedUrl,
-                  mediaUrl: media.data.mediaUrl,
-                  title: media.data.title,
-                },
-          );
+          const metadata = parseYtDlpInfo(stdout.data, normalizedUrl);
+          if (!metadata.success) return metadata;
+          return ok({ kind: classification, originalInput: input, normalizedUrl, metadata: metadata.data });
         }
         case "direct_url": {
           if (!url) throw new Error("classifyInput returned direct_url for a non-URL input");
@@ -136,16 +166,12 @@ export const createMediaFetcher = (deps: MediaFetcherDeps): MediaFetcher => {
           const extension = getMediaExtensionFromPathname(url.pathname) ?? "";
           return ok({ kind: "direct_url", originalInput: input, normalizedUrl, mediaUrl: normalizedUrl, extension });
         }
-        case "unsupported_url":
-          return err(
-            createError("UNSUPPORTED_URL_NOT_DIRECT_MEDIA", `Input URL is not a direct media URL: \`${input}\`.`),
-          );
         case "local_file":
-          return resolveLocalFile(input, deps.cwd);
+          return resolveLocalFile(input, deps.cwd, settings);
       }
     },
 
-    fetchAudio: async (source, options) => {
+    fetchAudio: async (source, settings, options) => {
       if (source.kind === "local_file")
         return ok({ audio: { kind: "file", path: source.absolutePath }, release: async () => {} });
       if (source.kind === "direct_url")
@@ -167,8 +193,8 @@ export const createMediaFetcher = (deps: MediaFetcherDeps): MediaFetcher => {
         "download",
         source.normalizedUrl,
         MEDIA_TIMEOUT_MS,
+        settings,
         options,
-        source.kind === "instagram",
       );
       const filePath = stdout.success ? parseDownloadedPath(stdout.data) : undefined;
       if (!filePath) {
@@ -186,7 +212,7 @@ export const createMediaFetcher = (deps: MediaFetcherDeps): MediaFetcher => {
       return ok({ audio: { kind: "file", path: filePath }, release });
     },
 
-    download: async (target, request, options) => {
+    download: async (source, request, settings, options) => {
       const outputDir = path.resolve(deps.cwd, request.outputDir);
       const created = await makeDir(outputDir);
       if (!created.success) return created;
@@ -212,10 +238,10 @@ export const createMediaFetcher = (deps: MediaFetcherDeps): MediaFetcher => {
           ...format,
         ],
         "download",
-        target.url,
+        source.normalizedUrl,
         MEDIA_TIMEOUT_MS,
+        settings,
         options,
-        target.kind === "instagram",
       );
       await removeDir(tempDir);
       if (!stdout.success) return stdout;

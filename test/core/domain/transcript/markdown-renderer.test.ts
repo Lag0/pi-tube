@@ -24,7 +24,7 @@ describe("markdown renderer", () => {
     });
     const markdown = renderMarkdown(artifact);
 
-    expect(markdown).toContain('---\nschema_version: "1.1.0"');
+    expect(markdown).toContain('---\nschema_version: "1.2.0"');
     expect(markdown).toContain('generated_at: "2026-03-02T23:30:00.000Z"');
     expect(markdown).toContain('source_kind: "direct_url"');
     expect(markdown).toContain('source_reference: "https://cdn.example.com/audio/demo.wav"');
@@ -77,11 +77,13 @@ describe("markdown renderer", () => {
           kind: "youtube",
           originalInput: "https://youtube.com/watch?v=abc123",
           normalizedUrl: "https://youtube.com/watch?v=abc123",
-          mediaUrl: "https://cdn.example.com/audio.m4a",
-          title: "Launch Video",
-          publishedAt: "2024-02-29",
-          description: "Launch notes\nhttps://example.com/notes",
-          descriptionLinks: ["https://example.com/notes"],
+          metadata: {
+            platform: "Youtube",
+            title: "Launch Video",
+            publishedAt: "2024-02-29",
+            description: "Launch notes\nhttps://example.com/notes",
+            descriptionLinks: ["https://example.com/notes"],
+          },
         },
       },
       {
@@ -106,8 +108,10 @@ describe("markdown renderer", () => {
           kind: "youtube",
           originalInput: "https://youtube.com/watch?v=abc123",
           normalizedUrl: "https://youtube.com/watch?v=abc123",
-          mediaUrl: "https://cdn.example.com/audio.m4a",
-          title: "Title Only Video",
+          metadata: {
+            platform: "Youtube",
+            title: "Title Only Video",
+          },
         },
       },
       { generatedAt: "2026-03-02T23:35:00.000Z" },
