@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import type { ResolvedSource } from "../../../../src/core/domain/source.ts";
 import { buildOutputArtifact } from "../../../../src/core/domain/transcript/build-artifact.ts";
+import type { OutputArtifact } from "../../../../src/core/domain/transcript/contract.ts";
 import { parseStoredArtifact } from "../../../../src/core/domain/transcript/parse-stored.ts";
 import { renderJson } from "../../../../src/core/domain/transcript/render-json.ts";
 
@@ -27,8 +28,9 @@ const direct: ResolvedSource = {
   extension: "mp3",
 };
 
-const artifactOf = (source: ResolvedSource) =>
-  buildOutputArtifact(
+/** As the library saves it: built, then stamped with its id and source key. */
+const artifactOf = (source: ResolvedSource): OutputArtifact => {
+  const built = buildOutputArtifact(
     {
       source,
       provider: "groq",
@@ -40,13 +42,10 @@ const artifactOf = (source: ResolvedSource) =>
         { startMs: 12_000, endMs: 12_500, text: "world" },
       ],
     },
-    {
-      generatedAt: "2026-10-31T00:00:00.000Z",
-      includeTimestamps: true,
-      transcriptId: "0123456789abcdef0123",
-      sourceKey: "vimeo:1",
-    },
+    { generatedAt: "2026-10-31T00:00:00.000Z", includeTimestamps: true },
   );
+  return { ...built, transcript_id: "0123456789abcdef0123", source: { ...built.source, source_key: "vimeo:1" } };
+};
 
 describe("parseStoredArtifact", () => {
   test.each([

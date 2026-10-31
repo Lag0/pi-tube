@@ -20,9 +20,6 @@ const SEGMENT_COMPACTION_MAX_DURATION_MS = 18000;
 export interface BuildOutputArtifactOptions {
   generatedAt?: string;
   includeTimestamps?: boolean;
-  /** Library identity, stored in the artifact so a saved transcript names itself. */
-  transcriptId?: string;
-  sourceKey?: string;
 }
 
 /** Drops `user:password@`; a string that is not a URL is returned as is. */
@@ -298,11 +295,7 @@ export function buildOutputArtifact(
   return {
     schema_version: OUTPUT_SCHEMA_VERSION,
     generated_at: options.generatedAt ?? new Date().toISOString(),
-    ...(options.transcriptId === undefined ? {} : { transcript_id: options.transcriptId }),
-    source: {
-      ...mapSource(result.source),
-      ...(options.sourceKey === undefined ? {} : { source_key: options.sourceKey }),
-    },
+    source: mapSource(result.source),
     transcription: {
       provider: result.provider,
       ...(result.model === undefined ? {} : { model: result.model }),
