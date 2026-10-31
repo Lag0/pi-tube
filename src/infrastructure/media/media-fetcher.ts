@@ -15,6 +15,7 @@ import {
   tryParseHttpUrl,
 } from "../../core/domain/source-policy.ts";
 import type { MediaFetcher } from "../../core/ports/media-fetcher.ts";
+import { errnoOf } from "../errno.ts";
 import { type ProcessRequest, type ProcessResult, runProcess } from "../process/run-process.ts";
 import {
   AUDIO_FORMAT_SELECTOR,
@@ -37,9 +38,6 @@ export interface MediaFetcherDeps {
   readonly tmpDir: string;
   readonly run?: (request: ProcessRequest) => Promise<ProcessResult>;
 }
-
-const errnoOf = (error: unknown): string =>
-  error instanceof Error && "code" in error && typeof error.code === "string" ? error.code : "unknown error";
 
 // Best-effort: a temp dir that cannot be removed (a Windows antivirus lock) must not fail a finished operation.
 const removeDir = (dir: string): Promise<void> =>

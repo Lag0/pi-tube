@@ -5,11 +5,9 @@ import { pathToFileURL } from "node:url";
 import { createError, type PiTubeError } from "../../core/domain/errors.ts";
 import { err, ok } from "../../core/domain/result.ts";
 import type { TranscriptStore } from "../../core/ports/transcript-store.ts";
+import { errnoOf } from "../errno.ts";
 
 const MAX_NUMBERED_SUFFIX = 999;
-
-const errnoOf = (error: unknown): string =>
-  error instanceof Error && "code" in error && typeof error.code === "string" ? error.code : "unknown error";
 
 const storageError = (target: string, error: unknown): PiTubeError =>
   createError("STORAGE_IO_FAILED", `Cannot write \`${target}\` (${errnoOf(error)}).`, {
