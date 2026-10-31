@@ -106,4 +106,3 @@ export type {
   MediaFetcher,
 } from "./ports/media-fetcher.ts";
 export type { SttCapabilities, SttProvider, SttRequest, SttTranscript } from "./ports/stt-provider.ts";
-export type { SavedTranscript, TranscriptStore } from "./ports/transcript-store.ts";

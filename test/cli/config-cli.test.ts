@@ -142,7 +142,12 @@ describe("config command", () => {
 describe("defaults in transcription", () => {
   const transcribe = (env: Record<string, string> = {}) =>
     runCliInProcess(["transcribe", "https://cdn.example.com/audio/demo.wav"], {
-      env: { PI_TUBE_CONFIG_PATH: configPath, PI_TUBE_OUTPUT_DIR: outputDir, ...PROVIDER_KEYS, ...env },
+      env: {
+        PI_TUBE_CONFIG_PATH: configPath,
+        PI_TUBE_LIBRARY_DIR: mkdtempSync(path.join(outputDir, "library-")),
+        ...PROVIDER_KEYS,
+        ...env,
+      },
       fakes: { stt: fakeProviders({ groq: transcript("config provider", "pt") }) },
     });
 

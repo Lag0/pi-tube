@@ -28,9 +28,9 @@ import {
   type UseCase,
 } from "./core/index.ts";
 import { createFileConfigStore } from "./infrastructure/config/file-config-store.ts";
+import { createFileLibraryStore } from "./infrastructure/library/file-library-store.ts";
 import type { LookupHost } from "./infrastructure/media/host-guard.ts";
 import { createMediaFetcher } from "./infrastructure/media/media-fetcher.ts";
-import { createFileTranscriptStore } from "./infrastructure/output/file-transcript-store.ts";
 import { resolvePiTubePaths } from "./infrastructure/paths.ts";
 import { type ProcessRequest, type ProcessResult, runProcess } from "./infrastructure/process/run-process.ts";
 import { createSttProviders, PROVIDER_DESCRIPTORS } from "./infrastructure/stt/registry.ts";
@@ -95,7 +95,7 @@ export const createApp = (environment: AppEnvironment, overrides: AppOverrides =
       providers: PROVIDER_DESCRIPTORS,
       stt: overrides.stt ?? createSttProviders(),
       media,
-      store: createFileTranscriptStore(paths.outputDir),
+      library: createFileLibraryStore({ libraryDir: paths.libraryDir }),
       now: () => new Date(),
     }),
     downloadMedia: createDownloadMedia({ configStore, env, media, defaultOutputDir: paths.downloadsDir }),

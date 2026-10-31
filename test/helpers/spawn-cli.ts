@@ -15,7 +15,7 @@ const HERMETIC_ENV = {
   PI_TUBE_TRANSCRIPTION_PROVIDER: "",
   PI_TUBE_TRANSCRIPTION_LANGUAGE: "",
   PI_TUBE_CONFIG_PATH: path.join(SPAWN_ROOT, "missing.json"),
-  PI_TUBE_OUTPUT_DIR: SPAWN_ROOT,
+  PI_TUBE_LIBRARY_DIR: path.join(SPAWN_ROOT, "library"),
 };
 
 export interface SpawnCliResult {

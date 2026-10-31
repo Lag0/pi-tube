@@ -19,7 +19,7 @@ const run = (
   ytDlp: { metadata?: Record<string, unknown>; metadataFailure?: Partial<ProcessResult> } = {},
 ) =>
   runCliInProcess(["transcribe", input], {
-    env: { PI_TUBE_OUTPUT_DIR: outputDir, ...PROVIDER_KEYS },
+    env: { PI_TUBE_LIBRARY_DIR: mkdtempSync(path.join(outputDir, "library-")), ...PROVIDER_KEYS },
     fakes: { stt: fakeProviders(), runProcess: fakeYtDlp(ytDlp) },
   });
 

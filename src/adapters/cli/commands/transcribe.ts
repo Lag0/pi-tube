@@ -1,3 +1,4 @@
+import { pathToFileURL } from "node:url";
 import { createError, sourceReferenceOf, type TranscribeOutput } from "../../../core/index.ts";
 import { CliFailure, unwrapOrFail } from "../error-output.ts";
 import type { CliDeps } from "../io.ts";
@@ -9,7 +10,7 @@ export interface TranscribeCommand {
   readonly extraPositionals: readonly string[];
   readonly provider?: string;
   readonly language?: string;
-  readonly timestamps: boolean;
+  readonly force: boolean;
   readonly json: boolean;
   readonly color: boolean;
 }
@@ -17,9 +18,13 @@ export interface TranscribeCommand {
 /** The `--json` stdout object: a summary of the result, without the full text (it is in the saved file). */
 export const toTranscribeJson = (output: TranscribeOutput) => {
   const { artifact } = output;
+  const outputPath = output.format === "json" ? output.paths.json : output.paths.markdown;
   return {
-    output_path: output.saved.path,
-    output_uri: output.saved.uri,
+    output_path: outputPath,
+    output_uri: pathToFileURL(outputPath).href,
+    markdown_path: output.paths.markdown,
+    transcript_id: output.transcriptId,
+    cache_hit: output.cacheHit,
     format: output.format,
     provider: artifact.transcription.provider,
     source: {
@@ -53,7 +58,7 @@ export const runTranscribe = async (deps: CliDeps, command: TranscribeCommand): 
         input: command.input,
         provider: command.provider,
         language: command.language,
-        timestamps: command.timestamps,
+        force: command.force,
         format: command.json ? "json" : "markdown",
       },
       { onProgress: (step) => progress.update(step), signal: deps.listenForCancel?.() },
@@ -64,13 +69,16 @@ export const runTranscribe = async (deps: CliDeps, command: TranscribeCommand): 
     });
   if (!result.success) progress.fail("Failed");
   const output = unwrapOrFail(result);
-  progress.succeed(output.saved.path, Date.now() - startTime);
+  const outputPath = output.format === "json" ? output.paths.json : output.paths.markdown;
+  progress.succeed(outputPath, Date.now() - startTime);
 
   if (command.json) {
     deps.io.writeOut(JSON.stringify(toTranscribeJson(output), null, 2));
     return 0;
   }
-  deps.io.writeOut(`[OUTPUT_FILE] ${output.saved.path}`);
-  deps.io.writeOut(`[OUTPUT_FILE_URI] ${output.saved.uri}`);
+  deps.io.writeOut(`[OUTPUT_FILE] ${outputPath}`);
+  deps.io.writeOut(`[OUTPUT_FILE_URI] ${pathToFileURL(outputPath).href}`);
+  deps.io.writeOut(`[TRANSCRIPT_ID] ${output.transcriptId}`);
+  deps.io.writeOut(`[CACHE_HIT] ${output.cacheHit}`);
   return 0;
 };

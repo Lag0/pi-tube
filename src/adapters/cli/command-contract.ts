@@ -34,7 +34,7 @@ const ROOT_HELP_DOCUMENT: HelpDocument = {
   title: `${COMMAND_IDENTITY} CLI`,
   summary: "Transcribe and download public media with provider-based AI transcription.",
   usage: [
-    `${COMMAND_IDENTITY} transcribe <input> [--provider <deepgram|groq|elevenlabs>] [--language <code>] [--timestamps] [--json]`,
+    `${COMMAND_IDENTITY} transcribe <input> [--provider <deepgram|groq|elevenlabs>] [--language <code>] [--force] [--json]`,
     `${COMMAND_IDENTITY} info <input> [--json]`,
     `${COMMAND_IDENTITY} download <url> [--audio] [--output <dir>]`,
     `${COMMAND_IDENTITY} providers [--json]`,
@@ -101,7 +101,7 @@ const ROOT_HELP_DOCUMENT: HelpDocument = {
     `${COMMAND_IDENTITY} defaults provider elevenlabs`,
     `${COMMAND_IDENTITY} defaults language pt-BR`,
     `${COMMAND_IDENTITY} transcribe "https://youtube.com/watch?v=dQw4w9WgXcQ" --provider elevenlabs`,
-    `${COMMAND_IDENTITY} transcribe "./recording.mp3" --timestamps`,
+    `${COMMAND_IDENTITY} transcribe "./recording.mp3" --force`,
     `${COMMAND_IDENTITY} download "https://youtube.com/watch?v=dQw4w9WgXcQ"`,
     `${COMMAND_IDENTITY} download "https://instagram.com/reel/abc123" --audio`,
     `${COMMAND_IDENTITY} setup yt-dlp`,
@@ -119,18 +119,19 @@ const TRANSCRIBE_HELP_DOCUMENT: HelpDocument = {
   title: `${COMMAND_IDENTITY} transcribe`,
   summary: "Transcribe a URL or local media file.",
   usage: [
-    `${COMMAND_IDENTITY} transcribe <input> [--provider <deepgram|groq|elevenlabs>] [--language <code>] [--timestamps] [--json]`,
+    `${COMMAND_IDENTITY} transcribe <input> [--provider <deepgram|groq|elevenlabs>] [--language <code>] [--force] [--json]`,
   ],
   options: [
     { term: "--provider <deepgram|groq|elevenlabs>", description: "Select transcription provider." },
     { term: "--language <code>", description: "Optional language preference." },
-    { term: "--timestamps", description: "Include timestamp blocks in transcript output." },
+    { term: "--force", description: "Transcribe again even when the library already has this transcript." },
+    { term: "--timestamps", description: "Accepted for compatibility; transcripts always keep their timestamps." },
     { term: "--json", description: "Print the result as JSON on stdout and save the transcript as JSON." },
   ],
   examples: [
     `${COMMAND_IDENTITY} transcribe "https://youtube.com/watch?v=dQw4w9WgXcQ"`,
     `${COMMAND_IDENTITY} transcribe "./recording.mp3" --provider elevenlabs --language pt-BR`,
-    `${COMMAND_IDENTITY} transcribe "./recording.mp3" --timestamps --json`,
+    `${COMMAND_IDENTITY} transcribe "./recording.mp3" --json`,
   ],
   notes: ["Use `defaults provider` and `defaults language` to avoid repeating common flags."],
 };

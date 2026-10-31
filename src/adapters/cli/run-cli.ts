@@ -44,6 +44,7 @@ interface TranscribeOptions extends JsonCommandOptions {
   provider?: string;
   language?: string;
   timestamps?: boolean;
+  force?: boolean;
 }
 
 interface DownloadOptions extends JsonCommandOptions {
@@ -159,7 +160,8 @@ function createProgram(setAction: (action: CliAction) => void): Command {
     .argument("[extraPositionals...]", "extra inputs")
     .option("--provider <provider>", "Select transcription provider (deepgram or groq).")
     .option("--language <code>", "Optional language preference.")
-    .option("--timestamps", "Include timestamp blocks in transcript output.")
+    .option("--timestamps", "Accepted for compatibility; transcripts always keep their timestamps.")
+    .option("--force", "Transcribe again even when the library already has this transcript.")
     .option("--json", "Print the result as JSON on stdout and save the transcript as JSON.")
     .action((input: string | undefined, extraPositionals: string[], options: TranscribeOptions) => {
       setAction({ kind: "transcribe", input, extraPositionals, options, rootOptions: program.opts<RootOptions>() });
@@ -307,7 +309,7 @@ export const runCli = async (argv: readonly string[], deps: CliDeps): Promise<nu
           extraPositionals: action.extraPositionals,
           provider: action.options.provider,
           language: action.options.language,
-          timestamps: Boolean(action.options.timestamps),
+          force: Boolean(action.options.force),
           json: Boolean(action.options.json),
           color: action.rootOptions.color !== false,
         });

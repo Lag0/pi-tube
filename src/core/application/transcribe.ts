@@ -1,5 +1,6 @@
 import type { EnvironmentVariables } from "../domain/config.ts";
 import { createError, type PiTubeError } from "../domain/errors.ts";
+import { sourceKeyFromInput, type TranscriptKey } from "../domain/library.ts";
 import { type ProviderDescriptor, resolveCredential, selectProvider } from "../domain/providers.ts";
 import { err, ok } from "../domain/result.ts";
 import { isSiteSource, type ResolvedSource } from "../domain/source.ts";
@@ -8,13 +9,10 @@ import { resolveSourceSettings } from "../domain/source-settings.ts";
 import { toSafeLine } from "../domain/text.ts";
 import { buildOutputArtifact } from "../domain/transcript/build-artifact.ts";
 import type { OutputArtifact } from "../domain/transcript/contract.ts";
-import { transcriptFileName } from "../domain/transcript/file-name.ts";
-import { renderJson } from "../domain/transcript/render-json.ts";
-import { renderMarkdown } from "../domain/transcript/render-markdown.ts";
 import type { ConfigStore } from "../ports/config-store.ts";
+import type { LibraryStore, StoredTranscript } from "../ports/library-store.ts";
 import type { MediaFetcher } from "../ports/media-fetcher.ts";
 import type { SttProvider } from "../ports/stt-provider.ts";
-import type { SavedTranscript, TranscriptStore } from "../ports/transcript-store.ts";
 import { ensureNotAborted, type UseCase } from "./operation.ts";
 
 /** Env var naming the default provider; wins over the config default. */
@@ -32,13 +30,18 @@ export interface TranscribeInput {
   readonly input: string;
   readonly provider?: string;
   readonly language?: string;
-  readonly timestamps: boolean;
+  /** Transcribes again even when the library has this transcript; the new one is saved as `<id>-<n>`. */
+  readonly force?: boolean;
+  /** Which saved file the adapter reports; the library always writes both. */
   readonly format: "markdown" | "json";
 }
 
 /** Output of `transcribe`: where the transcript was saved and what it contains. */
 export interface TranscribeOutput {
-  readonly saved: SavedTranscript;
+  readonly transcriptId: string;
+  /** True when the transcript came from the library, without a provider call. */
+  readonly cacheHit: boolean;
+  readonly paths: StoredTranscript["paths"];
   readonly format: "markdown" | "json";
   readonly artifact: OutputArtifact;
 }
@@ -50,7 +53,7 @@ export interface TranscribeDeps {
   readonly providers: readonly ProviderDescriptor[];
   readonly stt: Readonly<Record<string, SttProvider>>;
   readonly media: MediaFetcher;
-  readonly store: TranscriptStore;
+  readonly library: LibraryStore;
   readonly now: () => Date;
 }
 
@@ -83,8 +86,10 @@ const withAlternatives = (
 };
 
 /**
- * Transcribes a URL or local file with one provider, never falling back to another, and saves the
- * rendered transcript. Fetched audio is always released, also on failure and cancellation.
+ * Transcribes a URL or local file with one provider, never falling back to another, and saves it in the
+ * library. The same source, provider, model and language is a cache hit: the saved transcript comes back
+ * without downloading or paying again, unless `force`. Fetched audio is always released, also on failure and
+ * cancellation.
  */
 export const createTranscribe =
   (deps: TranscribeDeps): UseCase<TranscribeInput, TranscribeOutput> =>
@@ -114,15 +119,48 @@ export const createTranscribe =
       config.data.defaults.language,
     )?.toLowerCase();
 
-    // A bad output dir fails here, before the paid provider call.
-    const writable = await deps.store.prepare();
+    // A library that cannot be written fails here, before the paid provider call.
+    const writable = await deps.library.prepare();
     if (!writable.success) return writable;
+
+    const keyFor = (sourceKey: string): TranscriptKey => ({
+      sourceKey,
+      provider: providerId,
+      model: provider.model,
+      ...(language ? { language } : {}),
+    });
+    const hit = (stored: StoredTranscript): TranscribeOutput => {
+      options?.onProgress?.({ label: "Found in library" });
+      return {
+        transcriptId: stored.transcriptId,
+        cacheHit: true,
+        paths: stored.paths,
+        format: input.format,
+        artifact: stored.artifact,
+      };
+    };
+
+    // YouTube and Instagram keys come from the URL, so a cache hit runs no yt-dlp at all.
+    const inputKey = input.force ? undefined : sourceKeyFromInput(input.input);
+    if (inputKey !== undefined) {
+      const early = await deps.library.find(keyFor(inputKey));
+      if (!early.success) return early;
+      if (early.data) return ok(hit(early.data));
+    }
 
     options?.onProgress?.({ label: "Resolving source..." });
     const source = await deps.media.resolve(input.input, settings.data, options);
     if (!source.success) return source;
     const finished = ensureFinishedMedia(source.data);
     if (!finished.success) return finished;
+    const sourceKey = await deps.library.sourceKeyOf(source.data);
+    if (!sourceKey.success) return sourceKey;
+    const key = keyFor(sourceKey.data);
+    if (!input.force) {
+      const cached = await deps.library.find(key);
+      if (!cached.success) return cached;
+      if (cached.data) return ok(hit(cached.data));
+    }
     options?.onProgress?.({ label: "Transcribing audio...", detail: `(${sourceDetail(source.data)})` });
     const audio = await deps.media.fetchAudio(source.data, settings.data, options);
     if (!audio.success) return audio;
@@ -142,18 +180,23 @@ export const createTranscribe =
       {
         source: source.data,
         provider: providerId,
+        model: provider.model,
         transcript: transcript.data.text,
         requestedLanguage: language,
         detectedLanguage: transcript.data.detectedLanguage,
         segments: [...transcript.data.segments],
       },
-      { generatedAt: deps.now().toISOString(), includeTimestamps: input.timestamps },
+      // The library keeps one canonical transcript per key, always with its timed segments.
+      { generatedAt: deps.now().toISOString(), includeTimestamps: true },
     );
     options?.onProgress?.({ label: "Saving output..." });
-    const saved = await deps.store.save({
-      fileName: transcriptFileName({ artifact, now: deps.now(), format: input.format }),
-      content: input.format === "json" ? renderJson(artifact) : renderMarkdown(artifact),
-    });
+    const saved = await deps.library.save({ key, source: source.data, artifact, fresh: input.force === true });
     if (!saved.success) return saved;
-    return ok({ saved: saved.data, format: input.format, artifact });
+    return ok({
+      transcriptId: saved.data.transcriptId,
+      cacheHit: false,
+      paths: saved.data.paths,
+      format: input.format,
+      artifact: saved.data.artifact,
+    });
   };
