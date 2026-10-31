@@ -107,6 +107,7 @@ describe("CLI error exits and formatting", () => {
   test("keeps unexpected failures distinguishable with exit code 1", async () => {
     const throwing: SttProvider = {
       id: "deepgram",
+      model: "nova-3",
       capabilities: { timestamps: true, languageDetection: true, requiresLanguage: false, offline: false },
       transcribe: async () => {
         throw new SyntaxError("Unexpected token b in JSON");

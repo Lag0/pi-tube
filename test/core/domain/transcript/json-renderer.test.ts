@@ -24,11 +24,12 @@ describe("json renderer", () => {
     });
     const payload = JSON.parse(renderJson(artifact)) as Record<string, unknown>;
 
-    expect(payload.schema_version).toBe("1.2.0");
+    expect(payload.schema_version).toBe("1.3.0");
     expect(payload.generated_at).toBe("2026-03-02T23:40:00.000Z");
     expect(Object.keys(payload)).toEqual([
       "schema_version",
       "generated_at",
+      "transcript_id",
       "source",
       "transcription",
       "summary",

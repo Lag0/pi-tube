@@ -12,6 +12,7 @@ export interface TranscriptionSegment {
 export interface TranscriptionExecutionResult {
   source: ResolvedSource;
   provider: ProviderId;
+  model?: string;
   transcript: string;
   requestedLanguage?: string;
   detectedLanguage?: string;

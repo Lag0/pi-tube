@@ -116,6 +116,7 @@ export const createElevenLabsProvider = (options: ElevenLabsProviderOptions = {}
 
   return {
     id: "elevenlabs",
+    model,
     capabilities: CLOUD_STT_CAPABILITIES,
     transcribe: (request, operation) =>
       runProviderCall({

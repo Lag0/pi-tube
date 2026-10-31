@@ -30,6 +30,8 @@ export interface SttTranscript {
 /** A speech-to-text provider. Adding one is a new implementation plus a registry entry. */
 export interface SttProvider {
   readonly id: ProviderId;
+  /** The model this provider calls; part of the transcript's library key. */
+  readonly model: string;
   readonly capabilities: SttCapabilities;
   transcribe(request: SttRequest, options?: OperationOptions): Promise<Result<SttTranscript>>;
 }

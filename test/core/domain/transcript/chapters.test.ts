@@ -91,7 +91,7 @@ describe("chapters in the artifact", () => {
         { title: "Main", start_ms: 10_000, end_ms: 20_000 },
       ],
     });
-    expect(artifact.schema_version).toBe("1.2.0");
+    expect(artifact.schema_version).toBe("1.3.0");
   });
 });
 
