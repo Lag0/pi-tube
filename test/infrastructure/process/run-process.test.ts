@@ -203,4 +203,11 @@ describe("buildChildEnv", () => {
     expect(buildChildEnv({ Path: "C:\\bin", groq_api_key: "k" }, "win32")).toEqual({ Path: "C:\\bin" });
     expect(buildChildEnv({ Path: "/bin", PATH: "/usr/bin" }, "linux")).toEqual({ PATH: "/usr/bin" });
   });
+
+  test("keeps the Python encoding vars, so a user's UTF-8 setting still reaches yt-dlp", () => {
+    expect(buildChildEnv({ PYTHONUTF8: "1", PYTHONIOENCODING: "utf-8" }, "win32")).toEqual({
+      PYTHONUTF8: "1",
+      PYTHONIOENCODING: "utf-8",
+    });
+  });
 });

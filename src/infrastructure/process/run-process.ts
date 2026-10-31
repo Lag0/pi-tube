@@ -18,6 +18,9 @@ export const CHILD_ENV_ALLOWLIST: readonly string[] = [
   "LANG",
   "LC_ALL",
   "LC_CTYPE",
+  // yt-dlp prints file paths in Python's output encoding; on Windows these keep a user's UTF-8 setting.
+  "PYTHONUTF8",
+  "PYTHONIOENCODING",
   "TZ",
   "XDG_CACHE_HOME",
   "XDG_CONFIG_HOME",
