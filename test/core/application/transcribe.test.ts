@@ -292,6 +292,56 @@ describe("site sources", () => {
   });
 });
 
+describe("live streams", () => {
+  const liveSource = (liveStatus: "is_live" | "is_upcoming" | "was_live") => ({
+    kind: "youtube" as const,
+    originalInput: "https://www.youtube.com/watch?v=live",
+    normalizedUrl: "https://www.youtube.com/watch?v=live",
+    metadata: { platform: "Youtube", title: "Live show", liveStatus },
+  });
+
+  test("a live stream in progress is refused before any download or provider call", async () => {
+    const { stt, deps } = setup({ env: { GROQ_API_KEY: "gq" } });
+    const media = createFakeMediaFetcher({ source: liveSource("is_live") });
+    const transcribe = createTranscribe({ ...deps, media: media.fetcher });
+
+    const result = await run(transcribe);
+
+    expect(result.success ? undefined : result.error.code).toBe("SOURCE_LIVE_NOT_ENDED");
+    expect(media.calls.fetchAudio).toHaveLength(0);
+    expect(stt.groq.requests).toHaveLength(0);
+  });
+
+  test("a finished live stream is transcribed", async () => {
+    const { stt, deps } = setup({ env: { GROQ_API_KEY: "gq" } });
+    const media = createFakeMediaFetcher({
+      source: liveSource("was_live"),
+      audio: { kind: "url", url: "https://cdn.example.com/v.mp3" },
+    });
+    const transcribe = createTranscribe({ ...deps, media: media.fetcher });
+
+    const result = await run(transcribe);
+
+    expect(result.success).toBe(true);
+    expect(stt.groq.requests).toHaveLength(1);
+  });
+
+  test("download refuses an upcoming live stream without downloading", async () => {
+    const media = createFakeMediaFetcher({ source: liveSource("is_upcoming") });
+    const download = createDownloadMedia({
+      configStore: createInMemoryConfigStore(config()),
+      env: {},
+      media: media.fetcher,
+      defaultOutputDir: outputDir,
+    });
+
+    const result = await download({ input: "https://www.youtube.com/watch?v=live", media: "audio" });
+
+    expect(result.success ? undefined : result.error.code).toBe("SOURCE_LIVE_NOT_ENDED");
+    expect(media.calls.download).toHaveLength(0);
+  });
+});
+
 describe("downloadMedia", () => {
   test("a best-effort site is resolved, then downloaded from the resolved source", async () => {
     const vimeo = "https://vimeo.com/1";

@@ -2,7 +2,7 @@ import type { EnvironmentVariables } from "../domain/config.ts";
 import { createError } from "../domain/errors.ts";
 import { err, ok } from "../domain/result.ts";
 import { isSiteSource, type SiteKind } from "../domain/source.ts";
-import { classifyInput } from "../domain/source-policy.ts";
+import { classifyInput, ensureFinishedMedia } from "../domain/source-policy.ts";
 import { resolveSourceSettings } from "../domain/source-settings.ts";
 import type { ConfigStore } from "../ports/config-store.ts";
 import type { MediaFetcher } from "../ports/media-fetcher.ts";
@@ -51,6 +51,8 @@ export const createDownloadMedia =
     const source = await deps.media.resolve(input.input, settings.data, options);
     if (!source.success) return source;
     if (!isSiteSource(source.data)) return err(createError("DOWNLOAD_FAILED", NOT_A_PAGE));
+    const finished = ensureFinishedMedia(source.data);
+    if (!finished.success) return finished;
 
     options?.onProgress?.({ label: "Downloading media...", detail: `(${input.media})` });
     const downloaded = await deps.media.download(

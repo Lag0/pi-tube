@@ -84,6 +84,10 @@ export const ERROR_CATALOG = {
     category: "source",
     hint: "Pass a page from a site yt-dlp supports (`yt-dlp --list-extractors`), a direct media URL (.mp3, .mp4, ...) or a local file.",
   },
+  SOURCE_LIVE_NOT_ENDED: {
+    category: "source",
+    hint: "Retry once the stream has ended and its recording is available; pi-tube transcribes finished streams only.",
+  },
   SOURCE_EXTRACT_FAILED: {
     category: "source",
     hint: "Check that the page opens in a browser and update yt-dlp (`yt-dlp -U`, `brew upgrade yt-dlp` or `pipx upgrade yt-dlp`); support for this site is best-effort.",

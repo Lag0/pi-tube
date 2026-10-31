@@ -228,6 +228,21 @@ describe("resolve", () => {
     });
   });
 
+  test.each(["is_live", "is_upcoming"])(
+    "a %s page resolves with its live status instead of failing",
+    async (status) => {
+      const { run } = fakeRun(() =>
+        exited(JSON.stringify({ id: "abc", extractor_key: "Youtube", live_status: status })),
+      );
+
+      const result = await fetcherWith(run).resolve(YOUTUBE, SETTINGS);
+
+      expect(result.success ? result.data.kind === "youtube" && result.data.metadata.liveStatus : undefined).toBe(
+        status,
+      );
+    },
+  );
+
   test("a local file resolves without yt-dlp", async () => {
     writeFileSync(path.join(root, "clip.mp3"), "x");
     const { requests, run } = fakeRun(() => exited(""));

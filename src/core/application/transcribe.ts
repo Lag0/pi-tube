@@ -3,6 +3,7 @@ import { createError, type PiTubeError } from "../domain/errors.ts";
 import { type ProviderDescriptor, resolveCredential, selectProvider } from "../domain/providers.ts";
 import { err, ok } from "../domain/result.ts";
 import { isSiteSource, type ResolvedSource } from "../domain/source.ts";
+import { ensureFinishedMedia } from "../domain/source-policy.ts";
 import { resolveSourceSettings } from "../domain/source-settings.ts";
 import { buildOutputArtifact } from "../domain/transcript/build-artifact.ts";
 import type { OutputArtifact } from "../domain/transcript/contract.ts";
@@ -118,6 +119,8 @@ export const createTranscribe =
     options?.onProgress?.({ label: "Resolving source..." });
     const source = await deps.media.resolve(input.input, settings.data, options);
     if (!source.success) return source;
+    const finished = ensureFinishedMedia(source.data);
+    if (!finished.success) return finished;
     options?.onProgress?.({ label: "Transcribing audio...", detail: `(${sourceDetail(source.data)})` });
     const audio = await deps.media.fetchAudio(source.data, settings.data, options);
     if (!audio.success) return audio;

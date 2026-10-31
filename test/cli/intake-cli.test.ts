@@ -84,6 +84,16 @@ describe("CLI intake integration", () => {
     expect(result.stderr).toContain("[SOURCE_UNSUPPORTED]");
   });
 
+  test("a live stream in progress exits 5 with a retry-later hint", async () => {
+    const result = await run("https://www.youtube.com/watch?v=live1", {
+      metadata: { id: "live1", extractor_key: "Youtube", title: "Live", live_status: "is_live" },
+    });
+
+    expect(result.exitCode).toBe(5);
+    expect(result.stderr).toContain("[SOURCE_LIVE_NOT_ENDED]");
+    expect(result.stderr).toContain("Retry once the stream has ended");
+  });
+
   test("transcribes a best-effort site through yt-dlp", async () => {
     const result = await run("https://vimeo.com/1", {
       metadata: { id: "1", extractor_key: "Vimeo", title: "Vimeo Mock" },
