@@ -188,8 +188,9 @@ export const createMediaFetcher = (deps: MediaFetcherDeps): MediaFetcher => {
       const outputDir = path.resolve(deps.cwd, request.outputDir);
       const created = await makeDir(outputDir);
       if (!created.success) return created;
-      // yt-dlp keeps .part and fragment files in the temp path, so a failed or cancelled run leaves nothing in outputDir.
-      const tempDir = path.join(deps.tmpDir, randomUUID());
+      // yt-dlp keeps .part and fragment files in the temp path, removed below, so a failed or cancelled run leaves
+      // nothing in outputDir. The path sits inside outputDir: the final move stays a rename on the same filesystem.
+      const tempDir = path.join(outputDir, `.pi-tube-tmp-${randomUUID()}`);
       const tempCreated = await makeDir(tempDir);
       if (!tempCreated.success) return tempCreated;
       const format =

@@ -286,6 +286,24 @@ describe("hardening", () => {
     expect(existsSync(tmpDir) ? readdirSync(tmpDir) : []).toEqual([]);
   });
 
+  test("download stages its temp files inside the output dir, so the final move never crosses filesystems", async () => {
+    const outputDir = path.join(root, "out");
+    const tempOf = (args: readonly string[]): string =>
+      args.find((arg) => arg.startsWith("temp:"))?.slice("temp:".length) ?? "";
+    const { requests, run } = fakeRun((request) => {
+      writeFileSync(path.join(tempOf(request.args), "Demo [abc].f401.mp4.part"), "partial");
+      const file = path.join(outputDir, "Demo [abc].mp4");
+      writeFileSync(file, "video");
+      return exited(`${file}\n`);
+    });
+
+    const result = await fetcherWith(run).download({ url: YOUTUBE, kind: "youtube" }, { media: "video", outputDir });
+
+    expect(result.success).toBe(true);
+    expect(path.dirname(tempOf(requests[0]?.args ?? []))).toBe(outputDir);
+    expect(readdirSync(outputDir)).toEqual(["Demo [abc].mp4"]);
+  });
+
   test.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
     "release never rejects, even when the temp dir cannot be removed",
     async () => {
