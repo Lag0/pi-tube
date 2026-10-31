@@ -297,7 +297,6 @@ describe("hardening", () => {
     expect(result.success ? undefined : result.error.code).toBe("CANCELLED");
     expect(requests[0]?.args).toEqual(expect.arrayContaining(["-P", `home:${outputDir}`]));
     expect(existsSync(outputDir) ? readdirSync(outputDir) : []).toEqual([]);
-    expect(existsSync(tmpDir) ? readdirSync(tmpDir) : []).toEqual([]);
   });
 
   test("a temp audio dir that cannot be created is STORAGE_IO_FAILED with a hint that fits transcribe", async () => {

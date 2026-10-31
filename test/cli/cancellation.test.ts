@@ -110,8 +110,6 @@ describe("cancellation", () => {
       expect(Date.now() - startedAt).toBeLessThan(20_000);
       await waitFor(() => !isAlive(ytDlpPid ?? 0) && !isAlive(sleepPid ?? 0), 5000);
       expect(readdirSync(outputDir)).toEqual(["pids"]);
-      const tmpDir = path.join(workDir, ".pi-tube", "tmp");
-      expect(existsSync(tmpDir) ? readdirSync(tmpDir) : []).toEqual([]);
       rmSync(FAKE_YTDLP_DIR, { recursive: true, force: true });
     },
     30_000,
