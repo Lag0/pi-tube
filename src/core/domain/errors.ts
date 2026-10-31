@@ -100,9 +100,9 @@ export const ERROR_CATALOG = {
     category: "source",
     hint: "Check that the video is public and opens in a browser, then retry.",
   },
-  INSTAGRAM_AUTH_REQUIRED: {
+  SOURCE_AUTH_REQUIRED: {
     category: "source",
-    hint: "pi-tube supports public Instagram URLs only.",
+    hint: "Export cookies for this site from a browser where you are logged in to a cookies.txt file (Netscape format), then run `pi-tube config set cookies.file <absolute path>` or set PI_TUBE_COOKIES_FILE.",
   },
   INSTAGRAM_EXTRACT_FAILED: {
     category: "source",

@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `transcribe` and `download` accept any page yt-dlp supports. YouTube, Instagram, direct media URLs and local files are the `tested` tier; any other site is `best_effort`.
 - Saved transcripts (schema 1.2.0) keep the source's tier and, for pages, the platform (yt-dlp extractor), media id, canonical URL, duration, live status and chapters. Each timestamped segment names its chapter, and dense segments are never merged across a chapter boundary. The Markdown lists the chapters under "Source Metadata" and, with `--timestamps`, puts a `####` heading before each chapter's first segment. `transcribe --json` adds `source.platform` and `source.tier`.
 - A live stream that is still running, is scheduled, or whose recording YouTube is still processing (`live_status` `is_live`, `is_upcoming` or `post_live`) fails `transcribe` and `download` with `SOURCE_LIVE_NOT_ENDED` (exit 5) before anything is downloaded or sent to a provider. A finished stream (`was_live`) works as before.
+- Cookies for sites that need a login: point `cookies.file` (or `PI_TUBE_COOKIES_FILE`) at a cookies.txt exported from your browser. Every yt-dlp run gets its own temporary copy (mode 600, in a 700 directory), removed when the run ends, also on failure or Ctrl-C, because yt-dlp rewrites the file it is given; your file is never written. A missing file, or one whose first line is not `# Netscape HTTP Cookie File` (or `# HTTP Cookie File`), fails with `COOKIES_FILE_INVALID` before yt-dlp runs. Messages name where the file was set, never its path.
 - Source settings in the config, read on every `transcribe` and `download`:
   - `network.allow_private_hosts` (default `false`): set it to `true` to let pi-tube reach private, loopback and link-local hosts;
   - `cookies.file`: a cookies.txt (Netscape format) for sites that need a login; `PI_TUBE_COOKIES_FILE` wins over it;
@@ -36,7 +37,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   | usage | 2 | `INPUT_INVALID`, `NOT_IMPLEMENTED`, `PROVIDER_INVALID` |
   | dependency | 3 | `SETUP_COMMAND_FAILED`, `YTDLP_NOT_FOUND`, `YTDLP_OUTPUT_INVALID` |
   | provider | 4 | `PROVIDER_NOT_CONFIGURED`, `PROVIDER_AUTH`, `PROVIDER_RATE_LIMIT`, `PROVIDER_UNAVAILABLE`, `PROVIDER_FAILED`, `PROVIDER_INVALID_RESPONSE` |
-  | source | 5 | `SOURCE_UNSUPPORTED`, `SOURCE_EXTRACT_FAILED`, `SOURCE_LIVE_NOT_ENDED`, `SOURCE_HOST_BLOCKED`, `YOUTUBE_EXTRACT_FAILED`, `INSTAGRAM_*`, `LOCAL_FILE_*`, `DOWNLOAD_FAILED` |
+  | source | 5 | `SOURCE_UNSUPPORTED`, `SOURCE_EXTRACT_FAILED`, `SOURCE_AUTH_REQUIRED`, `SOURCE_LIVE_NOT_ENDED`, `SOURCE_HOST_BLOCKED`, `YOUTUBE_EXTRACT_FAILED`, `INSTAGRAM_*`, `LOCAL_FILE_*`, `DOWNLOAD_FAILED` |
   | config | 6 | `CONFIG_INVALID`, `CONFIG_IO_FAILED`, `STORAGE_IO_FAILED`, `COOKIES_FILE_INVALID` |
   | cancelled | 130 | `CANCELLED` |
   | unexpected | 1 | `UNEXPECTED` |
@@ -57,6 +58,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **Breaking:** `UNSUPPORTED_URL_NOT_DIRECT_MEDIA` is replaced by `SOURCE_UNSUPPORTED`, which pi-tube reports only when yt-dlp cannot read the page (or the URL is a playlist or channel). A best-effort site that yt-dlp fails to read is the new `SOURCE_EXTRACT_FAILED`.
 - **Breaking:** `download` takes any page yt-dlp supports and reads its metadata first. Direct media URLs and local files fail with `DOWNLOAD_FAILED`, since they are already files. `download --json` reports `source_kind: "site"` for a best-effort site.
 - Reading metadata no longer asks yt-dlp for a format (`--dump-single-json --ignore-no-formats-error`), so it no longer fails on a video without a usable format URL, and pi-tube no longer reads the media URL of YouTube and Instagram at all.
+- **Breaking:** `INSTAGRAM_AUTH_REQUIRED` is replaced by `SOURCE_AUTH_REQUIRED`, for any site whose yt-dlp error asks for a login or cookies (YouTube's sign-in and bot checks included). Its hint explains how to set up cookies or, when cookies are already configured, that they did not grant access.
 - **Breaking:** yt-dlp runs with `--ignore-config`: yt-dlp configuration files (yours, or a `yt-dlp.conf` in the current or output directory) no longer apply to pi-tube's runs, so none can inject options such as `--exec`.
 - **Breaking:** untitled YouTube and Instagram transcripts are named from the page URL instead of the media URL (for example `…-watch.md` and `…-www-instagram-com.md`).
 - **Breaking:** the slug in a transcript file name is capped at 80 characters, so a long title no longer fails the save with `ENAMETOOLONG` after a paid transcription.

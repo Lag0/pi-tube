@@ -4,6 +4,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readdirSync,
+  readFileSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -137,12 +138,12 @@ describe("resolve", () => {
     expect(result.success ? undefined : result.error.code).toBe("INSTAGRAM_EXTRACT_FAILED");
   });
 
-  test("an Instagram login wall is INSTAGRAM_AUTH_REQUIRED", async () => {
+  test("an Instagram login wall is SOURCE_AUTH_REQUIRED", async () => {
     const { run } = fakeRun(() => exited("", 1, "ERROR: login required"));
 
     const result = await fetcherWith(run).resolve(INSTAGRAM, SETTINGS);
 
-    expect(result.success ? undefined : result.error.code).toBe("INSTAGRAM_AUTH_REQUIRED");
+    expect(result.success ? undefined : result.error.code).toBe("SOURCE_AUTH_REQUIRED");
   });
 
   test("an aborted run is CANCELLED", async () => {
@@ -425,6 +426,93 @@ describe("download", () => {
     );
 
     expect(result.success ? undefined : result.error.code).toBe("STORAGE_IO_FAILED");
+  });
+});
+
+describe("cookies", () => {
+  const HEADER = "# Netscape HTTP Cookie File\n.example.com\tTRUE\t/\tTRUE\t0\tsid\tabc\n";
+  let userFile: string;
+  let cookieSettings: SourceSettings;
+
+  beforeEach(() => {
+    userFile = path.join(root, "my-cookies.txt");
+    writeFileSync(userFile, HEADER);
+    cookieSettings = { ...SETTINGS, cookies: { file: userFile, origin: "config" } };
+  });
+
+  /** A yt-dlp stand-in that rewrites the `--cookies` file it gets, as yt-dlp does on exit, then answers `result`. */
+  const rewritingRun = (result: (request: ProcessRequest) => ProcessResult) =>
+    fakeRun((request) => {
+      const file = request.args[request.args.indexOf("--cookies") + 1] ?? "";
+      if (existsSync(file)) writeFileSync(file, "# Netscape HTTP Cookie File\nrewritten\n");
+      return result(request);
+    });
+
+  const cookieDirs = (): string[] =>
+    existsSync(tmpDir) ? readdirSync(tmpDir).filter((name) => name.startsWith("cookies-")) : [];
+
+  test("yt-dlp gets a temp copy, the user's file stays byte for byte the same and the copy is removed", async () => {
+    const { requests, run } = rewritingRun(() => exited(JSON.stringify({ id: "abc" })));
+
+    const result = await fetcherWith(run).resolve(YOUTUBE, cookieSettings);
+
+    expect(result.success).toBe(true);
+    const args = requests[0]?.args ?? [];
+    expect(args).toContain("--cookies");
+    expect(args).not.toContain(userFile);
+    expect(args[args.indexOf("--cookies") + 1]?.startsWith(tmpDir)).toBe(true);
+    expect(readFileSync(userFile, "utf8")).toBe(HEADER);
+    expect(cookieDirs()).toEqual([]);
+  });
+
+  test.each([
+    ["a failed run", exited("", 1, "ERROR: boom")],
+    ["a cancelled run", { outcome: "aborted", exitCode: null, stdout: "", stderr: "" } as ProcessResult],
+  ])("the copy is removed after %s", async (_name, outcome) => {
+    const { run } = rewritingRun(() => outcome);
+
+    await fetcherWith(run).resolve(YOUTUBE, cookieSettings);
+
+    expect(cookieDirs()).toEqual([]);
+    expect(readFileSync(userFile, "utf8")).toBe(HEADER);
+  });
+
+  test("fetchAudio and download pass the cookies too", async () => {
+    const { requests, run } = rewritingRun((request) => {
+      const template = request.args[request.args.indexOf("-o") + 1] ?? "";
+      if (template.includes("%(id)s.%(ext)s")) {
+        const file = template.replace("%(id)s.%(ext)s", "abc.m4a");
+        mkdirSync(path.dirname(file), { recursive: true });
+        writeFileSync(file, "audio");
+        return exited(`${file}\n`);
+      }
+      return exited(`${path.join(root, "a.mp4")}\n`);
+    });
+    const fetcher = fetcherWith(run);
+
+    const fetched = await fetcher.fetchAudio(YOUTUBE_SOURCE, cookieSettings);
+    await fetcher.download(YOUTUBE_SOURCE, { media: "video", outputDir: root }, cookieSettings);
+
+    expect(requests.map((request) => request.args.includes("--cookies"))).toEqual([true, true]);
+    if (fetched.success) await fetched.data.release();
+    expect(cookieDirs()).toEqual([]);
+  });
+
+  test("a sign-in wall with cookies configured says the cookies did not grant access", async () => {
+    const { run } = rewritingRun(() =>
+      exited(
+        "",
+        1,
+        "ERROR: [youtube] abc: Sign in to confirm you're not a bot. Use --cookies-from-browser or --cookies for the authentication.",
+      ),
+    );
+
+    const result = await fetcherWith(run).resolve(YOUTUBE, cookieSettings);
+
+    expect(result.success ? undefined : result.error).toMatchObject({
+      code: "SOURCE_AUTH_REQUIRED",
+      hint: "The configured cookies did not grant access: export fresh cookies from a browser where you are logged in and replace the file.",
+    });
   });
 });
 

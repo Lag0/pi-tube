@@ -111,8 +111,8 @@ describe("CLI intake integration", () => {
     });
 
     expect(result.exitCode).toBe(5);
-    expect(result.stderr).toContain("[INSTAGRAM_AUTH_REQUIRED]");
-    expect(result.stderr).toContain("supports public Instagram URLs only");
+    expect(result.stderr).toContain("[SOURCE_AUTH_REQUIRED]");
+    expect(result.stderr).toContain("pi-tube config set cookies.file");
   });
 
   test("maps Instagram extraction failures to INSTAGRAM_EXTRACT_FAILED", async () => {

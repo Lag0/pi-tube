@@ -2,6 +2,7 @@ import { createError, type PiTubeError } from "../../core/domain/errors.ts";
 import { err, ok, type Result } from "../../core/domain/result.ts";
 import type { Chapter, LiveStatus, MediaMetadata } from "../../core/domain/source.ts";
 import type { ProcessResult } from "../process/run-process.ts";
+import { cookiesOriginName } from "./cookies.ts";
 
 /** What a yt-dlp run was for; decides which source error a failure maps to. */
 export type YtDlpPurpose = "youtube_metadata" | "instagram_metadata" | "site_metadata" | "download";
@@ -55,11 +56,14 @@ export const extractionError = (purpose: YtDlpPurpose, detail: string): PiTubeEr
   return createError("DOWNLOAD_FAILED", `Failed to download media via yt-dlp (${detail}).`);
 };
 
+const COOKIES_DID_NOT_WORK_HINT =
+  "The configured cookies did not grant access: export fresh cookies from a browser where you are logged in and replace the file.";
+
 /** Maps a finished yt-dlp run to `ok(stdout)` or the error for its purpose. */
 export const interpretYtDlpRun = (
   result: ProcessResult,
   purpose: YtDlpPurpose,
-  input: { readonly url: string; readonly timeoutMs: number; readonly isInstagram: boolean },
+  input: { readonly url: string; readonly timeoutMs: number; readonly cookies?: "env" | "config" },
 ): Result<string> => {
   switch (result.outcome) {
     case "not_found":
@@ -78,12 +82,19 @@ export const interpretYtDlpRun = (
       if (result.exitCode === 0) return ok(result.stdout);
       const detail =
         [result.stderr.trim(), result.stdout.trim()].filter(Boolean).join(" ").trim() || `exit code ${result.exitCode}`;
+      // The detail names the temporary copy, never the user's file, but it is still left out of the message.
+      if (/does not look like a Netscape format cookies file|Cookies file must be Netscape formatted/.test(detail)) {
+        const origin = cookiesOriginName(input.cookies ?? "config");
+        return err(createError("COOKIES_FILE_INVALID", `yt-dlp rejected the cookies file set by \`${origin}\`.`));
+      }
       if (/Unsupported URL|No suitable extractor found/.test(detail)) {
         return err(createError("SOURCE_UNSUPPORTED", `yt-dlp cannot read \`${input.url}\` (${detail}).`));
       }
-      if (input.isInstagram && isInstagramAuthRequiredFailure(detail)) {
+      if (isAuthRequiredFailure(detail)) {
         return err(
-          createError("INSTAGRAM_AUTH_REQUIRED", `Instagram URL requires authentication for \`${input.url}\`.`),
+          createError("SOURCE_AUTH_REQUIRED", `\`${input.url}\` requires a logged-in session (${detail}).`, {
+            ...(input.cookies ? { hint: COOKIES_DID_NOT_WORK_HINT } : {}),
+          }),
         );
       }
       return err(extractionError(purpose, detail));
@@ -256,8 +267,10 @@ export const parseYtDlpInfo = (stdout: string, url: string): Result<MediaMetadat
   });
 };
 
-export function isInstagramAuthRequiredFailure(detail: string): boolean {
-  return /(login required|requires login|you need to log in|challenge_required|checkpoint_required|private content|not available due to login)/i.test(
-    detail,
-  );
-}
+// Instagram's login walls, plus the yt-dlp texts that ask for cookies or a login (yt-dlp source, see
+// .agents/research/2026-10-31-ytdlp-1c-facts.md §4). Server texts not in yt-dlp's code are left out on purpose.
+const AUTH_REQUIRED =
+  /login required|requires login|you need to log in|challenge_required|checkpoint_required|private content|not available due to login|use --cookies-from-browser or --cookies|use --cookies, --cookies-from-browser|only available for registered users|login details are needed/i;
+
+/** Tells whether a yt-dlp error means the page needs a logged-in session. */
+export const isAuthRequiredFailure = (detail: string): boolean => AUTH_REQUIRED.test(detail);

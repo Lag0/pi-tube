@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
-import { parseYtDlpInfo } from "../../../src/infrastructure/media/yt-dlp.ts";
+import { interpretYtDlpRun, parseYtDlpInfo } from "../../../src/infrastructure/media/yt-dlp.ts";
+import type { ProcessResult } from "../../../src/infrastructure/process/run-process.ts";
 
 const metadataOf = (payload: unknown) => {
   const result = parseYtDlpInfo(JSON.stringify(payload), "https://example.com/v");
@@ -104,5 +105,64 @@ describe("parseYtDlpInfo", () => {
     const result = parseYtDlpInfo(stdout, "https://example.com/v");
 
     expect(result.success ? undefined : result.error.code).toBe("YTDLP_OUTPUT_INVALID");
+  });
+});
+
+describe("interpretYtDlpRun", () => {
+  const failed = (stderr: string): ProcessResult => ({ outcome: "exited", exitCode: 1, stdout: "", stderr });
+  const URL_ = "https://www.youtube.com/watch?v=abc";
+  const BOT =
+    "ERROR: [youtube] abc: Sign in to confirm you're not a bot. Use --cookies-from-browser or --cookies for the authentication. See  https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp  for how to manually pass cookies";
+
+  test("a sign-in wall without cookies is SOURCE_AUTH_REQUIRED with the export-cookies hint", () => {
+    const result = interpretYtDlpRun(failed(BOT), "youtube_metadata", { url: URL_, timeoutMs: 1000 });
+
+    expect(result.success ? undefined : result.error).toMatchObject({
+      code: "SOURCE_AUTH_REQUIRED",
+      message: `\`${URL_}\` requires a logged-in session (${BOT}).`,
+      hint: "Export cookies for this site from a browser where you are logged in to a cookies.txt file (Netscape format), then run `pi-tube config set cookies.file <absolute path>` or set PI_TUBE_COOKIES_FILE.",
+    });
+  });
+
+  test("with cookies configured the hint says they did not grant access", () => {
+    const result = interpretYtDlpRun(failed(BOT), "download", { url: URL_, timeoutMs: 1000, cookies: "config" });
+
+    expect(result.success ? undefined : result.error.hint).toBe(
+      "The configured cookies did not grant access: export fresh cookies from a browser where you are logged in and replace the file.",
+    );
+  });
+
+  test.each([
+    "ERROR: [vimeo] 1: This video is only available for registered users. Use --cookies, --cookies-from-browser, --username and --password, --netrc-cmd, or --netrc (vimeo) to provide account credentials.",
+    "ERROR: [youtube] abc: Login details are needed to download this content.",
+    "ERROR: [instagram] abc: login required",
+  ])("%s is SOURCE_AUTH_REQUIRED", (stderr) => {
+    const result = interpretYtDlpRun(failed(stderr), "site_metadata", { url: URL_, timeoutMs: 1000 });
+
+    expect(result.success ? undefined : result.error.code).toBe("SOURCE_AUTH_REQUIRED");
+  });
+
+  test("yt-dlp rejecting the cookies file is COOKIES_FILE_INVALID without the temp path", () => {
+    const result = interpretYtDlpRun(
+      failed("ERROR: '/tmp/x/cookies.txt' does not look like a Netscape format cookies file"),
+      "youtube_metadata",
+      { url: URL_, timeoutMs: 1000, cookies: "env" },
+    );
+
+    expect(result.success ? undefined : result.error).toMatchObject({
+      code: "COOKIES_FILE_INVALID",
+      message: "yt-dlp rejected the cookies file set by `PI_TUBE_COOKIES_FILE`.",
+    });
+    expect(JSON.stringify(result)).not.toContain("/tmp/x");
+  });
+
+  test("a geo restriction stays an extraction error", () => {
+    const result = interpretYtDlpRun(
+      failed("ERROR: [youtube] abc: The uploader has not made this video available in your country"),
+      "youtube_metadata",
+      { url: URL_, timeoutMs: 1000 },
+    );
+
+    expect(result.success ? undefined : result.error.code).toBe("YOUTUBE_EXTRACT_FAILED");
   });
 });

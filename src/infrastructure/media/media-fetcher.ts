@@ -18,6 +18,7 @@ import type { SourceSettings } from "../../core/domain/source-settings.ts";
 import type { MediaFetcher } from "../../core/ports/media-fetcher.ts";
 import { errnoOf } from "../errno.ts";
 import { type ProcessRequest, type ProcessResult, runProcess } from "../process/run-process.ts";
+import { prepareCookies } from "./cookies.ts";
 import { checkHost, defaultLookup, type LookupHost } from "./host-guard.ts";
 import {
   AUDIO_FORMAT_SELECTOR,
@@ -98,7 +99,8 @@ export const createMediaFetcher = (deps: MediaFetcherDeps): MediaFetcher => {
   const run = deps.run ?? runProcess;
   const lookupHost = deps.lookup ?? defaultLookup;
 
-  // The only path to yt-dlp: every run passes the host guard first.
+  // The only path to yt-dlp: every run passes the host guard, then gets a temporary copy of the user's cookies,
+  // removed whatever the outcome.
   const ytDlp = async (
     args: readonly string[],
     purpose: YtDlpPurpose,
@@ -106,19 +108,28 @@ export const createMediaFetcher = (deps: MediaFetcherDeps): MediaFetcher => {
     defaultTimeoutMs: number,
     settings: SourceSettings,
     options: OperationOptions | undefined,
-    isInstagram: boolean,
   ): Promise<Result<string>> => {
     const allowed = await checkHost(url, settings, lookupHost, purpose);
     if (!allowed.success) return allowed;
-    const timeoutMs = resolveYtDlpTimeoutMs(deps.env, defaultTimeoutMs);
-    const result = await run({
-      command: "yt-dlp",
-      args: withUrl(args, url),
-      env: deps.env,
-      timeoutMs,
-      signal: options?.signal,
-    });
-    return interpretYtDlpRun(result, purpose, { url, timeoutMs, isInstagram });
+    const cookies = await prepareCookies(settings, deps.tmpDir);
+    if (!cookies.success) return cookies;
+    try {
+      const timeoutMs = resolveYtDlpTimeoutMs(deps.env, defaultTimeoutMs);
+      const result = await run({
+        command: "yt-dlp",
+        args: withUrl([...cookies.data.args, ...args], url),
+        env: deps.env,
+        timeoutMs,
+        signal: options?.signal,
+      });
+      return interpretYtDlpRun(result, purpose, {
+        url,
+        timeoutMs,
+        ...(settings.cookies ? { cookies: settings.cookies.origin } : {}),
+      });
+    } finally {
+      await cookies.data.cleanup();
+    }
   };
 
   return {
@@ -142,7 +153,6 @@ export const createMediaFetcher = (deps: MediaFetcherDeps): MediaFetcher => {
             METADATA_TIMEOUT_MS,
             settings,
             options,
-            classification === "instagram",
           );
           if (!stdout.success) return stdout;
           const metadata = parseYtDlpInfo(stdout.data, normalizedUrl);
@@ -184,7 +194,6 @@ export const createMediaFetcher = (deps: MediaFetcherDeps): MediaFetcher => {
         MEDIA_TIMEOUT_MS,
         settings,
         options,
-        source.kind === "instagram",
       );
       const filePath = stdout.success ? parseDownloadedPath(stdout.data) : undefined;
       if (!filePath) {
@@ -232,7 +241,6 @@ export const createMediaFetcher = (deps: MediaFetcherDeps): MediaFetcher => {
         MEDIA_TIMEOUT_MS,
         settings,
         options,
-        source.kind === "instagram",
       );
       await removeDir(tempDir);
       if (!stdout.success) return stdout;
