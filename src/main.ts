@@ -10,9 +10,9 @@ import { runInteractiveCommand } from "./infrastructure/interactive-command.ts";
 const CANCEL_SIGNALS: readonly NodeJS.Signals[] = ["SIGINT", "SIGTERM", "SIGHUP"];
 
 /**
- * CLI entry point: binds the real process to `runCli` and returns the exit code. During `transcribe` and
- * `download`, the first Ctrl-C, SIGHUP or SIGTERM cancels the operation (exit 130, temp files removed) and a
- * second one kills the process; every other command keeps the default signal behavior.
+ * CLI entry point: binds the real process to `runCli` and returns the exit code. During `transcribe`,
+ * `download` and `info`, the first Ctrl-C, SIGHUP or SIGTERM cancels the operation (exit 130, temp files removed)
+ * and a second one kills the process; every other command keeps the default signal behavior.
  */
 export const main = async (argv: readonly string[] = process.argv.slice(2)): Promise<number> => {
   const controller = new AbortController();

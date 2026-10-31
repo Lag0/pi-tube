@@ -85,7 +85,11 @@ export const runInfo = async (deps: CliDeps, command: InfoCommand): Promise<numb
   const progress = createProgressReporter({ color: command.color, stream: deps.io.progressStream });
   const startTime = Date.now();
   const result = await deps.app
-    .getMediaInfo({ input: command.input }, { onProgress: (step) => progress.update(step) })
+    .getMediaInfo(
+      { input: command.input },
+      // Armed like transcribe and download: on Ctrl-C yt-dlp is stopped and its temp cookies copy is removed.
+      { onProgress: (step) => progress.update(step), signal: deps.listenForCancel?.() },
+    )
     .catch((error: unknown) => {
       progress.fail("Failed");
       throw error;

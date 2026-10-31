@@ -99,6 +99,27 @@ describe("info command", () => {
     expect(ytDlp.requests).toHaveLength(0);
   });
 
+  test("Ctrl-C cancels a running info and stops yt-dlp, so its temp cookies copy is removed", async () => {
+    const controller = new AbortController();
+    const seen: Array<AbortSignal | undefined> = [];
+    const run = async (request: ProcessRequest): Promise<ProcessResult> => {
+      seen.push(request.signal);
+      const { signal } = request;
+      if (!signal) return { outcome: "exited", exitCode: 0, stdout: JSON.stringify(METADATA), stderr: "" };
+      await new Promise((resolve) => signal.addEventListener("abort", resolve, { once: true }));
+      return { outcome: "aborted", exitCode: null, stdout: "", stderr: "" };
+    };
+
+    const pending = runCliInProcess(["info", YOUTUBE], { signal: controller.signal, fakes: { runProcess: run } });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    controller.abort();
+    const result = await pending;
+
+    expect(seen[0]).toBeInstanceOf(AbortSignal);
+    expect(result.exitCode).toBe(130);
+    expect(result.stderr).toContain("[CANCELLED]");
+  });
+
   test("help lists the command", async () => {
     const topic = await runCliInProcess(["help", "info"]);
     const root = await runCliInProcess(["--help", "--no-color"]);
