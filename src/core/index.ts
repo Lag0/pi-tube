@@ -26,6 +26,7 @@ export {
   type DownloadMediaInput,
   type DownloadMediaOutput,
 } from "./application/download-media.ts";
+export { createGetMediaInfo, type GetMediaInfoDeps } from "./application/get-media-info.ts";
 export { ensureNotAborted, type OperationOptions, type ProgressEvent, type UseCase } from "./application/operation.ts";
 export {
   type AccountDeps,
@@ -59,6 +60,7 @@ export {
   type PiTubeError,
   toPiTubeError,
 } from "./domain/errors.ts";
+export { describeSource, type MediaInfo } from "./domain/media-info.ts";
 export {
   findProvider,
   type KeySource,

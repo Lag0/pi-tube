@@ -22,6 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   - `local_files.max_bytes` (default 1073741824, at most 2147483647): the largest local file pi-tube accepts.
 
   Cookie paths must be absolute; a relative one fails with `COOKIES_FILE_INVALID` (exit 6). `pi-tube config set` takes `true`/`false` and whole numbers for these keys, and `config get|list --json` print them as JSON booleans and numbers.
+- `pi-tube info <input> [--json]` shows what pi-tube knows about a source without downloading or transcribing it: kind, tier, URL or path and size, and for pages the platform, media id, canonical URL, title, publication date, duration, live status, chapters and description. The human output cuts the description at 280 characters; `--json` prints it whole, with `null` for absent fields. A live stream that has not ended is reported, not refused.
 - `pi-tube providers [--json]` lists each provider with `configured`, `key_source` (`env`, `config` or `none`) and the env var name when the key comes from the environment. `auth`, `config` and `providers` accept `--json`.
 
 ### Changed

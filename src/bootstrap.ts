@@ -4,6 +4,7 @@ import {
   type ConfigValues,
   createDownloadMedia,
   createGetConfigValue,
+  createGetMediaInfo,
   createListConfigValues,
   createListProviders,
   createLoginProvider,
@@ -18,6 +19,7 @@ import {
   type LogoutInput,
   type LogoutOutput,
   type MediaFetcher,
+  type MediaInfo,
   type ProviderDescriptor,
   type ProviderListing,
   type SttProvider,
@@ -59,6 +61,7 @@ export interface App {
   readonly listConfigValues: UseCase<Record<string, never>, ConfigValues>;
   readonly transcribe: UseCase<TranscribeInput, TranscribeOutput>;
   readonly downloadMedia: UseCase<DownloadMediaInput, DownloadMediaOutput>;
+  readonly getMediaInfo: UseCase<{ readonly input: string }, MediaInfo>;
 }
 
 /** Wires the core and the infrastructure for one environment. */
@@ -96,5 +99,6 @@ export const createApp = (environment: AppEnvironment, overrides: AppOverrides =
       now: () => new Date(),
     }),
     downloadMedia: createDownloadMedia({ configStore, env, media, defaultOutputDir: paths.downloadsDir }),
+    getMediaInfo: createGetMediaInfo({ configStore, env, media }),
   };
 };

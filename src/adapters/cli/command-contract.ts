@@ -7,11 +7,21 @@ const PACKAGE_JSON_URL = new URL("../../../package.json", import.meta.url);
 const PACKAGE_JSON = JSON.parse(readFileSync(PACKAGE_JSON_URL, "utf8")) as { version?: string };
 export const APP_VERSION = typeof PACKAGE_JSON.version === "string" ? PACKAGE_JSON.version : "0.0.0";
 
-export type HelpTopic = "root" | "transcribe" | "download" | "providers" | "auth" | "defaults" | "config" | "setup";
+export type HelpTopic =
+  | "root"
+  | "transcribe"
+  | "info"
+  | "download"
+  | "providers"
+  | "auth"
+  | "defaults"
+  | "config"
+  | "setup";
 
 /** Topics accepted by `pi-tube help <topic>` and `pi-tube <topic> --help`. */
 export const HELP_TOPICS: readonly HelpTopic[] = [
   "transcribe",
+  "info",
   "download",
   "providers",
   "auth",
@@ -25,6 +35,7 @@ const ROOT_HELP_DOCUMENT: HelpDocument = {
   summary: "Transcribe and download public media with provider-based AI transcription.",
   usage: [
     `${COMMAND_IDENTITY} transcribe <input> [--provider <deepgram|groq|elevenlabs>] [--language <code>] [--timestamps] [--json]`,
+    `${COMMAND_IDENTITY} info <input> [--json]`,
     `${COMMAND_IDENTITY} download <url> [--audio] [--output <dir>]`,
     `${COMMAND_IDENTITY} providers [--json]`,
     `${COMMAND_IDENTITY} auth <login|status|logout> [provider]`,
@@ -37,6 +48,10 @@ const ROOT_HELP_DOCUMENT: HelpDocument = {
       title: "Core",
       rows: [
         { term: `${COMMAND_IDENTITY} transcribe <input>`, description: "Transcribe a URL or local media file." },
+        {
+          term: `${COMMAND_IDENTITY} info <input>`,
+          description: "Show media metadata (title, platform, date, duration, chapters) without transcribing.",
+        },
         { term: `${COMMAND_IDENTITY} download <url>`, description: "Download media from a page yt-dlp supports." },
       ],
     },
@@ -118,6 +133,21 @@ const TRANSCRIBE_HELP_DOCUMENT: HelpDocument = {
     `${COMMAND_IDENTITY} transcribe "./recording.mp3" --timestamps --json`,
   ],
   notes: ["Use `defaults provider` and `defaults language` to avoid repeating common flags."],
+};
+
+const INFO_HELP_DOCUMENT: HelpDocument = {
+  title: `${COMMAND_IDENTITY} info`,
+  summary: "Show media metadata (title, platform, date, duration, chapters) without transcribing.",
+  usage: [`${COMMAND_IDENTITY} info <input> [--json]`],
+  options: [{ term: "--json", description: "Print the media info as JSON on stdout, with the full description." }],
+  examples: [
+    `${COMMAND_IDENTITY} info "https://youtube.com/watch?v=dQw4w9WgXcQ"`,
+    `${COMMAND_IDENTITY} info "https://vimeo.com/76979871" --json`,
+  ],
+  notes: [
+    "`tier` is `tested` for YouTube, Instagram, direct media URLs and local files, and `best_effort` for any other site.",
+    "A live stream that has not ended is reported with its `live_status`; `transcribe` and `download` refuse it.",
+  ],
 };
 
 const DOWNLOAD_HELP_DOCUMENT: HelpDocument = {
@@ -245,6 +275,7 @@ const SETUP_HELP_DOCUMENT: HelpDocument = {
 
 export function getHelpDocument(topic: HelpTopic): HelpDocument {
   if (topic === "transcribe") return TRANSCRIBE_HELP_DOCUMENT;
+  if (topic === "info") return INFO_HELP_DOCUMENT;
   if (topic === "download") return DOWNLOAD_HELP_DOCUMENT;
   if (topic === "providers") return PROVIDERS_HELP_DOCUMENT;
   if (topic === "auth") return AUTH_HELP_DOCUMENT;
