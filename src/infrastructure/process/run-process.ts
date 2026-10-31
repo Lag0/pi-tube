@@ -77,20 +77,23 @@ const signalGroup = (pid: number, signal: NodeJS.Signals): void => {
   try {
     process.kill(-pid, signal);
   } catch {
-    // ESRCH: every process in the group has already exited.
+    // ESRCH (every process in the group has exited) or EPERM (the id is no longer our group): nothing to stop.
   }
 };
 
-/** Stops the child and everything it started: the process group on POSIX, `taskkill /T` on Windows. */
-const killTree = (child: ChildProcess): void => {
+/**
+ * Stops the child and everything it started: the process group on POSIX, `taskkill /T` on Windows. Returns
+ * the pending SIGKILL timer, which the caller clears once the child has exited.
+ */
+const killTree = (child: ChildProcess): ReturnType<typeof setTimeout> | undefined => {
   const { pid } = child;
-  if (pid === undefined) return;
+  if (pid === undefined) return undefined;
   if (process.platform === "win32") {
     spawnSync("taskkill", ["/pid", String(pid), "/T", "/F"], { stdio: "ignore", windowsHide: true });
-    return;
+    return undefined;
   }
   signalGroup(pid, "SIGTERM");
-  setTimeout(() => signalGroup(pid, "SIGKILL"), KILL_GRACE_MS).unref();
+  return setTimeout(() => signalGroup(pid, "SIGKILL"), KILL_GRACE_MS).unref();
 };
 
 /**
@@ -115,19 +118,26 @@ export const runProcess = (request: ProcessRequest): Promise<ProcessResult> =>
     const sizes = { stdout: 0, stderr: 0 };
     let stoppedWith: ProcessOutcome | undefined;
     let spawnFailure: NodeJS.ErrnoException | undefined;
+    let graceTimer: ReturnType<typeof setTimeout> | undefined;
     let settled = false;
+    // Once the child has exited, a late timeout or cancel must not turn a finished run into timed_out or
+    // aborted, and a late SIGKILL must not reach a process group id the system may have reused.
+    const disarm = (): void => {
+      clearTimeout(timer);
+      clearTimeout(graceTimer);
+      request.signal?.removeEventListener("abort", onAbort);
+    };
     const settle = (result: ProcessResult): void => {
       if (settled) return;
       settled = true;
-      clearTimeout(timer);
-      request.signal?.removeEventListener("abort", onAbort);
+      disarm();
       resolve(result);
     };
 
     const stop = (outcome: ProcessOutcome): void => {
       if (stoppedWith !== undefined) return;
       stoppedWith = outcome;
-      killTree(child);
+      graceTimer = killTree(child);
     };
     const collect = (stream: "stdout" | "stderr") => (chunk: Buffer) => {
       sizes[stream] += chunk.length;
@@ -150,6 +160,7 @@ export const runProcess = (request: ProcessRequest): Promise<ProcessResult> =>
       if (error.code === "ENOENT") settle({ outcome: "not_found", exitCode: null, stdout: "", stderr: "" });
     });
     child.on("exit", () => {
+      disarm();
       // Grandchildren that outlive the child would keep the pipes open; the group goes with the child.
       if (child.pid !== undefined && process.platform !== "win32") signalGroup(child.pid, "SIGKILL");
     });

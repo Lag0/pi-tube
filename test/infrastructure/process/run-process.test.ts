@@ -1,8 +1,8 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import { buildChildEnv, runProcess } from "../../../src/infrastructure/process/run-process.ts";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { buildChildEnv, KILL_GRACE_MS, runProcess } from "../../../src/infrastructure/process/run-process.ts";
 
 const SCRIPTS = path.resolve("test", "fixtures-process");
 const NODE = process.execPath;
@@ -153,6 +153,48 @@ describe("runProcess", () => {
 
     expect(result.outcome).toBe("aborted");
     expect(existsSync(pidFile)).toBe(false);
+  });
+
+  test.skipIf(isWindows)(
+    "a cancel after the child exited, while its pipes drain, keeps the exited outcome",
+    async () => {
+      const pidFile = path.join(workDir, "grandchild.pid");
+      const controller = new AbortController();
+
+      const pending = runProcess({
+        command: NODE,
+        args: [script("exit-leaving-pipe-open.mjs"), pidFile],
+        env: baseEnv,
+        timeoutMs: 30_000,
+        signal: controller.signal,
+      });
+      await waitFor(() => existsSync(pidFile));
+      // The child is gone by now; only the grandchild still holds the pipes.
+      await new Promise((resolve) => setTimeout(resolve, 700));
+      controller.abort();
+      const result = await pending;
+
+      expect(result).toMatchObject({ outcome: "exited", exitCode: 0, stdout: "done" });
+    },
+  );
+
+  test.skipIf(isWindows)("no signal reaches the old process group once the run has settled", async () => {
+    const pidFile = path.join(workDir, "pids.json");
+    const kill = vi.spyOn(process, "kill");
+
+    const result = await runProcess({
+      command: NODE,
+      args: [script("sleep-with-child.mjs"), pidFile],
+      env: baseEnv,
+      timeoutMs: 500,
+    });
+    const callsAtSettle = kill.mock.calls.length;
+    await new Promise((resolve) => setTimeout(resolve, KILL_GRACE_MS + 300));
+    const callsLater = kill.mock.calls.length;
+    kill.mockRestore();
+
+    expect(result.outcome).toBe("timed_out");
+    expect(callsLater).toBe(callsAtSettle);
   });
 });
 
