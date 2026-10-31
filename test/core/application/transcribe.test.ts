@@ -7,7 +7,7 @@ import { createTranscribe, type TranscribeDeps } from "../../../src/core/applica
 import type { PiTubeConfig } from "../../../src/core/domain/config.ts";
 import { createError } from "../../../src/core/domain/errors.ts";
 import { renderMarkdown } from "../../../src/core/domain/transcript/render-markdown.ts";
-import { createFileTranscriptStore } from "../../../src/infrastructure/output/file-transcript-store.ts";
+import { createFileLibraryStore } from "../../../src/infrastructure/library/file-library-store.ts";
 import { PROVIDER_DESCRIPTORS } from "../../../src/infrastructure/stt/registry.ts";
 import { createFakeMediaFetcher } from "../../helpers/fake-media.ts";
 import { createFakeSttProvider } from "../../helpers/fake-stt.ts";
@@ -46,7 +46,7 @@ const setup = (options: { env?: Record<string, string>; config?: PiTubeConfig } 
     providers: PROVIDER_DESCRIPTORS,
     stt,
     media: media.fetcher,
-    store: createFileTranscriptStore(outputDir),
+    library: createFileLibraryStore({ libraryDir: outputDir }),
     now: () => NOW,
   };
   return { stt, media, deps, transcribe: createTranscribe(deps) };
@@ -55,7 +55,7 @@ const setup = (options: { env?: Record<string, string>; config?: PiTubeConfig } 
 const run = (
   transcribe: ReturnType<typeof createTranscribe>,
   overrides: { provider?: string; language?: string } = {},
-) => transcribe({ input: INPUT, timestamps: false, format: "markdown", ...overrides });
+) => transcribe({ input: INPUT, format: "markdown", ...overrides });
 
 describe("provider selection", () => {
   test("an explicit provider wins over the config default", async () => {
@@ -166,11 +166,12 @@ describe("audio and output", () => {
     const { media, stt, deps } = setup({ env: { GROQ_API_KEY: "gq" } });
     const failing = createFakeSttProvider("groq", createError("PROVIDER_FAILED", "boom"));
 
-    await createTranscribe(deps)({ input: INPUT, timestamps: false, format: "markdown" });
+    await createTranscribe(deps)({ input: INPUT, format: "markdown" });
+    // `force`: the first transcript is in the library, and only a fresh run fetches audio again.
     await createTranscribe({ ...deps, stt: { ...stt, groq: failing } })({
       input: INPUT,
-      timestamps: false,
       format: "markdown",
+      force: true,
     });
 
     expect(media.released()).toBe(2);
@@ -182,7 +183,7 @@ describe("audio and output", () => {
     const controller = new AbortController();
 
     const pending = createTranscribe({ ...deps, stt: { ...stt, groq: waiting } })(
-      { input: INPUT, timestamps: false, format: "markdown" },
+      { input: INPUT, format: "markdown" },
       { signal: controller.signal },
     );
     setTimeout(() => controller.abort(), 20);
@@ -200,9 +201,11 @@ describe("audio and output", () => {
 
     expect(result.success).toBe(true);
     if (!result.success) return;
-    expect(path.basename(result.data.saved.path)).toBe("2026-10-30-demo.md");
-    expect(readFileSync(result.data.saved.path, "utf8")).toBe(renderMarkdown(result.data.artifact));
-    if (process.platform !== "win32") expect(statSync(result.data.saved.path).mode & 0o777).toBe(0o600);
+    expect(path.basename(result.data.paths.markdown)).toBe(
+      `2026-10-30-demo-${result.data.transcriptId.slice(0, 8)}.md`,
+    );
+    expect(readFileSync(result.data.paths.markdown, "utf8")).toBe(renderMarkdown(result.data.artifact));
+    if (process.platform !== "win32") expect(statSync(result.data.paths.markdown).mode & 0o777).toBe(0o600);
   });
 
   test("an output dir that is a file is STORAGE_IO_FAILED", async () => {
@@ -210,14 +213,13 @@ describe("audio and output", () => {
     writeFileSync(blocker, "x");
     const { deps, stt } = setup({ env: { GROQ_API_KEY: "gq" } });
 
-    const result = await createTranscribe({ ...deps, store: createFileTranscriptStore(blocker) })({
+    const result = await createTranscribe({ ...deps, library: createFileLibraryStore({ libraryDir: blocker }) })({
       input: INPUT,
-      timestamps: false,
       format: "markdown",
     });
 
     expect(result.success ? undefined : result.error.code).toBe("STORAGE_IO_FAILED");
-    expect(result.success ? "" : result.error.hint).toContain("PI_TUBE_OUTPUT_DIR");
+    expect(result.success ? "" : result.error.hint).toContain("PI_TUBE_LIBRARY_DIR");
     // Checked before the paid call, so a bad output dir never costs a transcription.
     expect(stt.groq.requests).toHaveLength(0);
   });
@@ -234,12 +236,179 @@ describe("audio and output", () => {
     };
 
     const result = await createTranscribe({ ...deps, stt: { ...stt, groq: answersThenCancel } })(
-      { input: INPUT, timestamps: false, format: "markdown" },
+      { input: INPUT, format: "markdown" },
       { signal: controller.signal },
     );
 
     expect(result.success).toBe(true);
     expect(readdirSync(outputDir)).toHaveLength(1);
+  });
+});
+
+describe("library cache", () => {
+  const YOUTUBE = "https://www.youtube.com/watch?v=jNQXAC9IVRw";
+  const youtube = {
+    kind: "youtube" as const,
+    originalInput: YOUTUBE,
+    normalizedUrl: YOUTUBE,
+    metadata: { platform: "Youtube", mediaId: "jNQXAC9IVRw", title: "Me at the zoo" },
+  };
+  const cached = (source?: Parameters<typeof createFakeMediaFetcher>[0]) => {
+    const { stt, deps } = setup({ env: { GROQ_API_KEY: "gq", DEEPGRAM_API_KEY: "dg" } });
+    const media = createFakeMediaFetcher({ audio: { kind: "url", url: "https://cdn.example.com/a.m4a" }, ...source });
+    return { stt, media, transcribe: createTranscribe({ ...deps, media: media.fetcher }) };
+  };
+
+  test("a second YouTube transcribe is a cache hit without resolve, audio or provider", async () => {
+    const { stt, media, transcribe } = cached({ source: youtube });
+
+    const first = await transcribe({ input: YOUTUBE, provider: "groq", format: "markdown" });
+    const second = await transcribe({ input: YOUTUBE, provider: "groq", format: "markdown" });
+
+    expect(first.success && second.success).toBe(true);
+    if (!first.success || !second.success) return;
+    expect(first.data.cacheHit).toBe(false);
+    expect(second.data).toMatchObject({ cacheHit: true, transcriptId: first.data.transcriptId });
+    expect(media.calls.resolve).toHaveLength(1);
+    expect(media.calls.fetchAudio).toHaveLength(1);
+    expect(stt.groq.requests).toHaveLength(1);
+  });
+
+  test("a direct URL is resolved again (no yt-dlp) but neither downloaded nor transcribed again", async () => {
+    const { stt, media, transcribe } = cached();
+
+    await transcribe({ input: INPUT, provider: "groq", format: "markdown" });
+    const second = await transcribe({ input: INPUT, provider: "groq", format: "markdown" });
+
+    expect(second.success ? second.data.cacheHit : undefined).toBe(true);
+    expect(media.calls.resolve).toHaveLength(2);
+    expect(media.calls.fetchAudio).toHaveLength(1);
+    expect(stt.groq.requests).toHaveLength(1);
+  });
+
+  test("a best-effort site is resolved again but neither downloaded nor transcribed again", async () => {
+    const page = "https://vimeo.com/1";
+    const { stt, media, transcribe } = cached({
+      source: { kind: "site", originalInput: page, normalizedUrl: page, metadata: { platform: "Vimeo", mediaId: "1" } },
+    });
+
+    await transcribe({ input: page, provider: "groq", format: "markdown" });
+    const second = await transcribe({ input: page, provider: "groq", format: "markdown" });
+
+    expect(second.success ? second.data.cacheHit : undefined).toBe(true);
+    expect(media.calls.resolve).toHaveLength(2);
+    expect(media.calls.fetchAudio).toHaveLength(1);
+    expect(stt.groq.requests).toHaveLength(1);
+  });
+
+  test("a request in en reuses an automatic transcript that detected en, but not one in pt", async () => {
+    const { stt, transcribe } = cached({ source: youtube });
+
+    await transcribe({ input: YOUTUBE, provider: "groq", format: "markdown" });
+    const en = await transcribe({ input: YOUTUBE, provider: "groq", language: "en", format: "markdown" });
+    const pt = await transcribe({ input: YOUTUBE, provider: "groq", language: "pt", format: "markdown" });
+
+    expect(en.success ? en.data.cacheHit : undefined).toBe(true);
+    expect(pt.success ? pt.data.cacheHit : undefined).toBe(false);
+    expect(stt.groq.requests).toHaveLength(2);
+  });
+
+  test("a detected language name (Groq) is saved as its code, so a later request in that code is a hit", async () => {
+    const { deps } = setup({ env: { GROQ_API_KEY: "gq" } });
+    const groq = createFakeSttProvider("groq", { text: "olá", detectedLanguage: "Portuguese", segments: [] });
+    const media = createFakeMediaFetcher({
+      source: youtube,
+      audio: { kind: "url", url: "https://cdn.example.com/a.m4a" },
+    });
+    const transcribe = createTranscribe({ ...deps, media: media.fetcher, stt: { ...deps.stt, groq } });
+
+    const first = await transcribe({ input: YOUTUBE, provider: "groq", format: "json" });
+    const pt = await transcribe({ input: YOUTUBE, provider: "groq", language: "pt", format: "json" });
+
+    expect(first.success ? first.data.artifact.transcription.detected_language : undefined).toBe("pt");
+    expect(pt.success ? pt.data.cacheHit : undefined).toBe(true);
+    expect(groq.requests).toHaveLength(1);
+  });
+
+  test("another provider is a miss", async () => {
+    const { stt, transcribe } = cached({ source: youtube });
+
+    await transcribe({ input: YOUTUBE, provider: "groq", format: "markdown" });
+    const other = await transcribe({ input: YOUTUBE, provider: "deepgram", format: "markdown" });
+
+    expect(other.success ? other.data.cacheHit : undefined).toBe(false);
+    expect(stt.deepgram.requests).toHaveLength(1);
+  });
+
+  test("--force transcribes again into <id>-2, keeps the first, and later runs get <id>-2", async () => {
+    const { stt, transcribe } = cached({ source: youtube });
+
+    const first = await transcribe({ input: YOUTUBE, provider: "groq", format: "markdown" });
+    const forced = await transcribe({ input: YOUTUBE, provider: "groq", format: "markdown", force: true });
+    const again = await transcribe({ input: YOUTUBE, provider: "groq", format: "markdown" });
+
+    if (!first.success || !forced.success || !again.success) throw new Error("transcribe failed");
+    expect(forced.data).toMatchObject({ cacheHit: false, transcriptId: `${first.data.transcriptId}-2` });
+    expect(again.data).toMatchObject({ cacheHit: true, transcriptId: `${first.data.transcriptId}-2` });
+    expect(stt.groq.requests).toHaveLength(2);
+  });
+
+  test("the saved artifact always has segments and its library identity", async () => {
+    const { transcribe } = cached({ source: youtube });
+
+    const result = await transcribe({ input: YOUTUBE, provider: "groq", format: "json" });
+
+    if (!result.success) throw new Error("transcribe failed");
+    expect(result.data.artifact).toMatchObject({
+      transcript_id: result.data.transcriptId,
+      source: { source_key: "youtube:jNQXAC9IVRw" },
+      transcription: { provider: "groq", model: "groq-fake-model" },
+    });
+    expect(result.data.artifact.transcript.segments?.length).toBeGreaterThan(0);
+  });
+});
+
+describe("kept audio", () => {
+  const YOUTUBE = "https://www.youtube.com/watch?v=jNQXAC9IVRw";
+  const youtube = {
+    kind: "youtube" as const,
+    originalInput: YOUTUBE,
+    normalizedUrl: YOUTUBE,
+    metadata: { platform: "Youtube", mediaId: "jNQXAC9IVRw", title: "Me at the zoo" },
+  };
+  const withDownloadedAudio = (configOverrides: Partial<PiTubeConfig> = {}) => {
+    const downloaded = path.join(outputDir, "downloaded.m4a");
+    writeFileSync(downloaded, "audio");
+    const { stt, deps } = setup({
+      env: { GROQ_API_KEY: "gq", DEEPGRAM_API_KEY: "dg" },
+      config: config(configOverrides),
+    });
+    const media = createFakeMediaFetcher({ source: youtube, audio: { kind: "file", path: downloaded } });
+    return { stt, media, transcribe: createTranscribe({ ...deps, media: media.fetcher }) };
+  };
+
+  test("another provider reuses the kept audio and the stored source: no resolve, no download", async () => {
+    const { stt, media, transcribe } = withDownloadedAudio();
+
+    await transcribe({ input: YOUTUBE, provider: "groq", format: "markdown" });
+    const second = await transcribe({ input: YOUTUBE, provider: "deepgram", format: "markdown" });
+
+    expect(second.success ? second.data.cacheHit : undefined).toBe(false);
+    expect(media.calls.resolve).toHaveLength(1);
+    expect(media.calls.fetchAudio).toHaveLength(1);
+    const audio = stt.deepgram.requests[0]?.audio;
+    expect(audio?.kind).toBe("file");
+    expect(audio?.kind === "file" ? audio.path : "").toMatch(/youtube-jnqxac9ivrw-[0-9a-f]{10}[\\/]audio\.m4a$/);
+    expect(audio?.kind === "file" ? audio.path.startsWith(outputDir) : false).toBe(true);
+  });
+
+  test("with library.keep_audio false the audio is not kept and is downloaded again", async () => {
+    const { media, transcribe } = withDownloadedAudio({ library: { keep_audio: false } });
+
+    await transcribe({ input: YOUTUBE, provider: "groq", format: "markdown" });
+    await transcribe({ input: YOUTUBE, provider: "deepgram", format: "markdown" });
+
+    expect(media.calls.fetchAudio).toHaveLength(2);
   });
 });
 
@@ -283,7 +452,7 @@ describe("site sources", () => {
     const details: Array<string | undefined> = [];
 
     const result = await transcribe(
-      { input: vimeo, timestamps: false, format: "markdown" },
+      { input: vimeo, format: "markdown" },
       { onProgress: (event) => details.push(event.detail) },
     );
 
@@ -358,10 +527,7 @@ describe("progress detail", () => {
     const transcribe = createTranscribe({ ...deps, media: media.fetcher });
     const details: Array<string | undefined> = [];
 
-    await transcribe(
-      { input: page, timestamps: false, format: "markdown" },
-      { onProgress: (event) => details.push(event.detail) },
-    );
+    await transcribe({ input: page, format: "markdown" }, { onProgress: (event) => details.push(event.detail) });
 
     expect(details).toContain("(Evil [2J title)");
   });

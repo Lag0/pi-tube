@@ -17,7 +17,7 @@ const mediaUrl = "https://cdn.example.com/audio/demo.wav";
 
 const run = (args: string[], answers: { deepgram?: SttTranscript; groq?: SttTranscript } = {}) =>
   runCliInProcess(["transcribe", ...args], {
-    env: { PI_TUBE_OUTPUT_DIR: outputDir, ...PROVIDER_KEYS },
+    env: { PI_TUBE_LIBRARY_DIR: mkdtempSync(path.join(outputDir, "library-")), ...PROVIDER_KEYS },
     fakes: { stt: fakeProviders(answers) },
   });
 
@@ -35,13 +35,13 @@ describe("CLI output contract", () => {
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("[OUTPUT_FILE]");
     expect(result.stdout).toContain("[OUTPUT_FILE_URI]");
-    expect(path.basename(outputPath)).toMatch(/^\d{4}-\d{2}-\d{2}-demo(-\d+)?\.md$/);
-    expect(fileContent).toContain('---\nschema_version: "1.2.0"');
+    expect(path.basename(outputPath)).toMatch(/^\d{4}-\d{2}-\d{2}-demo-[0-9a-f]{8}\.md$/);
+    expect(fileContent).toContain('---\nschema_version: "1.3.0"');
     expect(fileContent).toContain('source_kind: "direct_url"');
     expect(fileContent).toContain('provider: "deepgram"');
     expect(fileContent).toContain("## Summary");
     expect(fileContent).toContain("### Key Points");
-    expect(fileContent).not.toContain("## Transcript");
+    expect(fileContent).toContain("## Transcript");
     expect(fileContent).toContain("### Full Text");
     expect(fileContent).toContain("hello deepgram");
   });
@@ -57,14 +57,15 @@ describe("CLI output contract", () => {
     expect(fileContent).toContain("- [00:00:00.710 - 00:00:01.200] world");
   });
 
-  test("keeps timestamp blocks disabled by default", async () => {
-    const result = await run([mediaUrl], { deepgram: helloWorld });
-    const fileContent = readOutputFileFromStdout(result.stdout);
+  test("keeps timestamped segments without --timestamps, which is accepted and changes nothing", async () => {
+    const plain = readOutputFileFromStdout((await run([mediaUrl], { deepgram: helloWorld })).stdout);
+    const flagged = readOutputFileFromStdout((await run([mediaUrl, "--timestamps"], { deepgram: helloWorld })).stdout);
 
-    expect(result.exitCode).toBe(0);
-    expect(fileContent).not.toContain("## Transcript");
-    expect(fileContent).not.toContain("### Timestamped Segments");
-    expect(fileContent).toContain("Timestamp mode: off (use --timestamps)");
+    for (const fileContent of [plain, flagged]) {
+      expect(fileContent).toContain("### Timestamped Segments");
+      expect(fileContent).toContain("- [00:00:00.200 - 00:00:00.700] hello");
+      expect(fileContent).toContain("Timestamp mode: on (2 blocks)");
+    }
   });
 
   test("returns deterministic schema-versioned JSON when --json is used", async () => {
@@ -77,7 +78,7 @@ describe("CLI output contract", () => {
       transcription: { provider: string };
       transcript: { full_text: string };
     };
-    expect(payload.schema_version).toBe("1.2.0");
+    expect(payload.schema_version).toBe("1.3.0");
     expect(payload.source.kind).toBe("direct_url");
     expect(payload.transcription.provider).toBe("deepgram");
     expect(payload.transcript.full_text).toBe("json response");
@@ -117,7 +118,7 @@ describe("CLI output contract", () => {
       transcription: { provider: string; requested_language: string | null; detected_language: string | null };
       transcript: { full_text: string };
     };
-    expect(payload.schema_version).toBe("1.2.0");
+    expect(payload.schema_version).toBe("1.3.0");
     expect(payload.transcription.provider).toBe("groq");
     expect(payload.transcription.requested_language).toBe("pt");
     expect(payload.transcription.detected_language).toBe("pt");

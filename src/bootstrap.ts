@@ -5,15 +5,20 @@ import {
   createDownloadMedia,
   createGetConfigValue,
   createGetMediaInfo,
+  createGetTranscript,
   createListConfigValues,
   createListProviders,
+  createListTranscripts,
   createLoginProvider,
   createLogoutProvider,
+  createPruneLibrary,
+  createSearchTranscripts,
   createSetConfigValue,
   createTranscribe,
   type DownloadMediaInput,
   type DownloadMediaOutput,
   type EnvironmentVariables,
+  type LibraryPage,
   type LoginInput,
   type LoginOutput,
   type LogoutInput,
@@ -22,15 +27,18 @@ import {
   type MediaInfo,
   type ProviderDescriptor,
   type ProviderListing,
+  type PruneInput,
+  type PruneReport,
+  type StoredTranscript,
   type SttProvider,
   type TranscribeInput,
   type TranscribeOutput,
   type UseCase,
 } from "./core/index.ts";
 import { createFileConfigStore } from "./infrastructure/config/file-config-store.ts";
+import { createFileLibraryStore } from "./infrastructure/library/file-library-store.ts";
 import type { LookupHost } from "./infrastructure/media/host-guard.ts";
 import { createMediaFetcher } from "./infrastructure/media/media-fetcher.ts";
-import { createFileTranscriptStore } from "./infrastructure/output/file-transcript-store.ts";
 import { resolvePiTubePaths } from "./infrastructure/paths.ts";
 import { type ProcessRequest, type ProcessResult, runProcess } from "./infrastructure/process/run-process.ts";
 import { createSttProviders, PROVIDER_DESCRIPTORS } from "./infrastructure/stt/registry.ts";
@@ -62,6 +70,13 @@ export interface App {
   readonly transcribe: UseCase<TranscribeInput, TranscribeOutput>;
   readonly downloadMedia: UseCase<DownloadMediaInput, DownloadMediaOutput>;
   readonly getMediaInfo: UseCase<{ readonly input: string }, MediaInfo>;
+  readonly listTranscripts: UseCase<{ readonly limit: number; readonly offset: number }, LibraryPage>;
+  readonly searchTranscripts: UseCase<
+    { readonly query: string; readonly limit: number; readonly offset: number },
+    LibraryPage
+  >;
+  readonly getTranscript: UseCase<{ readonly transcriptId: string }, StoredTranscript>;
+  readonly pruneLibrary: UseCase<PruneInput, PruneReport>;
 }
 
 /** Wires the core and the infrastructure for one environment. */
@@ -78,6 +93,7 @@ export const createApp = (environment: AppEnvironment, overrides: AppOverrides =
       run: overrides.runProcess ?? runProcess,
       ...(overrides.lookup ? { lookup: overrides.lookup } : {}),
     });
+  const library = createFileLibraryStore({ libraryDir: paths.libraryDir });
   const accountDeps = { configStore, env, providers: PROVIDER_DESCRIPTORS };
   const configDeps = { configStore, providers: PROVIDER_DESCRIPTORS };
 
@@ -95,10 +111,14 @@ export const createApp = (environment: AppEnvironment, overrides: AppOverrides =
       providers: PROVIDER_DESCRIPTORS,
       stt: overrides.stt ?? createSttProviders(),
       media,
-      store: createFileTranscriptStore(paths.outputDir),
+      library,
       now: () => new Date(),
     }),
     downloadMedia: createDownloadMedia({ configStore, env, media, defaultOutputDir: paths.downloadsDir }),
     getMediaInfo: createGetMediaInfo({ configStore, env, media }),
+    listTranscripts: createListTranscripts({ library }),
+    searchTranscripts: createSearchTranscripts({ library }),
+    getTranscript: createGetTranscript({ library }),
+    pruneLibrary: createPruneLibrary({ library, configStore }),
   };
 };

@@ -25,6 +25,7 @@ export const createFakeSttProvider = (
   const requests: SttRequest[] = [];
   return {
     id,
+    model: `${id}-fake-model`,
     capabilities: { timestamps: true, languageDetection: true, requiresLanguage: false, offline: false },
     requests,
     transcribe: async (request: SttRequest, operation?: OperationOptions) => {

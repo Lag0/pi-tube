@@ -45,7 +45,7 @@ describe("cancellation", () => {
     const outputDir = path.join(workDir, "out");
 
     const pending = runCliInProcess(["transcribe", "https://cdn.example.com/a.mp3"], {
-      env: { PI_TUBE_OUTPUT_DIR: outputDir, ...PROVIDER_KEYS },
+      env: { PI_TUBE_LIBRARY_DIR: outputDir, ...PROVIDER_KEYS },
       fakes: {
         stt: fakeProviders({ deepgram: createFakeSttProvider("deepgram", undefined, { waitForAbort: true }) }),
         media: media.fetcher,

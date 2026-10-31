@@ -182,6 +182,14 @@ describe.each(HARNESSES)("$id provider", (harness) => {
   });
 });
 
+describe("models", () => {
+  test("each provider names the model it calls", () => {
+    expect(createDeepgramProvider().model).toBe("nova-3");
+    expect(createGroqProvider().model).toBe("whisper-large-v3");
+    expect(createElevenLabsProvider().model).toBe("scribe_v2");
+  });
+});
+
 describe("registry", () => {
   test("has one provider per descriptor", async () => {
     const { createSttProviders, PROVIDER_DESCRIPTORS } = await import("../../../src/infrastructure/stt/registry.ts");

@@ -1,10 +1,13 @@
 import type { OutputArtifact } from "./contract.ts";
 
+/** A transcript as saved and printed in JSON: every field present, `null` when absent, snake_case. */
 export interface JsonOutputArtifact {
   schema_version: string;
   generated_at: string;
+  transcript_id: string | null;
   source: {
     kind: string;
+    source_key: string | null;
     tier: string;
     platform: string | null;
     media_id: string | null;
@@ -24,6 +27,7 @@ export interface JsonOutputArtifact {
   };
   transcription: {
     provider: string;
+    model: string | null;
     requested_language: string | null;
     detected_language: string | null;
   };
@@ -37,12 +41,15 @@ export interface JsonOutputArtifact {
   };
 }
 
+/** The JSON form of an artifact, as the library saves it and `library show --json` prints it. */
 export function toJsonOutputArtifact(artifact: OutputArtifact): JsonOutputArtifact {
   return {
     schema_version: artifact.schema_version,
     generated_at: artifact.generated_at,
+    transcript_id: artifact.transcript_id ?? null,
     source: {
       kind: artifact.source.kind,
+      source_key: artifact.source.source_key ?? null,
       tier: artifact.source.tier,
       platform: artifact.source.platform ?? null,
       media_id: artifact.source.media_id ?? null,
@@ -62,6 +69,7 @@ export function toJsonOutputArtifact(artifact: OutputArtifact): JsonOutputArtifa
     },
     transcription: {
       provider: artifact.transcription.provider,
+      model: artifact.transcription.model ?? null,
       requested_language: artifact.transcription.requested_language ?? null,
       detected_language: artifact.transcription.detected_language ?? null,
     },

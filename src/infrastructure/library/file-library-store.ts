@@ -1,0 +1,565 @@
+import { createHash, randomUUID } from "node:crypto";
+import { constants, createReadStream } from "node:fs";
+import {
+  access,
+  chmod,
+  copyFile,
+  link,
+  mkdir,
+  readdir,
+  readFile,
+  rename,
+  rm,
+  stat,
+  unlink,
+  utimes,
+  writeFile,
+} from "node:fs/promises";
+import path from "node:path";
+import { createError, type PiTubeError } from "../../core/domain/errors.ts";
+import { sameLanguage } from "../../core/domain/language.ts";
+import {
+  keyUrlOf,
+  type SourceKey,
+  siteSourceKey,
+  type TranscriptKey,
+  transcriptKeyText,
+} from "../../core/domain/library.ts";
+import { err, ok, type Result } from "../../core/domain/result.ts";
+import {
+  type Chapter,
+  isSiteSource,
+  type LiveStatus,
+  type MediaMetadata,
+  type ResolvedSource,
+  type SiteKind,
+} from "../../core/domain/source.ts";
+import { tierOf } from "../../core/domain/source-policy.ts";
+import { toPersistedUrl, withoutCredentials } from "../../core/domain/transcript/build-artifact.ts";
+import type { OutputArtifact } from "../../core/domain/transcript/contract.ts";
+import { markdownFileName } from "../../core/domain/transcript/file-name.ts";
+import { parseStoredArtifact } from "../../core/domain/transcript/parse-stored.ts";
+import { renderJson } from "../../core/domain/transcript/render-json.ts";
+import { renderMarkdown } from "../../core/domain/transcript/render-markdown.ts";
+import type { LibraryEntry, LibraryStore, StoredSource, StoredTranscript } from "../../core/ports/library-store.ts";
+import { errnoOf } from "../errno.ts";
+
+const MAX_FRESH_COPIES = 999;
+const SOURCE_FILE = "source.json";
+const TRANSCRIPT_ID = /^[0-9a-f]{20}(-\d+)?$/;
+const HINT =
+  "Check that your user can read and write the library directory, or set PI_TUBE_LIBRARY_DIR to another directory.";
+
+const sha256 = (text: string): string => createHash("sha256").update(text).digest("hex");
+
+const ioError = (action: "read" | "write", target: string, error: unknown): PiTubeError =>
+  createError("STORAGE_IO_FAILED", `Cannot ${action} \`${target}\` (${errnoOf(error)}).`, { hint: HINT });
+
+/** The first 20 hex characters of the SHA-256 of `transcriptKeyText(key)`. */
+export const transcriptIdOf = (key: TranscriptKey): string => sha256(transcriptKeyText(key)).slice(0, 20);
+
+/**
+ * `<slug of the key, at most 60 characters>-<first 10 hex of its SHA-256>`. The hash keeps apart ids that differ
+ * only in case, which case-insensitive file systems (macOS and Windows by default) would merge.
+ */
+export const sourceDirName = (sourceKey: SourceKey): string => {
+  const slug =
+    sourceKey
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+/, "")
+      .slice(0, 60)
+      .replace(/-+$/, "") || "source";
+  return `${slug}-${sha256(sourceKey).slice(0, 10)}`;
+};
+
+const hashFile = (file: string): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const hash = createHash("sha256");
+    createReadStream(file)
+      .on("data", (chunk) => hash.update(chunk))
+      .on("error", reject)
+      .on("end", () => resolve(hash.digest("hex")));
+  });
+
+/** What source.json keeps about a source: no credentials, no signed query, no media URL. */
+const describeForLibrary = (sourceKey: SourceKey, source: ResolvedSource): Record<string, unknown> => {
+  const base = { schema_version: 1, source_key: sourceKey, kind: source.kind, tier: tierOf(source.kind) };
+  if (source.kind === "local_file") return { ...base, absolute_path: source.absolutePath, extension: source.extension };
+  if (source.kind === "direct_url") {
+    return { ...base, normalized_url: toPersistedUrl(source.normalizedUrl), extension: source.extension };
+  }
+  const { metadata } = source;
+  return {
+    ...base,
+    normalized_url: withoutCredentials(source.normalizedUrl),
+    metadata: {
+      platform: metadata.platform,
+      media_id: metadata.mediaId,
+      canonical_url: metadata.canonicalUrl === undefined ? undefined : withoutCredentials(metadata.canonicalUrl),
+      title: metadata.title,
+      published_at: metadata.publishedAt,
+      description: metadata.description,
+      description_links: metadata.descriptionLinks,
+      duration_seconds: metadata.durationSeconds,
+      live_status: metadata.liveStatus,
+      chapters: metadata.chapters?.map((chapter) => ({
+        title: chapter.title,
+        start_ms: chapter.startMs,
+        end_ms: chapter.endMs,
+      })),
+    },
+  };
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const AUDIO_PREFIX = "audio.";
+/** `audio.<ext>`, not a temp copy in progress. */
+const isAudioName = (name: string): boolean => name.startsWith(AUDIO_PREFIX) && !name.endsWith(".tmp");
+const DAY_MS = 86_400_000;
+const SITE_KINDS: ReadonlySet<string> = new Set(["youtube", "instagram", "site"]);
+
+interface AudioFile {
+  readonly dir: string;
+  readonly path: string;
+  readonly bytes: number;
+  readonly mtimeMs: number;
+}
+
+const text = (value: unknown): string | undefined => (typeof value === "string" ? value : undefined);
+const num = (value: unknown): number | undefined => (typeof value === "number" ? value : undefined);
+
+/** The page source source.json describes, back in core form; undefined for other kinds. */
+const pageSourceOf = (saved: Record<string, unknown>): ResolvedSource | undefined => {
+  const kind = text(saved.kind);
+  const url = text(saved.normalized_url);
+  const raw = isRecord(saved.metadata) ? saved.metadata : undefined;
+  if (kind === undefined || !SITE_KINDS.has(kind) || url === undefined || !raw) return undefined;
+  const chapters = Array.isArray(raw.chapters)
+    ? raw.chapters.filter(isRecord).map(
+        (chapter): Chapter => ({
+          title: text(chapter.title) ?? "",
+          startMs: num(chapter.start_ms) ?? 0,
+          endMs: num(chapter.end_ms) ?? 0,
+        }),
+      )
+    : undefined;
+  const links = Array.isArray(raw.description_links)
+    ? raw.description_links.filter((link) => typeof link === "string")
+    : undefined;
+  const fields: Omit<MediaMetadata, "platform"> = {
+    mediaId: text(raw.media_id),
+    canonicalUrl: text(raw.canonical_url),
+    title: text(raw.title),
+    publishedAt: text(raw.published_at),
+    description: text(raw.description),
+    descriptionLinks: links,
+    durationSeconds: num(raw.duration_seconds),
+    liveStatus: text(raw.live_status) as LiveStatus | undefined,
+    chapters,
+  };
+  const metadata = Object.fromEntries(Object.entries(fields).filter(([, value]) => value !== undefined));
+  return {
+    kind: kind as SiteKind,
+    originalInput: url,
+    normalizedUrl: url,
+    metadata: { platform: text(raw.platform) ?? "unknown", ...metadata },
+  };
+};
+
+/**
+ * Library on files: `<libraryDir>/<source dir>/{source.json, <TranscriptId>.json, <date>-<title>-<id8>.md}`. The
+ * JSON is the canonical copy; the Markdown name comes from it (`markdownFileName`).
+ */
+/** File operations the store needs that differ between file systems; tests replace them to simulate one. */
+export interface LibraryFileSystem {
+  readonly link?: (existing: string, target: string) => Promise<void>;
+  readonly rename?: (from: string, to: string) => Promise<void>;
+}
+
+export const createFileLibraryStore = (deps: {
+  readonly libraryDir: string;
+  readonly now?: () => Date;
+  readonly fs?: LibraryFileSystem;
+}): LibraryStore => {
+  const now = deps.now ?? (() => new Date());
+  const linkFile = deps.fs?.link ?? link;
+  const renameFile = deps.fs?.rename ?? rename;
+  const dirOf = (sourceKey: SourceKey): string => path.join(deps.libraryDir, sourceDirName(sourceKey));
+
+  /**
+   * Reads a saved transcript. With `repair`, a Markdown file that is missing (a crash between the two writes, or a
+   * concurrent save still writing it) is rendered again from the JSON, which is the canonical copy.
+   */
+  const readTranscript = async (file: string, repair = false): Promise<Result<StoredTranscript | undefined>> => {
+    let text: string;
+    try {
+      text = await readFile(file, "utf8");
+    } catch (error) {
+      const code = errnoOf(error);
+      return code === "ENOENT" || code === "ENOTDIR" ? ok(undefined) : err(ioError("read", file, error));
+    }
+    const artifact = parseStoredArtifact(text);
+    if (!artifact.success) {
+      return err(
+        createError("STORAGE_IO_FAILED", `${artifact.error.message.replace(/\.$/, "")}: \`${file}\`.`, {
+          hint: `Delete \`${file}\`, or run the command again with \`--force\` to transcribe anew.`,
+        }),
+      );
+    }
+    const transcriptId = path.basename(file, ".json");
+    const markdown = path.join(path.dirname(file), markdownFileName(artifact.data, transcriptId));
+    if (repair) {
+      const exists = await stat(markdown).then(
+        () => true,
+        () => false,
+      );
+      if (!exists) {
+        const written = await publish(markdown, renderMarkdown(artifact.data));
+        if (!written.success) return written;
+      }
+    }
+    return ok({
+      transcriptId,
+      sourceKey: artifact.data.source.source_key ?? "",
+      paths: { json: file, markdown },
+      artifact: artifact.data,
+    });
+  };
+
+  /** The newest copy of a transcript: `<id>-<n>` with the highest n, written by `--force`, else `<id>`. */
+  const newestCopy = async (dir: string, transcriptId: string): Promise<string> => {
+    let best = { copy: 1, file: path.join(dir, `${transcriptId}.json`) };
+    for (const name of await listDir(dir)) {
+      const match = /^(.+?)(?:-(\d+))?\.json$/.exec(name);
+      if (match?.[1] !== transcriptId || match[2] === undefined) continue;
+      const copy = Number(match[2]);
+      if (copy > best.copy) best = { copy, file: path.join(dir, name) };
+    }
+    return best.file;
+  };
+
+  /** Merges the source description into source.json atomically (temp file + rename), keeping other fields. */
+  const writeSourceFile = async (dir: string, sourceKey: SourceKey, source: ResolvedSource): Promise<Result<void>> => {
+    const file = path.join(dir, SOURCE_FILE);
+    let existing: Record<string, unknown> = {};
+    try {
+      const parsed: unknown = JSON.parse(await readFile(file, "utf8"));
+      if (isRecord(parsed)) existing = parsed;
+    } catch {
+      // A missing or unreadable source.json is rewritten from the source.
+    }
+    const content = { ...existing, ...describeForLibrary(sourceKey, source), updated_at: now().toISOString() };
+    const temp = `${file}.${process.pid}.${randomUUID()}.tmp`;
+    try {
+      await writeFile(temp, `${JSON.stringify(content, null, 2)}\n`, { encoding: "utf8", mode: 0o600, flag: "wx" });
+      await rename(temp, file);
+      return ok(undefined);
+    } catch (error) {
+      await rm(temp, { force: true }).catch(() => undefined);
+      return err(ioError("write", file, error));
+    }
+  };
+
+  /**
+   * Publishes `content` at `target` only if nothing is there: a complete temp file, hard-linked in place. On a file
+   * system without hard links (exFAT, FAT, some network shares), an exclusive copy keeps the no-overwrite rule.
+   */
+  async function publish(target: string, content: string): Promise<Result<boolean>> {
+    const temp = `${target}.${process.pid}.${randomUUID()}.tmp`;
+    try {
+      await writeFile(temp, content, { encoding: "utf8", mode: 0o600, flag: "wx" });
+      try {
+        await linkFile(temp, target);
+      } catch (error) {
+        if (errnoOf(error) === "EEXIST") return ok(false);
+        await copyFile(temp, target, constants.COPYFILE_EXCL);
+      }
+      return ok(true);
+    } catch (error) {
+      return errnoOf(error) === "EEXIST" ? ok(false) : err(ioError("write", target, error));
+    } finally {
+      await rm(temp, { force: true }).catch(() => undefined);
+    }
+  }
+
+  function listDir(dir: string): Promise<string[]> {
+    return readdir(dir).catch(() => [] as string[]);
+  }
+
+  const filesOf = async (
+    dir: string,
+  ): Promise<Array<{ readonly path: string; readonly bytes: number; readonly mtimeMs: number }>> => {
+    const names = await listDir(dir);
+    const stats = await Promise.all(
+      names.map(async (name) => {
+        const file = path.join(dir, name);
+        const info = await stat(file).catch(() => undefined);
+        return info?.isFile() ? { path: file, bytes: info.size, mtimeMs: info.mtimeMs } : undefined;
+      }),
+    );
+    return stats.filter((entry) => entry !== undefined);
+  };
+
+  const audioFiles = async (): Promise<AudioFile[]> => {
+    const dirs = await listDir(deps.libraryDir);
+    const perDir = await Promise.all(
+      dirs.map(async (name) => {
+        const dir = path.join(deps.libraryDir, name);
+        const files = await filesOf(dir);
+        return files.filter((file) => isAudioName(path.basename(file.path))).map((file) => ({ dir, ...file }));
+      }),
+    );
+    return perDir.flat();
+  };
+
+  /** The oldest audio to drop so the rest fits in `maxBytes`; `keep` is never chosen. */
+  const overflow = (audio: readonly AudioFile[], maxBytes: number, keep?: string): AudioFile[] => {
+    let total = audio.reduce((sum, file) => sum + file.bytes, 0);
+    const dropped: AudioFile[] = [];
+    for (const file of [...audio].sort((left, right) => left.mtimeMs - right.mtimeMs)) {
+      if (total <= maxBytes) break;
+      if (file.path === keep) continue;
+      dropped.push(file);
+      total -= file.bytes;
+    }
+    return dropped;
+  };
+
+  const stamp = (artifact: OutputArtifact, transcriptId: string, sourceKey: SourceKey): OutputArtifact => ({
+    ...artifact,
+    transcript_id: transcriptId,
+    source: { ...artifact.source, source_key: sourceKey },
+  });
+
+  return {
+    prepare: async () => {
+      try {
+        await mkdir(deps.libraryDir, { recursive: true, mode: 0o700 });
+        await access(deps.libraryDir, constants.W_OK);
+        return ok(undefined);
+      } catch (error) {
+        return err(ioError("write", deps.libraryDir, error));
+      }
+    },
+
+    sourceKeyOf: async (source) => {
+      if (isSiteSource(source)) {
+        const { platform, mediaId, canonicalUrl } = source.metadata;
+        // yt-dlp's Generic extractor uses the URL's base name as the id, so `video.php?id=1` and `?id=2` would collide.
+        if (mediaId && platform.toLowerCase() !== "generic") return ok(siteSourceKey(platform, mediaId));
+        return ok(`url:${sha256(keyUrlOf(canonicalUrl ?? source.normalizedUrl))}`);
+      }
+      if (source.kind === "direct_url") return ok(`url:${sha256(keyUrlOf(source.normalizedUrl))}`);
+      try {
+        return ok(`file:${await hashFile(source.absolutePath)}`);
+      } catch (error) {
+        return err(ioError("read", source.absolutePath, error));
+      }
+    },
+
+    find: async (key) => {
+      const dir = dirOf(key.sourceKey);
+      const exact = await readTranscript(await newestCopy(dir, transcriptIdOf(key)), true);
+      if (!exact.success || exact.data || key.language === undefined) return exact;
+      const auto = await readTranscript(await newestCopy(dir, transcriptIdOf({ ...key, language: undefined })), true);
+      if (!auto.success) return auto;
+      return ok(
+        sameLanguage(key.language, auto.data?.artifact.transcription.detected_language) ? auto.data : undefined,
+      );
+    },
+
+    save: async ({ key, source, artifact, fresh = false }) => {
+      const dir = dirOf(key.sourceKey);
+      try {
+        await mkdir(dir, { recursive: true, mode: 0o700 });
+      } catch (error) {
+        return err(ioError("write", dir, error));
+      }
+      const baseId = transcriptIdOf(key);
+      for (let copy = 1; copy <= MAX_FRESH_COPIES; copy += 1) {
+        const transcriptId = copy === 1 ? baseId : `${baseId}-${copy}`;
+        const stamped = stamp(artifact, transcriptId, key.sourceKey);
+        const jsonPath = path.join(dir, `${transcriptId}.json`);
+        const claimed = await publish(jsonPath, renderJson(stamped));
+        if (!claimed.success) return claimed;
+        if (!claimed.data) {
+          if (fresh) continue;
+          const existing = await readTranscript(jsonPath, true);
+          if (!existing.success) return existing;
+          if (existing.data) return ok(existing.data);
+          continue;
+        }
+        // The paid JSON is saved; the Markdown is derived (and repaired on read), and source.json is best-effort,
+        // so neither can lose the transcript.
+        const markdownPath = path.join(dir, markdownFileName(stamped, transcriptId));
+        await publish(markdownPath, renderMarkdown(stamped));
+        await writeSourceFile(dir, key.sourceKey, source);
+        return ok({
+          transcriptId,
+          sourceKey: key.sourceKey,
+          paths: { json: jsonPath, markdown: markdownPath },
+          artifact: stamped,
+        });
+      }
+      return err(ioError("write", path.join(dir, `${baseId}.json`), new Error("too many copies of this transcript")));
+    },
+
+    get: async (transcriptId) => {
+      if (!TRANSCRIPT_ID.test(transcriptId)) return ok(undefined);
+      let dirs: string[];
+      try {
+        dirs = await readdir(deps.libraryDir);
+      } catch (error) {
+        return errnoOf(error) === "ENOENT" ? ok(undefined) : err(ioError("read", deps.libraryDir, error));
+      }
+      for (const dir of dirs) {
+        const found = await readTranscript(path.join(deps.libraryDir, dir, `${transcriptId}.json`), true);
+        if (!found.success || found.data) return found;
+      }
+      return ok(undefined);
+    },
+
+    storedSource: async (sourceKey) => {
+      const dir = dirOf(sourceKey);
+      let saved: unknown;
+      try {
+        saved = JSON.parse(await readFile(path.join(dir, SOURCE_FILE), "utf8"));
+      } catch {
+        return ok(undefined);
+      }
+      const source = isRecord(saved) ? pageSourceOf(saved) : undefined;
+      if (!source) return ok(undefined);
+      const audio = (await listDir(dir)).find(isAudioName);
+      const stored: StoredSource = audio === undefined ? { source } : { source, audioPath: path.join(dir, audio) };
+      return ok(stored);
+    },
+
+    keepAudio: async (sourceKey, filePath, maxAudioBytes) => {
+      const dir = dirOf(sourceKey);
+      const target = path.join(dir, `audio${path.extname(filePath) || ".m4a"}`);
+      try {
+        await mkdir(dir, { recursive: true, mode: 0o700 });
+        for (const name of await listDir(dir)) {
+          if (isAudioName(name) && path.join(dir, name) !== target) await rm(path.join(dir, name), { force: true });
+        }
+        // yt-dlp sets the upload date as mtime; the library ages audio from when it was kept. Stamped before the
+        // move, so another run's eviction never sees the new audio as the oldest.
+        const keptAt = now();
+        await utimes(filePath, keptAt, keptAt);
+        try {
+          await renameFile(filePath, target);
+        } catch (error) {
+          if (errnoOf(error) !== "EXDEV") throw error;
+          // Across file systems: copy next to the target, then rename, so a reader never sees a partial audio file.
+          const temp = `${target}.${randomUUID()}.tmp`;
+          await copyFile(filePath, temp);
+          await utimes(temp, keptAt, keptAt);
+          await renameFile(temp, target);
+          await unlink(filePath);
+        }
+        await chmod(target, 0o600).catch(() => undefined);
+      } catch (error) {
+        return err(ioError("write", target, error));
+      }
+      if (maxAudioBytes !== undefined) {
+        // Best-effort: audio that cannot be deleted stays, and the new audio is kept either way.
+        for (const file of overflow(await audioFiles(), maxAudioBytes, target)) {
+          await rm(file.path, { force: true }).catch(() => undefined);
+        }
+      }
+      return ok(target);
+    },
+
+    prune: async ({ olderThanDays, includeTranscripts, dryRun, maxAudioBytes }) => {
+      const cutoff = olderThanDays === undefined ? undefined : now().getTime() - olderThanDays * DAY_MS;
+      const removedDirs: Array<{ readonly dir: string; readonly bytes: number }> = [];
+      if (includeTranscripts && cutoff !== undefined) {
+        for (const name of await listDir(deps.libraryDir)) {
+          const dir = path.join(deps.libraryDir, name);
+          const files = await filesOf(dir);
+          if (files.length > 0 && files.every((file) => file.mtimeMs < cutoff)) {
+            removedDirs.push({ dir, bytes: files.reduce((sum, file) => sum + file.bytes, 0) });
+          }
+        }
+      }
+      const removed = new Set(removedDirs.map((entry) => entry.dir));
+      const audio = (await audioFiles()).filter((file) => !removed.has(file.dir));
+      const byAge =
+        cutoff !== undefined ? audio.filter((file) => file.mtimeMs < cutoff) : maxAudioBytes === undefined ? audio : [];
+      const aged = new Set(byAge.map((file) => file.path));
+      const bySize =
+        maxAudioBytes === undefined
+          ? []
+          : overflow(
+              audio.filter((file) => !aged.has(file.path)),
+              maxAudioBytes,
+            );
+      const dropped = [...byAge, ...bySize];
+      if (!dryRun) {
+        try {
+          for (const entry of removedDirs) await rm(entry.dir, { recursive: true, force: true });
+          for (const file of dropped) await rm(file.path, { force: true });
+        } catch (error) {
+          return err(ioError("write", deps.libraryDir, error));
+        }
+      }
+      return ok({
+        audioFiles: dropped.length,
+        sourceDirs: removedDirs.length,
+        bytes: [...dropped, ...removedDirs].reduce((sum, entry) => sum + entry.bytes, 0),
+        dryRun,
+      });
+    },
+
+    entries: async () => {
+      let dirs: string[];
+      try {
+        dirs = await readdir(deps.libraryDir);
+      } catch (error) {
+        return errnoOf(error) === "ENOENT" ? ok([]) : err(ioError("read", deps.libraryDir, error));
+      }
+      const files = (
+        await Promise.all(
+          dirs.map(async (dir) => {
+            const names = await readdir(path.join(deps.libraryDir, dir)).catch(() => [] as string[]);
+            return names
+              .filter((name) => name.endsWith(".json") && name !== SOURCE_FILE)
+              .map((name) => path.join(deps.libraryDir, dir, name));
+          }),
+        )
+      ).flat();
+      const stored = await Promise.all(files.map((file) => readTranscript(file)));
+      const entries = stored
+        .map((result) => (result.success ? result.data : undefined))
+        .filter((entry): entry is StoredTranscript => entry !== undefined)
+        .map(toEntry)
+        .sort((left, right) => right.generatedAt.localeCompare(left.generatedAt));
+      return ok(entries);
+    },
+  };
+};
+
+const toEntry = ({ transcriptId, sourceKey, artifact }: StoredTranscript): LibraryEntry => {
+  const { source, transcription } = artifact;
+  const sourceName =
+    source.absolute_path !== undefined
+      ? path.basename(source.absolute_path)
+      : (source.normalized_url ?? source.original_input);
+  return {
+    transcriptId,
+    sourceKey,
+    kind: source.kind,
+    ...(source.title === undefined ? {} : { title: source.title }),
+    ...(source.platform === undefined ? {} : { platform: source.platform }),
+    sourceName,
+    provider: transcription.provider,
+    ...(transcription.model === undefined ? {} : { model: transcription.model }),
+    ...(transcription.requested_language === undefined ? {} : { requestedLanguage: transcription.requested_language }),
+    ...(transcription.detected_language === undefined ? {} : { detectedLanguage: transcription.detected_language }),
+    generatedAt: artifact.generated_at,
+    characters: artifact.transcript.full_text.length,
+  };
+};

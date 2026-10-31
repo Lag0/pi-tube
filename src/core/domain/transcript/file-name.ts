@@ -1,9 +1,10 @@
 import type { OutputArtifact } from "./contract.ts";
 
-/** Longest slug in a transcript file name; long titles used to hit ENAMETOOLONG after a paid transcription. */
+/** Longest slug in a Markdown file name; long titles used to hit ENAMETOOLONG after a paid transcription. */
 export const MAX_SLUG_LENGTH = 80;
 
 const FALLBACK_SLUG = "transcript";
+const SHORT_ID_LENGTH = 8;
 
 const sanitizeLabel = (value: string): string =>
   value
@@ -23,13 +24,11 @@ const stem = (filePath: string): string => {
   return dot > 0 ? base.slice(0, dot) : base;
 };
 
-const extractFilenameLabel = (source: OutputArtifact["source"]): string => {
+const labelOf = (source: OutputArtifact["source"]): string => {
   if (source.title && source.title.trim().length > 0) return source.title.trim();
   if (source.absolute_path && source.absolute_path.trim().length > 0) return stem(source.absolute_path);
-
-  const urlCandidate = source.media_url ?? source.normalized_url ?? source.original_input;
   try {
-    const parsed = new URL(urlCandidate);
+    const parsed = new URL(source.normalized_url ?? source.original_input);
     const base = stem(parsed.pathname);
     return base.length > 0 ? base : parsed.hostname;
   } catch {
@@ -37,15 +36,16 @@ const extractFilenameLabel = (source: OutputArtifact["source"]): string => {
   }
 };
 
-const formatDatePart = (now: Date): string =>
-  `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-
-/** `YYYY-MM-DD-<slug>.<md|json>`, with the slug taken from the title, file name or URL and capped. */
-export const transcriptFileName = (input: {
-  readonly artifact: OutputArtifact;
-  readonly now: Date;
-  readonly format: "markdown" | "json";
-}): string => {
-  const slug = sanitizeLabel(extractFilenameLabel(input.artifact.source)) || FALLBACK_SLUG;
-  return `${formatDatePart(input.now)}-${slug}.${input.format === "json" ? "json" : "md"}`;
+/**
+ * The Markdown file of a library transcript: `<YYYY-MM-DD>-<title slug>-<first 8 of the id>[-<n>].md`, readable in a
+ * file browser. The date is the UTC date of `generated_at`, so the name is derived from the saved JSON alone and is
+ * the same on every machine. `<n>` is the copy number of a `--force` transcript.
+ */
+export const markdownFileName = (artifact: OutputArtifact, transcriptId: string): string => {
+  const date = new Date(artifact.generated_at);
+  const day = Number.isNaN(date.getTime()) ? "0000-00-00" : date.toISOString().slice(0, 10);
+  const slug = sanitizeLabel(labelOf(artifact.source)) || FALLBACK_SLUG;
+  const [hash = "", copy] = transcriptId.split("-");
+  const id = `${hash.slice(0, SHORT_ID_LENGTH)}${copy === undefined ? "" : `-${copy}`}`;
+  return `${day}-${slug}-${id}.md`;
 };

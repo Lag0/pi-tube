@@ -74,6 +74,7 @@ const mergeConfig = (raw: RawConfig, config: PiTubeConfig): RawConfig => {
     ["network", { allow_private_hosts: config.network?.allow_private_hosts }],
     ["cookies", { file: config.cookies?.file }],
     ["local_files", { max_bytes: config.local_files?.max_bytes }],
+    ["library", { keep_audio: config.library?.keep_audio, max_audio_bytes: config.library?.max_audio_bytes }],
   ];
   const sections = Object.fromEntries(
     sourceSections

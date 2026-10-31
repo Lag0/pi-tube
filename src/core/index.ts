@@ -27,6 +27,16 @@ export {
   type DownloadMediaOutput,
 } from "./application/download-media.ts";
 export { createGetMediaInfo, type GetMediaInfoDeps } from "./application/get-media-info.ts";
+export {
+  createGetTranscript,
+  createListTranscripts,
+  createPruneLibrary,
+  createSearchTranscripts,
+  type LibraryDeps,
+  type LibraryPage,
+  MAX_PAGE_LIMIT,
+  type PruneInput,
+} from "./application/library.ts";
 export { ensureNotAborted, type OperationOptions, type ProgressEvent, type UseCase } from "./application/operation.ts";
 export {
   type AccountDeps,
@@ -60,6 +70,17 @@ export {
   type PiTubeError,
   toPiTubeError,
 } from "./domain/errors.ts";
+export { normalizeLanguageTag, sameLanguage } from "./domain/language.ts";
+export {
+  type LibrarySettings,
+  matchesName,
+  type NamedEntry,
+  resolveLibrarySettings,
+  type SourceKey,
+  siteSourceKey,
+  sourceKeyFromInput,
+  type TranscriptKey,
+} from "./domain/library.ts";
 export { describeSource, type MediaInfo } from "./domain/media-info.ts";
 export {
   findProvider,
@@ -95,8 +116,17 @@ export {
 } from "./domain/source-settings.ts";
 export { toSafeLine } from "./domain/text.ts";
 export type { OutputArtifact } from "./domain/transcript/contract.ts";
+export { type JsonOutputArtifact, toJsonOutputArtifact } from "./domain/transcript/render-json.ts";
 export { sourceReferenceOf } from "./domain/transcript/render-markdown.ts";
 export type { ConfigStore } from "./ports/config-store.ts";
+export type {
+  LibraryEntry,
+  LibraryStore,
+  PruneReport,
+  PruneRequest,
+  StoredSource,
+  StoredTranscript,
+} from "./ports/library-store.ts";
 export type {
   DownloadedMedia,
   DownloadRequest,
@@ -104,4 +134,3 @@ export type {
   MediaFetcher,
 } from "./ports/media-fetcher.ts";
 export type { SttCapabilities, SttProvider, SttRequest, SttTranscript } from "./ports/stt-provider.ts";
-export type { SavedTranscript, TranscriptStore } from "./ports/transcript-store.ts";

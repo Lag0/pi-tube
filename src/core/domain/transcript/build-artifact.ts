@@ -298,6 +298,7 @@ export function buildOutputArtifact(
     source: mapSource(result.source),
     transcription: {
       provider: result.provider,
+      ...(result.model === undefined ? {} : { model: result.model }),
       requested_language: result.requestedLanguage,
       detected_language: result.detectedLanguage,
     },

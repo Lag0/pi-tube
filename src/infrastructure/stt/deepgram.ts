@@ -130,6 +130,7 @@ export const createDeepgramProvider = (options: DeepgramProviderOptions = {}): S
 
   return {
     id: "deepgram",
+    model,
     capabilities: CLOUD_STT_CAPABILITIES,
     transcribe: (request, operation) =>
       runProviderCall({

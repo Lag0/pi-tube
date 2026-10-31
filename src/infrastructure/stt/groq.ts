@@ -111,6 +111,7 @@ export const createGroqProvider = (options: GroqProviderOptions = {}): SttProvid
 
   return {
     id: "groq",
+    model,
     capabilities: CLOUD_STT_CAPABILITIES,
     transcribe: (request, operation) =>
       runProviderCall({

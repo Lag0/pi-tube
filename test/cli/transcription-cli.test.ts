@@ -26,7 +26,7 @@ const run = (
   options: { env?: Record<string, string>; stt?: Parameters<typeof fakeProviders>[0] } = {},
 ) =>
   runCliInProcess(["transcribe", ...args], {
-    env: { PI_TUBE_OUTPUT_DIR: outputDir, ...PROVIDER_KEYS, ...options.env },
+    env: { PI_TUBE_LIBRARY_DIR: mkdtempSync(path.join(outputDir, "library-")), ...PROVIDER_KEYS, ...options.env },
     fakes: { stt: fakeProviders(options.stt) },
   });
 
@@ -40,7 +40,7 @@ describe("CLI transcription", () => {
     expect(result.exitCode).toBe(0);
     expect(output).toContain('source_kind: "direct_url"');
     expect(output).toContain('provider: "deepgram"');
-    expect(output).not.toContain("## Transcript");
+    expect(output).toContain("## Transcript");
     expect(output).toContain("### Full Text");
     expect(output).toContain("hello deepgram");
   });
@@ -98,7 +98,7 @@ describe("CLI transcription", () => {
 
   test("fails fast when no provider is configured", async () => {
     const result = await runCliInProcess(["transcribe", mediaUrl], {
-      env: { PI_TUBE_OUTPUT_DIR: outputDir },
+      env: { PI_TUBE_LIBRARY_DIR: mkdtempSync(path.join(outputDir, "library-")) },
       fakes: { stt: fakeProviders() },
     });
 
@@ -127,6 +127,9 @@ describe("CLI transcription", () => {
     expect(Object.keys(payload)).toEqual([
       "output_path",
       "output_uri",
+      "markdown_path",
+      "transcript_id",
+      "cache_hit",
       "format",
       "provider",
       "source",

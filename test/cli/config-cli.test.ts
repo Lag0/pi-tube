@@ -48,6 +48,8 @@ describe("config command", () => {
         "network.allow_private_hosts=(unset)",
         "cookies.file=(unset)",
         "local_files.max_bytes=(unset)",
+        "library.keep_audio=(unset)",
+        "library.max_audio_bytes=(unset)",
         "providers.deepgram.api_key_env=(unset)",
         "providers.groq.api_key_env=(unset)",
         "providers.elevenlabs.api_key_env=(unset)",
@@ -72,6 +74,8 @@ describe("config command", () => {
         "network.allow_private_hosts": null,
         "cookies.file": null,
         "local_files.max_bytes": null,
+        "library.keep_audio": null,
+        "library.max_audio_bytes": null,
         "providers.deepgram.api_key_env": null,
         "providers.groq.api_key_env": "MY_GROQ",
         "providers.elevenlabs.api_key_env": null,
@@ -142,7 +146,12 @@ describe("config command", () => {
 describe("defaults in transcription", () => {
   const transcribe = (env: Record<string, string> = {}) =>
     runCliInProcess(["transcribe", "https://cdn.example.com/audio/demo.wav"], {
-      env: { PI_TUBE_CONFIG_PATH: configPath, PI_TUBE_OUTPUT_DIR: outputDir, ...PROVIDER_KEYS, ...env },
+      env: {
+        PI_TUBE_CONFIG_PATH: configPath,
+        PI_TUBE_LIBRARY_DIR: mkdtempSync(path.join(outputDir, "library-")),
+        ...PROVIDER_KEYS,
+        ...env,
+      },
       fakes: { stt: fakeProviders({ groq: transcript("config provider", "pt") }) },
     });
 

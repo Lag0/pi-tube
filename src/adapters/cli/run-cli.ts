@@ -5,6 +5,7 @@ import { runAuth, runProviders } from "./commands/account.ts";
 import { runConfig, runDefaults } from "./commands/config.ts";
 import { runDownload } from "./commands/download.ts";
 import { runInfo } from "./commands/info.ts";
+import { runLibrary } from "./commands/library.ts";
 import { runTranscribe } from "./commands/transcribe.ts";
 import { CliFailure, exitCodeFor, formatErrorForCli } from "./error-output.ts";
 import { type HelpDocument, renderHelpDocument } from "./help-renderer.ts";
@@ -25,6 +26,7 @@ type CliAction =
     }
   | { kind: "download"; input?: string; extraPositionals: string[]; options: DownloadOptions; rootOptions: RootOptions }
   | { kind: "info"; input?: string; extraPositionals: string[]; options: JsonCommandOptions; rootOptions: RootOptions }
+  | { kind: "library"; action?: string; args: string[]; options: LibraryOptions }
   | { kind: "providers"; options: JsonCommandOptions }
   | { kind: "auth"; action?: string; provider?: string; options: AuthOptions; rootOptions: RootOptions }
   | { kind: "defaults"; action?: string; value?: string; rootOptions: RootOptions }
@@ -44,11 +46,20 @@ interface TranscribeOptions extends JsonCommandOptions {
   provider?: string;
   language?: string;
   timestamps?: boolean;
+  force?: boolean;
 }
 
 interface DownloadOptions extends JsonCommandOptions {
   audio?: boolean;
   output?: string;
+}
+
+interface LibraryOptions extends JsonCommandOptions {
+  limit?: string;
+  offset?: string;
+  olderThan?: string;
+  includeTranscripts?: boolean;
+  yes?: boolean;
 }
 
 interface AuthOptions extends JsonCommandOptions {
@@ -159,7 +170,8 @@ function createProgram(setAction: (action: CliAction) => void): Command {
     .argument("[extraPositionals...]", "extra inputs")
     .option("--provider <provider>", "Select transcription provider (deepgram or groq).")
     .option("--language <code>", "Optional language preference.")
-    .option("--timestamps", "Include timestamp blocks in transcript output.")
+    .option("--timestamps", "Accepted for compatibility; transcripts always keep their timestamps.")
+    .option("--force", "Transcribe again even when the library already has this transcript.")
     .option("--json", "Print the result as JSON on stdout and save the transcript as JSON.")
     .action((input: string | undefined, extraPositionals: string[], options: TranscribeOptions) => {
       setAction({ kind: "transcribe", input, extraPositionals, options, rootOptions: program.opts<RootOptions>() });
@@ -185,6 +197,21 @@ function createProgram(setAction: (action: CliAction) => void): Command {
     .option("--json", "Print the result as JSON on stdout.")
     .action((input: string | undefined, extraPositionals: string[], options: DownloadOptions) => {
       setAction({ kind: "download", input, extraPositionals, options, rootOptions: program.opts<RootOptions>() });
+    });
+
+  program
+    .command("library")
+    .description("List, show, search and prune the transcripts in the local library.")
+    .argument("[action]", "list, show, search or prune")
+    .argument("[args...]", "a transcript id, or search terms")
+    .option("--limit <n>", "How many entries to print (default 20, at most 500).")
+    .option("--offset <n>", "How many entries to skip (default 0).")
+    .option("--older-than <days>", "prune: only audio, or sources, older than this many days.")
+    .option("--include-transcripts", "prune: delete whole sources, transcripts included (needs --older-than).")
+    .option("--yes", "prune: delete; without it, prune only reports.")
+    .option("--json", "Print the result as JSON on stdout.")
+    .action((action: string | undefined, args: string[], options: LibraryOptions) => {
+      setAction({ kind: "library", action, args, options });
     });
 
   program
@@ -307,7 +334,7 @@ export const runCli = async (argv: readonly string[], deps: CliDeps): Promise<nu
           extraPositionals: action.extraPositionals,
           provider: action.options.provider,
           language: action.options.language,
-          timestamps: Boolean(action.options.timestamps),
+          force: Boolean(action.options.force),
           json: Boolean(action.options.json),
           color: action.rootOptions.color !== false,
         });
@@ -326,6 +353,17 @@ export const runCli = async (argv: readonly string[], deps: CliDeps): Promise<nu
           extraPositionals: action.extraPositionals,
           json: Boolean(action.options.json),
           color: action.rootOptions.color !== false,
+        });
+      case "library":
+        return await runLibrary(deps, {
+          action: action.action,
+          args: action.args,
+          limit: action.options.limit,
+          offset: action.options.offset,
+          olderThan: action.options.olderThan,
+          includeTranscripts: Boolean(action.options.includeTranscripts),
+          yes: Boolean(action.options.yes),
+          json: Boolean(action.options.json),
         });
       case "providers":
         return await runProviders(deps, { json: Boolean(action.options.json) });

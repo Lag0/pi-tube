@@ -102,6 +102,8 @@ describe("config keys", () => {
       "network.allow_private_hosts",
       "cookies.file",
       "local_files.max_bytes",
+      "library.keep_audio",
+      "library.max_audio_bytes",
       "providers.deepgram.api_key_env",
       "providers.groq.api_key_env",
       "providers.elevenlabs.api_key_env",
@@ -163,6 +165,20 @@ describe("config keys", () => {
     if (result.success) return;
     expect(result.error.code).toBe("INPUT_INVALID");
     expect(result.error.message).toBe("`local_files.max_bytes` must be a whole number of bytes from 1 to 2147483647.");
+  });
+
+  test.each(["0", "1.5", "-1", "x"])("library.max_audio_bytes refuses %s", (value) => {
+    const result = applyConfigValue(DEFAULT_CONFIG, "library.max_audio_bytes", value, PROVIDER_DESCRIPTORS);
+
+    expect(result.success ? undefined : result.error.code).toBe("INPUT_INVALID");
+  });
+
+  test("library.keep_audio and library.max_audio_bytes store a boolean and a number", () => {
+    const keep = applyConfigValue(DEFAULT_CONFIG, "library.keep_audio", "false", PROVIDER_DESCRIPTORS);
+    const max = applyConfigValue(DEFAULT_CONFIG, "library.max_audio_bytes", "5000000000", PROVIDER_DESCRIPTORS);
+
+    expect(keep.success ? keep.data.library : undefined).toEqual({ keep_audio: false });
+    expect(max.success ? max.data.library : undefined).toEqual({ max_audio_bytes: 5_000_000_000 });
   });
 
   test("local_files.max_bytes stores a number", () => {

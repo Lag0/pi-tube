@@ -1,7 +1,10 @@
 import type { ProviderId } from "../providers.ts";
 import type { LiveStatus, SourceKind, SourceTier } from "../source.ts";
 
-export const OUTPUT_SCHEMA_VERSION = "1.2.0" as const;
+export const OUTPUT_SCHEMA_VERSION = "1.3.0" as const;
+
+/** Schema versions a stored transcript may carry: any 1.x; 1.2.0 lacks the library fields. */
+export type OutputSchemaVersion = `1.${number}.${number}`;
 
 export interface OutputArtifactChapter {
   title: string;
@@ -11,6 +14,7 @@ export interface OutputArtifactChapter {
 
 export interface OutputArtifactSource {
   kind: SourceKind;
+  source_key?: string;
   tier: SourceTier;
   platform?: string;
   media_id?: string;
@@ -31,6 +35,7 @@ export interface OutputArtifactSource {
 
 export interface OutputArtifactTranscription {
   provider: ProviderId;
+  model?: string;
   requested_language?: string;
   detected_language?: string;
 }
@@ -54,8 +59,9 @@ export interface OutputArtifactTranscript {
 }
 
 export interface OutputArtifact {
-  schema_version: typeof OUTPUT_SCHEMA_VERSION;
+  schema_version: OutputSchemaVersion;
   generated_at: string;
+  transcript_id?: string;
   source: OutputArtifactSource;
   transcription: OutputArtifactTranscription;
   summary: OutputArtifactSummary;
