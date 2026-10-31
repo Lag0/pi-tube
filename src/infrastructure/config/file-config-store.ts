@@ -5,6 +5,7 @@ import { DEFAULT_CONFIG, type PiTubeConfig, parseConfig } from "../../core/domai
 import { createError } from "../../core/domain/errors.ts";
 import { err, ok, type Result } from "../../core/domain/result.ts";
 import type { ConfigStore } from "../../core/ports/config-store.ts";
+import { errnoOf } from "../errno.ts";
 
 type RawConfig = Readonly<Record<string, unknown>>;
 
@@ -15,9 +16,6 @@ interface LoadedConfig {
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
-
-const errnoOf = (error: unknown): string =>
-  error instanceof Error && "code" in error && typeof error.code === "string" ? error.code : "unknown error";
 
 const ioFailed = (action: "read" | "write", location: string, error: unknown): Result<never> =>
   err(createError("CONFIG_IO_FAILED", `Cannot ${action} config file ${location} (${errnoOf(error)}).`));

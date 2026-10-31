@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
+import { CliFailure } from "../../../src/adapters/cli/error-output.ts";
 import { createError, ERROR_CATALOG, getErrorCategory, toPiTubeError } from "../../../src/core/domain/errors.ts";
-import { CliError } from "../../../src/errors/cli-errors.ts";
 
 describe("createError", () => {
   test("uses the catalog hint by default", () => {
@@ -23,10 +23,10 @@ describe("getErrorCategory", () => {
 });
 
 describe("toPiTubeError", () => {
-  test("converts a legacy CliError, joining its guidance into one hint", () => {
-    const legacy = new CliError("m", { code: "INPUT_INVALID", guidance: ["a", "a", " b "] });
+  test("keeps the code and hint of an Error that carries them, such as the CLI adapter's CliFailure", () => {
+    const failure = new CliFailure(createError("INPUT_INVALID", "m", { hint: "a b" }));
 
-    expect(toPiTubeError(legacy)).toEqual({ code: "INPUT_INVALID", message: "m", hint: "a b" });
+    expect(toPiTubeError(failure)).toEqual({ code: "INPUT_INVALID", message: "m", hint: "a b" });
   });
 
   test("maps an unknown Error to UNEXPECTED keeping its message", () => {

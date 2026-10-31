@@ -24,4 +24,9 @@ export interface CliDeps {
   readonly app: App;
   readonly io: CliIo;
   readonly system: CliSystem;
+  /**
+   * Starts listening for Ctrl-C, SIGTERM and SIGHUP and returns the signal they abort; wired by `main`. Only
+   * commands that honour the signal call it, so every other command keeps the default signal behavior.
+   */
+  readonly listenForCancel?: () => AbortSignal;
 }

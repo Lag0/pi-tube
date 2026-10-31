@@ -36,6 +36,10 @@ export const ERROR_CATALOG = {
     category: "cancelled",
     hint: "Run the command again to retry.",
   },
+  STORAGE_IO_FAILED: {
+    category: "config",
+    hint: "Check that your user can write to the output directory, or pass --output with another directory.",
+  },
   SETUP_COMMAND_FAILED: {
     category: "dependency",
     hint: "Check the command output above and run it manually.",
@@ -79,10 +83,6 @@ export const ERROR_CATALOG = {
   YOUTUBE_EXTRACT_FAILED: {
     category: "source",
     hint: "Check that the video is public and opens in a browser, then retry.",
-  },
-  INSTAGRAM_URL_INVALID: {
-    category: "source",
-    hint: "Use a public Instagram post, reel or video URL.",
   },
   INSTAGRAM_AUTH_REQUIRED: {
     category: "source",
@@ -138,7 +138,7 @@ export const isErrorCode = (value: unknown): value is ErrorCode =>
 
 /**
  * Normalizes anything thrown into a `PiTubeError`. An `Error` carrying a known `code` and a string
- * `hint` (such as the legacy `CliError`) keeps both; anything else becomes `UNEXPECTED`, without a stack.
+ * `hint` (such as the CLI adapter's `CliFailure`) keeps both; anything else becomes `UNEXPECTED`, without a stack.
  */
 export const toPiTubeError = (error: unknown): PiTubeError => {
   if (error instanceof Error) {

@@ -2,7 +2,9 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, describe, expect, test } from "vitest";
-import { spawnCli } from "../helpers/spawn-cli.ts";
+import type { ProcessResult } from "../../src/infrastructure/process/run-process.ts";
+import { runCliInProcess } from "../helpers/cli-harness.ts";
+import { fakeProviders, fakeYtDlp, PROVIDER_KEYS } from "../helpers/transcribe-fakes.ts";
 import { readOutputFileFromStdout } from "./output-file.ts";
 
 const outputDir = mkdtempSync(path.join(os.tmpdir(), "pi-tube-cli-intake-output-"));
@@ -11,118 +13,106 @@ afterAll(() => {
   rmSync(outputDir, { recursive: true, force: true });
 });
 
-function runCli(args: string[], env: Record<string, string> = {}) {
-  const defaultEnv = {
-    PI_TUBE_TEST_DEEPGRAM_RESPONSE: JSON.stringify({
-      results: {
-        channels: [{ detected_language: "en", alternatives: [{ transcript: "test transcript" }] }],
-      },
-    }),
-  };
-
-  return spawnCli(args, { ...defaultEnv, PI_TUBE_OUTPUT_DIR: outputDir, ...env });
-}
+// The real media fetcher runs; only the yt-dlp process is faked.
+const run = (
+  input: string,
+  ytDlp: { metadata?: Record<string, unknown>; metadataFailure?: Partial<ProcessResult> } = {},
+) =>
+  runCliInProcess(["transcribe", input], {
+    env: { PI_TUBE_OUTPUT_DIR: outputDir, ...PROVIDER_KEYS },
+    fakes: { stt: fakeProviders(), runProcess: fakeYtDlp(ytDlp) },
+  });
 
 describe("CLI intake integration", () => {
-  test("resolves YouTube URL through baseline intake path", () => {
-    const result = runCli(["transcribe", "https://www.youtube.com/watch?v=abc123"], {
-      PI_TUBE_TEST_YTDLP_JSON: JSON.stringify({
-        url: "https://cdn.example.com/youtube/video.mp4",
-        title: "YouTube Mock",
-      }),
+  test("resolves a YouTube URL and saves the page URL, not the media URL", async () => {
+    const result = await run("https://www.youtube.com/watch?v=abc123", {
+      metadata: { url: "https://cdn.example.com/youtube/video.mp4", title: "YouTube Mock" },
     });
-
-    const stdout = readOutputFileFromStdout(result.stdout.toString());
+    const output = readOutputFileFromStdout(result.stdout);
 
     expect(result.exitCode).toBe(0);
-    expect(stdout).toContain('source_kind: "youtube"');
-    expect(stdout).toContain('source_reference: "https://cdn.example.com/youtube/video.mp4"');
+    expect(output).toContain('source_kind: "youtube"');
+    expect(output).toContain('source_reference: "https://www.youtube.com/watch?v=abc123"');
+    expect(output).not.toContain("cdn.example.com");
   });
 
-  test("maps missing yt-dlp dependency to deterministic code", () => {
-    const result = runCli(["transcribe", "https://www.youtube.com/watch?v=abc123"], {
-      PI_TUBE_TEST_YTDLP_ERROR: "not_found",
+  test("maps a missing yt-dlp to YTDLP_NOT_FOUND", async () => {
+    const result = await run("https://www.youtube.com/watch?v=abc123", {
+      metadataFailure: { outcome: "not_found", exitCode: null },
     });
-    const stderr = result.stderr.toString();
 
     expect(result.exitCode).toBe(3);
-    expect(stderr).toContain("[YTDLP_NOT_FOUND]");
+    expect(result.stderr).toContain("[YTDLP_NOT_FOUND]");
   });
 
-  test("maps YouTube extraction failures to deterministic code", () => {
-    const result = runCli(["transcribe", "https://www.youtube.com/watch?v=abc123"], {
-      PI_TUBE_TEST_YTDLP_ERROR: "extract_failed",
+  test("maps YouTube extraction failures to YOUTUBE_EXTRACT_FAILED", async () => {
+    const result = await run("https://www.youtube.com/watch?v=abc123", {
+      metadataFailure: { stderr: "ERROR: Video unavailable" },
     });
-    const stderr = result.stderr.toString();
 
     expect(result.exitCode).toBe(5);
-    expect(stderr).toContain("[YOUTUBE_EXTRACT_FAILED]");
+    expect(result.stderr).toContain("[YOUTUBE_EXTRACT_FAILED]");
   });
 
-  test("resolves direct media URL through baseline intake path", () => {
-    const result = runCli(["transcribe", "https://cdn.example.com/audio/demo.wav"]);
-    const stdout = readOutputFileFromStdout(result.stdout.toString());
+  test("resolves a direct media URL", async () => {
+    const result = await run("https://cdn.example.com/audio/demo.wav");
+    const output = readOutputFileFromStdout(result.stdout);
 
     expect(result.exitCode).toBe(0);
-    expect(stdout).toContain('source_kind: "direct_url"');
-    expect(stdout).toContain('source_reference: "https://cdn.example.com/audio/demo.wav"');
+    expect(output).toContain('source_kind: "direct_url"');
+    expect(output).toContain('source_reference: "https://cdn.example.com/audio/demo.wav"');
   });
 
-  test("resolves Instagram public URL through baseline intake path", () => {
-    const result = runCli(["transcribe", "https://www.instagram.com/reel/abc123"], {
-      PI_TUBE_TEST_INSTAGRAM_YTDLP_JSON: JSON.stringify({
-        url: "https://cdn.example.com/instagram/reel.mp4",
-        title: "Instagram Mock",
-      }),
+  test("resolves a public Instagram URL and saves the page URL", async () => {
+    const result = await run("https://www.instagram.com/reel/abc123", {
+      metadata: { url: "https://cdn.example.com/instagram/reel.mp4", title: "Instagram Mock" },
     });
-    const stdout = readOutputFileFromStdout(result.stdout.toString());
+    const output = readOutputFileFromStdout(result.stdout);
 
     expect(result.exitCode).toBe(0);
-    expect(stdout).toContain('source_kind: "instagram"');
-    expect(stdout).toContain('source_reference: "https://cdn.example.com/instagram/reel.mp4"');
+    expect(output).toContain('source_kind: "instagram"');
+    expect(output).toContain('source_reference: "https://www.instagram.com/reel/abc123"');
+    expect(output).not.toContain("cdn.example.com");
   });
 
-  test("fails unsupported non-direct URL with deterministic code", () => {
-    const result = runCli(["transcribe", "https://example.com/blog-post"]);
-    const stderr = result.stderr.toString();
+  test("fails an unsupported non-direct URL", async () => {
+    const result = await run("https://example.com/blog-post");
 
     expect(result.exitCode).toBe(5);
-    expect(stderr).toContain("[UNSUPPORTED_URL_NOT_DIRECT_MEDIA]");
+    expect(result.stderr).toContain("[UNSUPPORTED_URL_NOT_DIRECT_MEDIA]");
   });
 
-  test("fails auth-required Instagram URL with deterministic code and guidance", () => {
-    const result = runCli(["transcribe", "https://www.instagram.com/reel/private123"], {
-      PI_TUBE_TEST_INSTAGRAM_YTDLP_ERROR: "auth_required",
+  test("fails an auth-required Instagram URL with guidance", async () => {
+    const result = await run("https://www.instagram.com/reel/private123", {
+      metadataFailure: { stderr: "ERROR: login required" },
     });
-    const stderr = result.stderr.toString();
 
     expect(result.exitCode).toBe(5);
-    expect(stderr).toContain("[INSTAGRAM_AUTH_REQUIRED]");
-    expect(stderr).toContain("supports Instagram public URLs only");
+    expect(result.stderr).toContain("[INSTAGRAM_AUTH_REQUIRED]");
+    expect(result.stderr).toContain("supports public Instagram URLs only");
   });
 
-  test("maps Instagram extraction failures to deterministic code", () => {
-    const result = runCli(["transcribe", "https://www.instagram.com/reel/abc123"], {
-      PI_TUBE_TEST_INSTAGRAM_YTDLP_ERROR: "extract_failed",
+  test("maps Instagram extraction failures to INSTAGRAM_EXTRACT_FAILED", async () => {
+    const result = await run("https://www.instagram.com/reel/abc123", {
+      metadataFailure: { stderr: "ERROR: something broke" },
     });
-    const stderr = result.stderr.toString();
 
     expect(result.exitCode).toBe(5);
-    expect(stderr).toContain("[INSTAGRAM_EXTRACT_FAILED]");
+    expect(result.stderr).toContain("[INSTAGRAM_EXTRACT_FAILED]");
   });
 
-  test("resolves local file path through baseline intake path", () => {
+  test("resolves a local file path", async () => {
     const tempDir = mkdtempSync(path.join(os.tmpdir(), "pi-tube-cli-intake-"));
     const filePath = path.join(tempDir, "clip.m4a");
 
     try {
       writeFileSync(filePath, "audio-data");
-      const result = runCli(["transcribe", filePath]);
-      const stdout = readOutputFileFromStdout(result.stdout.toString());
+      const result = await run(filePath);
+      const output = readOutputFileFromStdout(result.stdout);
 
       expect(result.exitCode).toBe(0);
-      expect(stdout).toContain('source_kind: "local_file"');
-      expect(stdout).toContain(`source_reference: ${JSON.stringify(filePath)}`);
+      expect(output).toContain('source_kind: "local_file"');
+      expect(output).toContain(`source_reference: ${JSON.stringify(filePath)}`);
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
     }

@@ -110,7 +110,7 @@ const TRANSCRIBE_HELP_DOCUMENT: HelpDocument = {
     { term: "--provider <deepgram|groq|elevenlabs>", description: "Select transcription provider." },
     { term: "--language <code>", description: "Optional language preference." },
     { term: "--timestamps", description: "Include timestamp blocks in transcript output." },
-    { term: "--json", description: "Output deterministic JSON format." },
+    { term: "--json", description: "Print the result as JSON on stdout and save the transcript as JSON." },
   ],
   examples: [
     `${COMMAND_IDENTITY} transcribe "https://youtube.com/watch?v=dQw4w9WgXcQ"`,
@@ -126,7 +126,8 @@ const DOWNLOAD_HELP_DOCUMENT: HelpDocument = {
   usage: [`${COMMAND_IDENTITY} download <url> [--audio] [--output <dir>]`],
   options: [
     { term: "--audio", description: "Download audio only instead of video." },
-    { term: "--output <dir>", description: "Output directory (default: ./downloads)." },
+    { term: "--output <dir>", description: "Output directory (default: ~/.pi-tube/downloads)." },
+    { term: "--json", description: "Print the result as JSON on stdout." },
   ],
   examples: [
     `${COMMAND_IDENTITY} download "https://youtube.com/watch?v=dQw4w9WgXcQ"`,

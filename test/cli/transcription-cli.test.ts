@@ -1,176 +1,164 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterAll, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { createError } from "../../src/core/domain/errors.ts";
+import { runCliInProcess } from "../helpers/cli-harness.ts";
+import { createFakeSttProvider } from "../helpers/fake-stt.ts";
 import { spawnCli } from "../helpers/spawn-cli.ts";
+import { fakeProviders, PROVIDER_KEYS, transcript } from "../helpers/transcribe-fakes.ts";
 import { readOutputFileFromStdout } from "./output-file.ts";
-
-const outputDir = mkdtempSync(path.join(os.tmpdir(), "pi-tube-cli-transcription-"));
-const configDir = mkdtempSync(path.join(os.tmpdir(), "pi-tube-cli-transcription-config-"));
-const configPath = path.join(configDir, "config.json");
-
-afterAll(() => {
-  rmSync(outputDir, { recursive: true, force: true });
-  rmSync(configDir, { recursive: true, force: true });
-});
-
-function runCli(args: string[], env: Record<string, string> = {}) {
-  return spawnCli(args, {
-    PI_TUBE_OUTPUT_DIR: outputDir,
-    PI_TUBE_CONFIG_PATH: configPath,
-    DEEPGRAM_API_KEY: "",
-    GROQ_API_KEY: "",
-    ELEVENLABS_API_KEY: "",
-    ELEVEN_API_KEY: "",
-    ...env,
-  });
-}
 
 const mediaUrl = "https://cdn.example.com/audio/demo.wav";
 
-describe("CLI transcription integration", () => {
-  test("executes deepgram provider and renders deterministic markdown output", () => {
-    const result = runCli(["transcribe", mediaUrl, "--provider", "deepgram"], {
-      PI_TUBE_TEST_DEEPGRAM_RESPONSE: JSON.stringify({
-        results: {
-          channels: [
-            {
-              detected_language: "en",
-              alternatives: [{ transcript: "hello deepgram" }],
-            },
-          ],
-        },
-      }),
-    });
+let outputDir: string;
 
-    const stdout = readOutputFileFromStdout(result.stdout.toString());
-    expect(result.exitCode).toBe(0);
-    expect(stdout).toContain('source_kind: "direct_url"');
-    expect(stdout).toContain('provider: "deepgram"');
-    expect(stdout).not.toContain("## Transcript");
-    expect(stdout).toContain("### Full Text");
-    expect(stdout).toContain("hello deepgram");
+beforeEach(() => {
+  outputDir = mkdtempSync(path.join(os.tmpdir(), "pi-tube-cli-transcription-"));
+});
+
+afterEach(() => {
+  rmSync(outputDir, { recursive: true, force: true });
+});
+
+const run = (
+  args: string[],
+  options: { env?: Record<string, string>; stt?: Parameters<typeof fakeProviders>[0] } = {},
+) =>
+  runCliInProcess(["transcribe", ...args], {
+    env: { PI_TUBE_OUTPUT_DIR: outputDir, ...PROVIDER_KEYS, ...options.env },
+    fakes: { stt: fakeProviders(options.stt) },
   });
 
-  test("supports groq provider switching and language preference", () => {
-    const result = runCli(["transcribe", mediaUrl, "--provider", "groq", "--language", "pt-BR"], {
-      PI_TUBE_TEST_GROQ_RESPONSE: JSON.stringify({ text: "ola groq", language: "pt" }),
+describe("CLI transcription", () => {
+  test("executes deepgram and renders deterministic markdown output", async () => {
+    const result = await run([mediaUrl, "--provider", "deepgram"], {
+      stt: { deepgram: transcript("hello deepgram", "en") },
     });
 
-    const stdout = readOutputFileFromStdout(result.stdout.toString());
+    const output = readOutputFileFromStdout(result.stdout);
     expect(result.exitCode).toBe(0);
-    expect(stdout).toContain('provider: "groq"');
-    expect(stdout).toContain('requested_language: "pt-br"');
-    expect(stdout).toContain('detected_language: "pt"');
+    expect(output).toContain('source_kind: "direct_url"');
+    expect(output).toContain('provider: "deepgram"');
+    expect(output).not.toContain("## Transcript");
+    expect(output).toContain("### Full Text");
+    expect(output).toContain("hello deepgram");
   });
 
-  test("supports elevenlabs provider switching and language preference", () => {
-    const result = runCli(["transcribe", mediaUrl, "--provider", "elevenlabs", "--language", "es"], {
-      PI_TUBE_TEST_ELEVENLABS_RESPONSE: JSON.stringify({ text: "hola elevenlabs", language_code: "es" }),
+  test("supports groq with a language preference", async () => {
+    const result = await run([mediaUrl, "--provider", "groq", "--language", "pt-BR"], {
+      stt: { groq: transcript("ola groq", "pt") },
     });
 
-    const stdout = readOutputFileFromStdout(result.stdout.toString());
+    const output = readOutputFileFromStdout(result.stdout);
     expect(result.exitCode).toBe(0);
-    expect(stdout).toContain('provider: "elevenlabs"');
-    expect(stdout).toContain('requested_language: "es"');
-    expect(stdout).toContain('detected_language: "es"');
-    expect(stdout).toContain("hola elevenlabs");
+    expect(output).toContain('provider: "groq"');
+    expect(output).toContain('requested_language: "pt-br"');
+    expect(output).toContain('detected_language: "pt"');
   });
 
-  test("uses env provider fallback when --provider is omitted", () => {
-    const result = runCli(["transcribe", mediaUrl], {
-      PI_TUBE_TRANSCRIPTION_PROVIDER: "groq",
-      PI_TUBE_TEST_GROQ_RESPONSE: JSON.stringify({ text: "env groq", language: "es" }),
+  test("supports elevenlabs with a language preference", async () => {
+    const result = await run([mediaUrl, "--provider", "elevenlabs", "--language", "es"], {
+      stt: { elevenlabs: transcript("hola elevenlabs", "es") },
     });
 
-    const stdout = readOutputFileFromStdout(result.stdout.toString());
+    const output = readOutputFileFromStdout(result.stdout);
     expect(result.exitCode).toBe(0);
-    expect(stdout).toContain('provider: "groq"');
-    expect(stdout).toContain("env groq");
+    expect(output).toContain('provider: "elevenlabs"');
+    expect(output).toContain('requested_language: "es"');
+    expect(output).toContain("hola elevenlabs");
   });
 
-  test("prioritizes --provider over env provider fallback", () => {
-    const result = runCli(["transcribe", mediaUrl, "--provider", "deepgram"], {
-      PI_TUBE_TRANSCRIPTION_PROVIDER: "groq",
-      PI_TUBE_TEST_DEEPGRAM_RESPONSE: JSON.stringify({
-        results: { channels: [{ alternatives: [{ transcript: "cli wins" }] }] },
-      }),
-      PI_TUBE_TEST_GROQ_RESPONSE: JSON.stringify({ text: "env loses", language: "en" }),
+  test("uses PI_TUBE_TRANSCRIPTION_PROVIDER when --provider is omitted", async () => {
+    const result = await run([mediaUrl], { env: { PI_TUBE_TRANSCRIPTION_PROVIDER: "groq" } });
+
+    expect(readOutputFileFromStdout(result.stdout)).toContain('provider: "groq"');
+  });
+
+  test("--provider wins over PI_TUBE_TRANSCRIPTION_PROVIDER", async () => {
+    const result = await run([mediaUrl, "--provider", "deepgram"], { env: { PI_TUBE_TRANSCRIPTION_PROVIDER: "groq" } });
+
+    expect(readOutputFileFromStdout(result.stdout)).toContain('provider: "deepgram"');
+  });
+
+  test.each([
+    ["PROVIDER_AUTH", 4],
+    ["PROVIDER_RATE_LIMIT", 4],
+    ["PROVIDER_FAILED", 4],
+    ["PROVIDER_UNAVAILABLE", 4],
+    ["PROVIDER_INVALID_RESPONSE", 4],
+  ] as const)("a provider %s exits %i", async (code, exitCode) => {
+    const result = await run([mediaUrl, "--provider", "groq"], {
+      stt: { groq: createError(code, "Upstream said no.") },
     });
 
-    const stdout = readOutputFileFromStdout(result.stdout.toString());
-    expect(result.exitCode).toBe(0);
-    expect(stdout).toContain('provider: "deepgram"');
-    expect(stdout).toContain("cli wins");
+    expect(result.exitCode).toBe(exitCode);
+    expect(result.stderr).toContain(`[${code}]`);
   });
 
-  test("maps provider auth failure to stable code with non-zero exit", () => {
-    const result = runCli(["transcribe", mediaUrl, "--provider", "deepgram"], {
-      PI_TUBE_TEST_DEEPGRAM_ERROR: "auth",
+  test("fails fast when no provider is configured", async () => {
+    const result = await runCliInProcess(["transcribe", mediaUrl], {
+      env: { PI_TUBE_OUTPUT_DIR: outputDir },
+      fakes: { stt: fakeProviders() },
     });
 
     expect(result.exitCode).toBe(4);
-    expect(result.stderr.toString()).toContain("[PROVIDER_AUTH]");
+    expect(result.stderr).toContain("[PROVIDER_NOT_CONFIGURED]");
+    expect(result.stderr).toContain("auth login");
   });
 
-  test("maps provider rate-limit failure to stable code with non-zero exit", () => {
-    const result = runCli(["transcribe", mediaUrl, "--provider", "groq"], {
-      PI_TUBE_TEST_GROQ_ERROR: "rate_limit",
+  test("never falls back: an unavailable provider fails and names the other configured ones", async () => {
+    const groq = createFakeSttProvider("groq");
+    const result = await run([mediaUrl, "--provider", "deepgram"], {
+      stt: { deepgram: createError("PROVIDER_UNAVAILABLE", "Down."), groq },
     });
 
     expect(result.exitCode).toBe(4);
-    expect(result.stderr.toString()).toContain("[PROVIDER_RATE_LIMIT]");
+    expect(result.stderr).toContain("[PROVIDER_UNAVAILABLE]");
+    expect(result.stderr).toMatch(/hint: .*groq/);
+    expect(groq.requests).toHaveLength(0);
   });
 
-  test("maps generic provider failure to stable code with non-zero exit", () => {
-    const result = runCli(["transcribe", mediaUrl, "--provider", "deepgram"], {
-      PI_TUBE_TEST_DEEPGRAM_ERROR: "failed",
-    });
+  test("--json prints one JSON result object on stdout and saves the JSON file", async () => {
+    const result = await run([mediaUrl, "--json"], { stt: { deepgram: transcript("json response", "en") } });
+    const payload = JSON.parse(result.stdout) as Record<string, unknown>;
 
-    expect(result.exitCode).toBe(4);
-    expect(result.stderr.toString()).toContain("[PROVIDER_FAILED]");
-  });
-
-  test("maps provider unavailable failure to stable code with non-zero exit", () => {
-    const result = runCli(["transcribe", mediaUrl, "--provider", "groq"], {
-      PI_TUBE_TEST_GROQ_ERROR: "unavailable",
-    });
-
-    expect(result.exitCode).toBe(4);
-    expect(result.stderr.toString()).toContain("[PROVIDER_UNAVAILABLE]");
-  });
-
-  test("maps provider invalid response to stable code with non-zero exit", () => {
-    const result = runCli(["transcribe", mediaUrl, "--provider", "groq"], {
-      PI_TUBE_TEST_GROQ_RESPONSE: JSON.stringify({ text: "" }),
-    });
-
-    expect(result.exitCode).toBe(4);
-    expect(result.stderr.toString()).toContain("[PROVIDER_INVALID_RESPONSE]");
-  });
-
-  test("fails fast when no provider credentials are configured", () => {
-    const result = runCli(["transcribe", mediaUrl], {
-      DEEPGRAM_API_KEY: "",
-      GROQ_API_KEY: "",
-      ELEVENLABS_API_KEY: "",
-      ELEVEN_API_KEY: "",
-    });
-
-    expect(result.exitCode).toBe(4);
-    expect(result.stderr.toString()).toContain("[PROVIDER_NOT_CONFIGURED]");
-    expect(result.stderr.toString()).toContain("auth status");
-  });
-
-  test("falls back to alternate provider when primary fails", () => {
-    const result = runCli(["transcribe", mediaUrl, "--provider", "deepgram"], {
-      PI_TUBE_TEST_DEEPGRAM_ERROR: "failed",
-      PI_TUBE_TEST_GROQ_RESPONSE: JSON.stringify({ text: "fallback groq", language: "en" }),
-    });
-
-    const stdout = readOutputFileFromStdout(result.stdout.toString());
     expect(result.exitCode).toBe(0);
-    expect(stdout).toContain('provider: "groq"');
-    expect(stdout).toContain("fallback groq");
+    expect(Object.keys(payload)).toEqual([
+      "output_path",
+      "output_uri",
+      "format",
+      "provider",
+      "source",
+      "requested_language",
+      "detected_language",
+      "summary",
+      "characters",
+      "segments",
+    ]);
+    expect(payload).toMatchObject({
+      format: "json",
+      provider: "deepgram",
+      source: { kind: "direct_url", reference: mediaUrl, title: null },
+      detected_language: "en",
+      characters: "json response".length,
+    });
+    expect(JSON.parse(readOutputFileFromStdout(result.stdout)).transcript.full_text).toBe("json response");
+    expect(result.stdout).not.toContain("[OUTPUT_FILE]");
+  });
+
+  test("never writes to the process stdout or console", async () => {
+    const spies = [vi.spyOn(process.stdout, "write"), vi.spyOn(console, "log"), vi.spyOn(console, "error")];
+
+    await run([mediaUrl]);
+
+    for (const spy of spies) expect(spy).not.toHaveBeenCalled();
+  });
+
+  test("the real bin reports a missing local file", () => {
+    const result = spawnCli(["transcribe", "./missing-pi-tube-input.mp3"], { DEEPGRAM_API_KEY: "dg-test-key" });
+
+    expect(result.exitCode).toBe(5);
+    expect(result.stderr).toContain("[LOCAL_FILE_NOT_FOUND]");
   });
 });

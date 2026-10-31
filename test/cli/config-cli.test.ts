@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterAll, afterEach, beforeEach, describe, expect, test } from "vitest";
 import { runCliInProcess } from "../helpers/cli-harness.ts";
-import { spawnCli } from "../helpers/spawn-cli.ts";
+import { fakeProviders, PROVIDER_KEYS, transcript } from "../helpers/transcribe-fakes.ts";
 import { readOutputFileFromStdout } from "./output-file.ts";
 
 const outputDir = mkdtempSync(path.join(os.tmpdir(), "pi-tube-cli-config-output-"));
@@ -113,26 +113,37 @@ describe("config command", () => {
   });
 });
 
-describe("config precedence in transcription", () => {
-  test("uses config defaults for provider and language when CLI flags are omitted", () => {
-    const env = { PI_TUBE_CONFIG_PATH: configPath, PI_TUBE_OUTPUT_DIR: outputDir };
-    expect(spawnCli(["config", "set", "defaults.provider", "groq"], env).exitCode).toBe(0);
-    expect(spawnCli(["config", "set", "defaults.language", "pt-BR"], env).exitCode).toBe(0);
-
-    const runResult = spawnCli(["transcribe", "https://cdn.example.com/audio/demo.wav"], {
-      ...env,
-      PI_TUBE_TRANSCRIPTION_PROVIDER: "deepgram",
-      PI_TUBE_TRANSCRIPTION_LANGUAGE: "en",
-      PI_TUBE_TEST_GROQ_RESPONSE: JSON.stringify({ text: "config provider", language: "pt" }),
-      PI_TUBE_TEST_DEEPGRAM_RESPONSE: JSON.stringify({
-        results: { channels: [{ alternatives: [{ transcript: "env provider" }] }] },
-      }),
+describe("defaults in transcription", () => {
+  const transcribe = (env: Record<string, string> = {}) =>
+    runCliInProcess(["transcribe", "https://cdn.example.com/audio/demo.wav"], {
+      env: { PI_TUBE_CONFIG_PATH: configPath, PI_TUBE_OUTPUT_DIR: outputDir, ...PROVIDER_KEYS, ...env },
+      fakes: { stt: fakeProviders({ groq: transcript("config provider", "pt") }) },
     });
 
-    const output = readOutputFileFromStdout(runResult.stdout);
-    expect(runResult.exitCode).toBe(0);
+  test("uses the config defaults for provider and language when nothing else is set", async () => {
+    expect((await run(["config", "set", "defaults.provider", "groq"])).exitCode).toBe(0);
+    expect((await run(["config", "set", "defaults.language", "pt-BR"])).exitCode).toBe(0);
+
+    const result = await transcribe();
+    const output = readOutputFileFromStdout(result.stdout);
+
+    expect(result.exitCode).toBe(0);
     expect(output).toContain('provider: "groq"');
     expect(output).toContain('requested_language: "pt-br"');
     expect(output).toContain("config provider");
+  });
+
+  test("PI_TUBE_TRANSCRIPTION_PROVIDER and PI_TUBE_TRANSCRIPTION_LANGUAGE win over the config defaults", async () => {
+    await run(["config", "set", "defaults.provider", "groq"]);
+    await run(["config", "set", "defaults.language", "pt-BR"]);
+
+    const result = await transcribe({
+      PI_TUBE_TRANSCRIPTION_PROVIDER: "deepgram",
+      PI_TUBE_TRANSCRIPTION_LANGUAGE: "en",
+    });
+    const output = readOutputFileFromStdout(result.stdout);
+
+    expect(output).toContain('provider: "deepgram"');
+    expect(output).toContain('requested_language: "en"');
   });
 });

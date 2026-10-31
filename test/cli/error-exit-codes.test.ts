@@ -2,7 +2,11 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, describe, expect, test } from "vitest";
+import { createError } from "../../src/core/domain/errors.ts";
+import type { SttProvider } from "../../src/core/ports/stt-provider.ts";
+import { runCliInProcess } from "../helpers/cli-harness.ts";
 import { spawnCli } from "../helpers/spawn-cli.ts";
+import { fakeProviders, PROVIDER_KEYS } from "../helpers/transcribe-fakes.ts";
 
 const configDir = mkdtempSync(path.join(os.tmpdir(), "pi-tube-cli-error-config-"));
 const configPath = path.join(configDir, "config.json");
@@ -13,16 +17,15 @@ function runCli(args: string[], env: Record<string, string> = {}) {
 
 const mediaUrl = "https://cdn.example.com/audio/demo.wav";
 
+const runInProcess = (args: string[], stt: Parameters<typeof fakeProviders>[0] = {}) =>
+  runCliInProcess(["transcribe", ...args], { env: { ...PROVIDER_KEYS }, fakes: { stt: fakeProviders(stt) } });
+
 describe("CLI error exits and formatting", () => {
-  test("returns zero on success", () => {
-    const result = runCli(["transcribe", mediaUrl], {
-      PI_TUBE_TEST_DEEPGRAM_RESPONSE: JSON.stringify({
-        results: { channels: [{ alternatives: [{ transcript: "ok" }] }] },
-      }),
-    });
+  test("returns zero on success", async () => {
+    const result = await runInProcess([mediaUrl]);
 
     expect(result.exitCode).toBe(0);
-    expect(result.stderr.toString().trim()).toBe("");
+    expect(result.stderr.trim()).toBe("");
   });
 
   test("returns command-specific guidance for unsupported flags", () => {
@@ -82,7 +85,7 @@ describe("CLI error exits and formatting", () => {
   });
 
   test("returns deterministic intake error code and guidance formatting", () => {
-    const result = runCli(["transcribe", "https://example.com/blog"]);
+    const result = runCli(["transcribe", "https://example.com/blog"], { DEEPGRAM_API_KEY: "dg-test-key" });
     const stderr = result.stderr.toString();
     const lines = stderr.trim().split("\n");
 
@@ -92,22 +95,28 @@ describe("CLI error exits and formatting", () => {
     expect(lines[1]?.startsWith("hint: ")).toBe(true);
   });
 
-  test("returns deterministic provider auth failure code", () => {
-    const result = runCli(["transcribe", mediaUrl, "--provider", "deepgram"], {
-      PI_TUBE_TEST_DEEPGRAM_ERROR: "auth",
+  test("returns deterministic provider auth failure code", async () => {
+    const result = await runInProcess([mediaUrl, "--provider", "deepgram"], {
+      deepgram: createError("PROVIDER_AUTH", "Bad key."),
     });
 
     expect(result.exitCode).toBe(4);
-    expect(result.stderr.toString()).toContain("[PROVIDER_AUTH]");
+    expect(result.stderr).toContain("[PROVIDER_AUTH]");
   });
 
-  test("keeps unexpected failures distinguishable with exit code 1", () => {
-    const result = runCli(["transcribe", mediaUrl], {
-      PI_TUBE_TEST_DEEPGRAM_RESPONSE: "{bad-json",
-    });
+  test("keeps unexpected failures distinguishable with exit code 1", async () => {
+    const throwing: SttProvider = {
+      id: "deepgram",
+      capabilities: { timestamps: true, languageDetection: true, requiresLanguage: false, offline: false },
+      transcribe: async () => {
+        throw new SyntaxError("Unexpected token b in JSON");
+      },
+    };
+
+    const result = await runInProcess([mediaUrl], { deepgram: throwing });
 
     expect(result.exitCode).toBe(1);
-    expect(result.stderr.toString()).toContain("[UNEXPECTED]");
+    expect(result.stderr).toContain("[UNEXPECTED]");
   });
 
   test("keeps config validation deterministic", () => {
@@ -132,9 +141,7 @@ describe("CLI error exits and formatting", () => {
 
     const result = runCli(["transcribe", mediaUrl], {
       PI_TUBE_CONFIG_PATH: brokenConfigPath,
-      PI_TUBE_TEST_DEEPGRAM_RESPONSE: JSON.stringify({
-        results: { channels: [{ alternatives: [{ transcript: "ok" }] }] },
-      }),
+      DEEPGRAM_API_KEY: "dg-test-key",
     });
 
     expect(result.exitCode).toBe(6);

@@ -2,7 +2,9 @@ import { mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, describe, expect, test } from "vitest";
-import { spawnCli } from "../helpers/spawn-cli.ts";
+import type { SttTranscript } from "../../src/core/ports/stt-provider.ts";
+import { runCliInProcess } from "../helpers/cli-harness.ts";
+import { fakeProviders, PROVIDER_KEYS, transcript } from "../helpers/transcribe-fakes.ts";
 import { extractOutputPath, readOutputFileFromStdout } from "./output-file.ts";
 
 const outputDir = mkdtempSync(path.join(os.tmpdir(), "pi-tube-cli-output-"));
@@ -11,28 +13,28 @@ afterAll(() => {
   rmSync(outputDir, { recursive: true, force: true });
 });
 
-function runCli(args: string[], env: Record<string, string> = {}) {
-  return spawnCli(args, { PI_TUBE_OUTPUT_DIR: outputDir, ...env });
-}
-
 const mediaUrl = "https://cdn.example.com/audio/demo.wav";
 
+const run = (args: string[], answers: { deepgram?: SttTranscript; groq?: SttTranscript } = {}) =>
+  runCliInProcess(["transcribe", ...args], {
+    env: { PI_TUBE_OUTPUT_DIR: outputDir, ...PROVIDER_KEYS },
+    fakes: { stt: fakeProviders(answers) },
+  });
+
+const helloWorld = transcript("hello world", undefined, [
+  { startMs: 200, endMs: 700, text: "hello" },
+  { startMs: 710, endMs: 1200, text: "world" },
+]);
+
 describe("CLI output contract", () => {
-  test("renders deterministic markdown output by default", () => {
-    const result = runCli(["transcribe", mediaUrl], {
-      PI_TUBE_TEST_DEEPGRAM_RESPONSE: JSON.stringify({
-        results: {
-          channels: [{ detected_language: "en", alternatives: [{ transcript: "hello deepgram" }] }],
-        },
-      }),
-    });
-    const stdout = result.stdout.toString();
-    const outputPath = extractOutputPath(stdout);
-    const fileContent = readOutputFileFromStdout(stdout);
+  test("renders deterministic markdown output by default", async () => {
+    const result = await run([mediaUrl], { deepgram: transcript("hello deepgram", "en") });
+    const outputPath = extractOutputPath(result.stdout);
+    const fileContent = readOutputFileFromStdout(result.stdout);
 
     expect(result.exitCode).toBe(0);
-    expect(stdout).toContain("[OUTPUT_FILE]");
-    expect(stdout).toContain("[OUTPUT_FILE_URI]");
+    expect(result.stdout).toContain("[OUTPUT_FILE]");
+    expect(result.stdout).toContain("[OUTPUT_FILE_URI]");
     expect(path.basename(outputPath)).toMatch(/^\d{4}-\d{2}-\d{2}-demo(-\d+)?\.md$/);
     expect(fileContent).toContain('---\nschema_version: "1.1.0"');
     expect(fileContent).toContain('source_kind: "direct_url"');
@@ -44,28 +46,9 @@ describe("CLI output contract", () => {
     expect(fileContent).toContain("hello deepgram");
   });
 
-  test("renders timestamped transcript lines when provider segments are available", () => {
-    const result = runCli(["transcribe", mediaUrl, "--timestamps"], {
-      PI_TUBE_TEST_DEEPGRAM_RESPONSE: JSON.stringify({
-        results: {
-          channels: [
-            {
-              alternatives: [
-                {
-                  transcript: "hello world",
-                  words: [
-                    { word: "hello", start: 0.2, end: 0.7 },
-                    { word: "world", start: 0.71, end: 1.2 },
-                  ],
-                },
-              ],
-            },
-          ],
-        },
-      }),
-    });
-    const stdout = result.stdout.toString();
-    const fileContent = readOutputFileFromStdout(stdout);
+  test("renders timestamped transcript lines when provider segments are available", async () => {
+    const result = await run([mediaUrl, "--timestamps"], { deepgram: helloWorld });
+    const fileContent = readOutputFileFromStdout(result.stdout);
 
     expect(result.exitCode).toBe(0);
     expect(fileContent).toContain("## Transcript");
@@ -74,28 +57,9 @@ describe("CLI output contract", () => {
     expect(fileContent).toContain("- [00:00:00.710 - 00:00:01.200] world");
   });
 
-  test("keeps timestamp blocks disabled by default", () => {
-    const result = runCli(["transcribe", mediaUrl], {
-      PI_TUBE_TEST_DEEPGRAM_RESPONSE: JSON.stringify({
-        results: {
-          channels: [
-            {
-              alternatives: [
-                {
-                  transcript: "hello world",
-                  words: [
-                    { word: "hello", start: 0.2, end: 0.7 },
-                    { word: "world", start: 0.71, end: 1.2 },
-                  ],
-                },
-              ],
-            },
-          ],
-        },
-      }),
-    });
-    const stdout = result.stdout.toString();
-    const fileContent = readOutputFileFromStdout(stdout);
+  test("keeps timestamp blocks disabled by default", async () => {
+    const result = await run([mediaUrl], { deepgram: helloWorld });
+    const fileContent = readOutputFileFromStdout(result.stdout);
 
     expect(result.exitCode).toBe(0);
     expect(fileContent).not.toContain("## Transcript");
@@ -103,17 +67,11 @@ describe("CLI output contract", () => {
     expect(fileContent).toContain("Timestamp mode: off (use --timestamps)");
   });
 
-  test("returns deterministic schema-versioned JSON when --json is used", () => {
-    const result = runCli(["transcribe", mediaUrl, "--json"], {
-      PI_TUBE_TEST_DEEPGRAM_RESPONSE: JSON.stringify({
-        results: {
-          channels: [{ alternatives: [{ transcript: "json response" }] }],
-        },
-      }),
-    });
+  test("returns deterministic schema-versioned JSON when --json is used", async () => {
+    const result = await run([mediaUrl, "--json"], { deepgram: transcript("json response") });
 
     expect(result.exitCode).toBe(0);
-    const payload = JSON.parse(readOutputFileFromStdout(result.stdout.toString())) as {
+    const payload = JSON.parse(readOutputFileFromStdout(result.stdout)) as {
       schema_version: string;
       source: { kind: string };
       transcription: { provider: string };
@@ -125,33 +83,17 @@ describe("CLI output contract", () => {
     expect(payload.transcript.full_text).toBe("json response");
   });
 
-  test("keeps markdown and JSON CLI modes semantically aligned for the same input", () => {
-    const env = {
-      PI_TUBE_TEST_DEEPGRAM_RESPONSE: JSON.stringify({
-        results: {
-          channels: [
-            {
-              detected_language: "en",
-              alternatives: [
-                {
-                  transcript: "aligned output",
-                  words: [{ word: "aligned", start: 0.1, end: 0.8 }],
-                },
-              ],
-            },
-          ],
-        },
-      }),
-    };
+  test("keeps markdown and JSON CLI modes semantically aligned for the same input", async () => {
+    const aligned = transcript("aligned output", "en", [{ startMs: 100, endMs: 800, text: "aligned" }]);
 
-    const markdownResult = runCli(["transcribe", mediaUrl, "--timestamps"], env);
-    const jsonResult = runCli(["transcribe", mediaUrl, "--timestamps", "--json"], env);
+    const markdownResult = await run([mediaUrl, "--timestamps"], { deepgram: aligned });
+    const jsonResult = await run([mediaUrl, "--timestamps", "--json"], { deepgram: aligned });
 
     expect(markdownResult.exitCode).toBe(0);
     expect(jsonResult.exitCode).toBe(0);
 
-    const markdown = readOutputFileFromStdout(markdownResult.stdout.toString());
-    const jsonPayload = JSON.parse(readOutputFileFromStdout(jsonResult.stdout.toString())) as {
+    const markdown = readOutputFileFromStdout(markdownResult.stdout);
+    const jsonPayload = JSON.parse(readOutputFileFromStdout(jsonResult.stdout)) as {
       source: { kind: string };
       transcription: { provider: string; detected_language: string | null };
       transcript: { full_text: string; segments: Array<{ text: string }> };
@@ -164,16 +106,13 @@ describe("CLI output contract", () => {
     expect(markdown).toContain(jsonPayload.transcript.segments[0]?.text ?? "");
   });
 
-  test("supports documented provider + language JSON workflow deterministically", () => {
-    const result = runCli(["transcribe", mediaUrl, "--provider", "groq", "--language", "pt", "--json"], {
-      PI_TUBE_TEST_GROQ_RESPONSE: JSON.stringify({
-        text: "ola groq",
-        language: "pt",
-      }),
+  test("supports documented provider + language JSON workflow deterministically", async () => {
+    const result = await run([mediaUrl, "--provider", "groq", "--language", "pt", "--json"], {
+      groq: transcript("ola groq", "pt"),
     });
 
     expect(result.exitCode).toBe(0);
-    const payload = JSON.parse(readOutputFileFromStdout(result.stdout.toString())) as {
+    const payload = JSON.parse(readOutputFileFromStdout(result.stdout)) as {
       schema_version: string;
       transcription: { provider: string; requested_language: string | null; detected_language: string | null };
       transcript: { full_text: string };

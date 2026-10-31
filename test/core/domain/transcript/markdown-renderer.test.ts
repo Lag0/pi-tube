@@ -1,0 +1,120 @@
+import { describe, expect, test } from "vitest";
+import { buildOutputArtifact } from "../../../../src/core/domain/transcript/build-artifact.ts";
+import { renderMarkdown } from "../../../../src/core/domain/transcript/render-markdown.ts";
+import type { TranscriptionExecutionResult } from "../../../../src/core/domain/transcript/types.ts";
+
+const executionResult: TranscriptionExecutionResult = {
+  source: {
+    kind: "direct_url",
+    originalInput: "https://cdn.example.com/audio/demo.wav",
+    normalizedUrl: "https://cdn.example.com/audio/demo.wav",
+    mediaUrl: "https://cdn.example.com/audio/demo.wav",
+    extension: "wav",
+  },
+  provider: "deepgram",
+  transcript: "hello world",
+  requestedLanguage: "en",
+  detectedLanguage: "en",
+};
+
+describe("markdown renderer", () => {
+  test("renders deterministic frontmatter and summary sections", () => {
+    const artifact = buildOutputArtifact(executionResult, {
+      generatedAt: "2026-03-02T23:30:00.000Z",
+    });
+    const markdown = renderMarkdown(artifact);
+
+    expect(markdown).toContain('---\nschema_version: "1.1.0"');
+    expect(markdown).toContain('generated_at: "2026-03-02T23:30:00.000Z"');
+    expect(markdown).toContain('source_kind: "direct_url"');
+    expect(markdown).toContain('source_reference: "https://cdn.example.com/audio/demo.wav"');
+    expect(markdown).toContain('provider: "deepgram"');
+    expect(markdown).toContain("## Summary");
+    expect(markdown).toContain("### Key Points");
+    expect(markdown.match(/^- /gm)?.length).toBe(5);
+  });
+
+  test("keeps transcript fallback section deterministic", () => {
+    const artifact = buildOutputArtifact(executionResult, {
+      generatedAt: "2026-03-02T23:30:00.000Z",
+    });
+    const markdown = renderMarkdown(artifact);
+
+    expect(markdown).not.toContain("## Transcript");
+    expect(markdown).toContain("### Full Text");
+    expect(markdown).not.toContain("### Timestamped Segments");
+    expect(markdown).toContain("hello world");
+  });
+
+  test("renders timestamped transcript lines when segments are available", () => {
+    const artifact = buildOutputArtifact(
+      {
+        ...executionResult,
+        segments: [
+          { startMs: 1000, endMs: 2200, text: "hello" },
+          { startMs: 2300, endMs: 3200, text: "world" },
+        ],
+      },
+      {
+        generatedAt: "2026-03-02T23:30:00.000Z",
+        includeTimestamps: true,
+      },
+    );
+    const markdown = renderMarkdown(artifact);
+
+    expect(markdown).toContain("## Transcript");
+    expect(markdown).toContain("### Timestamped Segments");
+    expect(markdown).toContain("- [00:00:01.000 - 00:00:02.200] hello");
+    expect(markdown).toContain("- [00:00:02.300 - 00:00:03.200] world");
+    expect(markdown).toContain("### Full Text");
+  });
+
+  test("renders YouTube source metadata before summary", () => {
+    const artifact = buildOutputArtifact(
+      {
+        ...executionResult,
+        source: {
+          kind: "youtube",
+          originalInput: "https://youtube.com/watch?v=abc123",
+          normalizedUrl: "https://youtube.com/watch?v=abc123",
+          mediaUrl: "https://cdn.example.com/audio.m4a",
+          title: "Launch Video",
+          publishedAt: "2024-02-29",
+          description: "Launch notes\nhttps://example.com/notes",
+          descriptionLinks: ["https://example.com/notes"],
+        },
+      },
+      {
+        generatedAt: "2026-03-02T23:30:00.000Z",
+      },
+    );
+    const markdown = renderMarkdown(artifact);
+
+    expect(markdown).toContain("## Source Metadata\n");
+    expect(markdown).toContain("- Title: Launch Video");
+    expect(markdown).toContain("- Published at: 2024-02-29");
+    expect(markdown).toContain("### Description\nLaunch notes\nhttps://example.com/notes");
+    expect(markdown).toContain("### Description Links\n- https://example.com/notes");
+    expect(markdown.indexOf("## Source Metadata")).toBeLessThan(markdown.indexOf("## Summary"));
+  });
+
+  test("renders a title-only YouTube source in the Source Metadata section", () => {
+    const artifact = buildOutputArtifact(
+      {
+        ...executionResult,
+        source: {
+          kind: "youtube",
+          originalInput: "https://youtube.com/watch?v=abc123",
+          normalizedUrl: "https://youtube.com/watch?v=abc123",
+          mediaUrl: "https://cdn.example.com/audio.m4a",
+          title: "Title Only Video",
+        },
+      },
+      { generatedAt: "2026-03-02T23:35:00.000Z" },
+    );
+    const markdown = renderMarkdown(artifact);
+
+    expect(markdown).toContain("## Source Metadata");
+    expect(markdown).toContain("- Title: Title Only Video");
+  });
+});

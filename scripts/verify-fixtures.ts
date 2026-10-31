@@ -1,4 +1,9 @@
-const cmd = ["bun", "test", "test/output/golden-fixture.test.ts", "test/output/output-parity.test.ts"];
+const cmd = [
+  "bun",
+  "test",
+  "test/core/domain/transcript/golden-fixture.test.ts",
+  "test/core/domain/transcript/output-parity.test.ts",
+];
 
 const result = Bun.spawnSync({
   cmd,

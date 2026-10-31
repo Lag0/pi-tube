@@ -6,6 +6,7 @@ export interface PiTubePaths {
   readonly configFile: string;
   readonly outputDir: string;
   readonly tmpDir: string;
+  readonly downloadsDir: string;
 }
 
 export interface PiTubePathsInput {
@@ -28,5 +29,6 @@ export const resolvePiTubePaths = ({ env, cwd, homedir }: PiTubePathsInput): PiT
     configFile: resolveOverride(env.PI_TUBE_CONFIG_PATH, cwd) ?? path.join(home, "config.json"),
     outputDir: resolveOverride(env.PI_TUBE_OUTPUT_DIR, cwd) ?? home,
     tmpDir: path.join(home, "tmp"),
+    downloadsDir: path.join(home, "downloads"),
   };
 };

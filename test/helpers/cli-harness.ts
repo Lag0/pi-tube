@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import type { CliIo, CliSystem } from "../../src/adapters/cli/io.ts";
 import { runCli } from "../../src/adapters/cli/run-cli.ts";
-import { createApp } from "../../src/bootstrap.ts";
+import { type AppOverrides, createApp } from "../../src/bootstrap.ts";
 
 export interface CliRunOptions {
   /** Merged over a hermetic env (temp HOME and config path); `process.env` is never inherited. */
@@ -13,6 +13,10 @@ export interface CliRunOptions {
   readonly stdin?: string;
   /** Answer to the hidden prompt; its presence simulates a terminal. */
   readonly secret?: string;
+  /** Fake providers, media fetcher or process runner handed to the composition root. */
+  readonly fakes?: AppOverrides;
+  /** Aborts the run, as Ctrl-C does through `main`. */
+  readonly signal?: AbortSignal;
 }
 
 export interface CliRunResult {
@@ -50,12 +54,14 @@ export const runCliInProcess = async (argv: string[], options: CliRunOptions = {
     ...options.system,
   };
   const env = { HOME: home, PI_TUBE_CONFIG_PATH: path.join(home, "config.json"), ...options.env };
+  const { signal } = options;
 
   try {
     const exitCode = await runCli(argv, {
-      app: createApp({ env, cwd: process.cwd(), homedir: () => home }),
+      app: createApp({ env, cwd: process.cwd(), homedir: () => home }, options.fakes),
       io,
       system,
+      ...(signal ? { listenForCancel: () => signal } : {}),
     });
     return { exitCode, stdout: stdout.join(""), stderr: stderr.join(""), systemCalls, stdinRead };
   } finally {

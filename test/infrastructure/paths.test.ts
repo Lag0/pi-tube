@@ -14,6 +14,7 @@ describe("resolvePiTubePaths", () => {
       configFile: path.join(FAKE_HOME, ".pi-tube", "config.json"),
       outputDir: path.join(FAKE_HOME, ".pi-tube"),
       tmpDir: path.join(FAKE_HOME, ".pi-tube", "tmp"),
+      downloadsDir: path.join(FAKE_HOME, ".pi-tube", "downloads"),
     });
   });
 
