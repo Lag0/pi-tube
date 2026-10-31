@@ -49,6 +49,6 @@
     "@deepgram/sdk": "5.17.0",
     "@elevenlabs/elevenlabs-js": "2.49.1",
     "commander": "14.0.3",
-    "groq-sdk": "0.37.0"
+    "groq-sdk": "1.6.0"
   }
 }
