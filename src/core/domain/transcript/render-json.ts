@@ -1,5 +1,6 @@
 import type { OutputArtifact } from "./contract.ts";
 
+/** A transcript as saved and printed in JSON: every field present, `null` when absent, snake_case. */
 export interface JsonOutputArtifact {
   schema_version: string;
   generated_at: string;
@@ -40,6 +41,7 @@ export interface JsonOutputArtifact {
   };
 }
 
+/** The JSON form of an artifact, as the library saves it and `library show --json` prints it. */
 export function toJsonOutputArtifact(artifact: OutputArtifact): JsonOutputArtifact {
   return {
     schema_version: artifact.schema_version,
