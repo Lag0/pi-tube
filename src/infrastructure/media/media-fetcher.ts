@@ -145,9 +145,10 @@ export const createMediaFetcher = (deps: MediaFetcherDeps): MediaFetcher => {
         case "site": {
           const normalizedUrl = url?.toString() ?? input;
           // `--ignore-no-formats-error`: an upcoming live, or a page whose formats need a login, still reports its
-          // metadata; the guards and the audio download then fail with the precise error.
+          // metadata; the guards and the audio download then fail with the precise error. `--flat-playlist`: a
+          // playlist or channel is listed, not extracted entry by entry, so it is refused at once.
           const stdout = await ytDlp(
-            ["--dump-single-json", "--ignore-no-formats-error"],
+            ["--dump-single-json", "--ignore-no-formats-error", "--flat-playlist"],
             METADATA_PURPOSE[classification],
             normalizedUrl,
             METADATA_TIMEOUT_MS,

@@ -245,12 +245,13 @@ export const parseYtDlpInfo = (stdout: string, url: string): Result<MediaMetadat
     return err(malformedOutput());
   }
   if (!isRecord(info)) return err(malformedOutput());
-  if (info._type === "playlist") {
-    return err(
-      createError("SOURCE_UNSUPPORTED", `\`${url}\` is a playlist or channel; pi-tube takes one video at a time.`, {
-        hint: "Pass the URL of a single video.",
-      }),
-    );
+  // `multi_video` (a video split into parts) is refused too: only the last part would be downloaded.
+  if (info._type !== undefined && info._type !== "video") {
+    const message =
+      info._type === "playlist"
+        ? `\`${url}\` is a playlist or channel; pi-tube takes one video at a time.`
+        : `\`${url}\` holds several videos (_type=${String(info._type)}); pi-tube takes one video at a time.`;
+    return err(createError("SOURCE_UNSUPPORTED", message, { hint: "Pass the URL of a single video." }));
   }
 
   const description = isString(info.description) ? info.description : undefined;

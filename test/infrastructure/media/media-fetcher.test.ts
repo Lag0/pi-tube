@@ -201,6 +201,7 @@ describe("resolve", () => {
       "--no-playlist",
       "--dump-single-json",
       "--ignore-no-formats-error",
+      "--flat-playlist",
       "--",
       VIMEO,
     ]);
@@ -298,6 +299,18 @@ describe("resolve", () => {
     const result = await fetcherWith(run).resolve("link.mp3", { ...SETTINGS, maxLocalFileBytes: 9 });
 
     expect(result.success ? undefined : result.error.code).toBe("LOCAL_FILE_TOO_LARGE");
+  });
+
+  test("a multi-part video is refused: only one of its parts would be transcribed", async () => {
+    const { run } = fakeRun(() => exited(JSON.stringify({ _type: "multi_video", id: "m1", entries: [] })));
+
+    const result = await fetcherWith(run).resolve(VIMEO, SETTINGS);
+
+    expect(result.success ? undefined : result.error).toEqual({
+      code: "SOURCE_UNSUPPORTED",
+      message: `\`${VIMEO}\` holds several videos (_type=multi_video); pi-tube takes one video at a time.`,
+      hint: "Pass the URL of a single video.",
+    });
   });
 
   test("a local file resolves without yt-dlp", async () => {
