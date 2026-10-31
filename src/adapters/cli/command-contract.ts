@@ -11,6 +11,7 @@ export type HelpTopic =
   | "root"
   | "transcribe"
   | "info"
+  | "library"
   | "download"
   | "providers"
   | "auth"
@@ -22,6 +23,7 @@ export type HelpTopic =
 export const HELP_TOPICS: readonly HelpTopic[] = [
   "transcribe",
   "info",
+  "library",
   "download",
   "providers",
   "auth",
@@ -36,6 +38,7 @@ const ROOT_HELP_DOCUMENT: HelpDocument = {
   usage: [
     `${COMMAND_IDENTITY} transcribe <input> [--provider <deepgram|groq|elevenlabs>] [--language <code>] [--force] [--json]`,
     `${COMMAND_IDENTITY} info <input> [--json]`,
+    `${COMMAND_IDENTITY} library <list|show|search> [args] [--json]`,
     `${COMMAND_IDENTITY} download <url> [--audio] [--output <dir>]`,
     `${COMMAND_IDENTITY} providers [--json]`,
     `${COMMAND_IDENTITY} auth <login|status|logout> [provider]`,
@@ -48,6 +51,10 @@ const ROOT_HELP_DOCUMENT: HelpDocument = {
       title: "Core",
       rows: [
         { term: `${COMMAND_IDENTITY} transcribe <input>`, description: "Transcribe a URL or local media file." },
+        {
+          term: `${COMMAND_IDENTITY} library list`,
+          description: "List the transcripts saved in the local library.",
+        },
         {
           term: `${COMMAND_IDENTITY} info <input>`,
           description: "Show media metadata (title, platform, date, duration, chapters) without transcribing.",
@@ -148,6 +155,30 @@ const INFO_HELP_DOCUMENT: HelpDocument = {
   notes: [
     "`tier` is `tested` for YouTube, Instagram, direct media URLs and local files, and `best_effort` for any other site.",
     "A live stream that has not ended is reported with its `live_status`; `transcribe` and `download` refuse it.",
+  ],
+};
+
+const LIBRARY_HELP_DOCUMENT: HelpDocument = {
+  title: `${COMMAND_IDENTITY} library`,
+  summary: "The local library: every transcript pi-tube saved, by source, provider, model and language.",
+  usage: [
+    `${COMMAND_IDENTITY} library list [--limit <n>] [--offset <n>] [--json]`,
+    `${COMMAND_IDENTITY} library show <transcript_id> [--json]`,
+    `${COMMAND_IDENTITY} library search <query> [--limit <n>] [--offset <n>] [--json]`,
+  ],
+  options: [
+    { term: "--limit <n>", description: "How many entries to print (default 20, at most 500)." },
+    { term: "--offset <n>", description: "How many entries to skip (default 0)." },
+    { term: "--json", description: "Print the result as JSON on stdout." },
+  ],
+  examples: [
+    `${COMMAND_IDENTITY} library list`,
+    `${COMMAND_IDENTITY} library search "aula penal"`,
+    `${COMMAND_IDENTITY} library show 0123456789abcdef0123 --json`,
+  ],
+  notes: [
+    "Search matches names (title, file name or URL, platform), not the transcript text; it ignores case and accents.",
+    "The library lives in ~/.pi-tube/library, or PI_TUBE_LIBRARY_DIR.",
   ],
 };
 
@@ -277,6 +308,7 @@ const SETUP_HELP_DOCUMENT: HelpDocument = {
 export function getHelpDocument(topic: HelpTopic): HelpDocument {
   if (topic === "transcribe") return TRANSCRIBE_HELP_DOCUMENT;
   if (topic === "info") return INFO_HELP_DOCUMENT;
+  if (topic === "library") return LIBRARY_HELP_DOCUMENT;
   if (topic === "download") return DOWNLOAD_HELP_DOCUMENT;
   if (topic === "providers") return PROVIDERS_HELP_DOCUMENT;
   if (topic === "auth") return AUTH_HELP_DOCUMENT;

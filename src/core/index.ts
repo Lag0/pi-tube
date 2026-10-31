@@ -27,6 +27,14 @@ export {
   type DownloadMediaOutput,
 } from "./application/download-media.ts";
 export { createGetMediaInfo, type GetMediaInfoDeps } from "./application/get-media-info.ts";
+export {
+  createGetTranscript,
+  createListTranscripts,
+  createSearchTranscripts,
+  type LibraryDeps,
+  type LibraryPage,
+  MAX_PAGE_LIMIT,
+} from "./application/library.ts";
 export { ensureNotAborted, type OperationOptions, type ProgressEvent, type UseCase } from "./application/operation.ts";
 export {
   type AccountDeps,
@@ -60,7 +68,14 @@ export {
   type PiTubeError,
   toPiTubeError,
 } from "./domain/errors.ts";
-export { type SourceKey, siteSourceKey, sourceKeyFromInput, type TranscriptKey } from "./domain/library.ts";
+export {
+  matchesName,
+  type NamedEntry,
+  type SourceKey,
+  siteSourceKey,
+  sourceKeyFromInput,
+  type TranscriptKey,
+} from "./domain/library.ts";
 export { describeSource, type MediaInfo } from "./domain/media-info.ts";
 export {
   findProvider,
@@ -96,6 +111,7 @@ export {
 } from "./domain/source-settings.ts";
 export { toSafeLine } from "./domain/text.ts";
 export type { OutputArtifact } from "./domain/transcript/contract.ts";
+export { type JsonOutputArtifact, toJsonOutputArtifact } from "./domain/transcript/render-json.ts";
 export { sourceReferenceOf } from "./domain/transcript/render-markdown.ts";
 export type { ConfigStore } from "./ports/config-store.ts";
 export type { LibraryEntry, LibraryStore, StoredTranscript } from "./ports/library-store.ts";

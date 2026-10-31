@@ -5,6 +5,7 @@ import { runAuth, runProviders } from "./commands/account.ts";
 import { runConfig, runDefaults } from "./commands/config.ts";
 import { runDownload } from "./commands/download.ts";
 import { runInfo } from "./commands/info.ts";
+import { runLibrary } from "./commands/library.ts";
 import { runTranscribe } from "./commands/transcribe.ts";
 import { CliFailure, exitCodeFor, formatErrorForCli } from "./error-output.ts";
 import { type HelpDocument, renderHelpDocument } from "./help-renderer.ts";
@@ -25,6 +26,7 @@ type CliAction =
     }
   | { kind: "download"; input?: string; extraPositionals: string[]; options: DownloadOptions; rootOptions: RootOptions }
   | { kind: "info"; input?: string; extraPositionals: string[]; options: JsonCommandOptions; rootOptions: RootOptions }
+  | { kind: "library"; action?: string; args: string[]; options: LibraryOptions }
   | { kind: "providers"; options: JsonCommandOptions }
   | { kind: "auth"; action?: string; provider?: string; options: AuthOptions; rootOptions: RootOptions }
   | { kind: "defaults"; action?: string; value?: string; rootOptions: RootOptions }
@@ -50,6 +52,11 @@ interface TranscribeOptions extends JsonCommandOptions {
 interface DownloadOptions extends JsonCommandOptions {
   audio?: boolean;
   output?: string;
+}
+
+interface LibraryOptions extends JsonCommandOptions {
+  limit?: string;
+  offset?: string;
 }
 
 interface AuthOptions extends JsonCommandOptions {
@@ -187,6 +194,18 @@ function createProgram(setAction: (action: CliAction) => void): Command {
     .option("--json", "Print the result as JSON on stdout.")
     .action((input: string | undefined, extraPositionals: string[], options: DownloadOptions) => {
       setAction({ kind: "download", input, extraPositionals, options, rootOptions: program.opts<RootOptions>() });
+    });
+
+  program
+    .command("library")
+    .description("List, show and search the transcripts in the local library.")
+    .argument("[action]", "list, show or search")
+    .argument("[args...]", "a transcript id, or search terms")
+    .option("--limit <n>", "How many entries to print (default 20, at most 500).")
+    .option("--offset <n>", "How many entries to skip (default 0).")
+    .option("--json", "Print the result as JSON on stdout.")
+    .action((action: string | undefined, args: string[], options: LibraryOptions) => {
+      setAction({ kind: "library", action, args, options });
     });
 
   program
@@ -328,6 +347,14 @@ export const runCli = async (argv: readonly string[], deps: CliDeps): Promise<nu
           extraPositionals: action.extraPositionals,
           json: Boolean(action.options.json),
           color: action.rootOptions.color !== false,
+        });
+      case "library":
+        return await runLibrary(deps, {
+          action: action.action,
+          args: action.args,
+          limit: action.options.limit,
+          offset: action.options.offset,
+          json: Boolean(action.options.json),
         });
       case "providers":
         return await runProviders(deps, { json: Boolean(action.options.json) });

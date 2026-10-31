@@ -48,3 +48,28 @@ export const sourceKeyFromInput = (input: string): SourceKey | undefined => {
 /** The text a library hashes into a `TranscriptId`. */
 export const transcriptKeyText = (key: TranscriptKey): string =>
   [key.sourceKey, key.provider, key.model, key.language ?? "auto"].join("\n");
+
+/** The text a name search compares: lowercase, without accents. */
+const foldForSearch = (value: string): string =>
+  value
+    .normalize("NFD")
+    .replace(/\p{Mn}/gu, "")
+    .toLowerCase();
+
+/** The name fields of a library entry, as `matchesName` sees them. */
+export interface NamedEntry {
+  readonly title?: string;
+  readonly sourceName?: string;
+  readonly platform?: string;
+  readonly sourceKey: SourceKey;
+}
+
+/**
+ * A search by name, not by content: every term of `query` must appear in the title, the file name or URL, the
+ * platform or the source key, ignoring case and accents.
+ */
+export const matchesName = (entry: NamedEntry, query: string): boolean => {
+  const haystack = foldForSearch([entry.title, entry.sourceName, entry.platform, entry.sourceKey].join(" "));
+  const terms = foldForSearch(query).split(/\s+/).filter(Boolean);
+  return terms.length > 0 && terms.every((term) => haystack.includes(term));
+};

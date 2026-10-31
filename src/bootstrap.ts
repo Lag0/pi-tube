@@ -5,15 +5,19 @@ import {
   createDownloadMedia,
   createGetConfigValue,
   createGetMediaInfo,
+  createGetTranscript,
   createListConfigValues,
   createListProviders,
+  createListTranscripts,
   createLoginProvider,
   createLogoutProvider,
+  createSearchTranscripts,
   createSetConfigValue,
   createTranscribe,
   type DownloadMediaInput,
   type DownloadMediaOutput,
   type EnvironmentVariables,
+  type LibraryPage,
   type LoginInput,
   type LoginOutput,
   type LogoutInput,
@@ -22,6 +26,7 @@ import {
   type MediaInfo,
   type ProviderDescriptor,
   type ProviderListing,
+  type StoredTranscript,
   type SttProvider,
   type TranscribeInput,
   type TranscribeOutput,
@@ -62,6 +67,12 @@ export interface App {
   readonly transcribe: UseCase<TranscribeInput, TranscribeOutput>;
   readonly downloadMedia: UseCase<DownloadMediaInput, DownloadMediaOutput>;
   readonly getMediaInfo: UseCase<{ readonly input: string }, MediaInfo>;
+  readonly listTranscripts: UseCase<{ readonly limit: number; readonly offset: number }, LibraryPage>;
+  readonly searchTranscripts: UseCase<
+    { readonly query: string; readonly limit: number; readonly offset: number },
+    LibraryPage
+  >;
+  readonly getTranscript: UseCase<{ readonly transcriptId: string }, StoredTranscript>;
 }
 
 /** Wires the core and the infrastructure for one environment. */
@@ -78,6 +89,7 @@ export const createApp = (environment: AppEnvironment, overrides: AppOverrides =
       run: overrides.runProcess ?? runProcess,
       ...(overrides.lookup ? { lookup: overrides.lookup } : {}),
     });
+  const library = createFileLibraryStore({ libraryDir: paths.libraryDir });
   const accountDeps = { configStore, env, providers: PROVIDER_DESCRIPTORS };
   const configDeps = { configStore, providers: PROVIDER_DESCRIPTORS };
 
@@ -95,10 +107,13 @@ export const createApp = (environment: AppEnvironment, overrides: AppOverrides =
       providers: PROVIDER_DESCRIPTORS,
       stt: overrides.stt ?? createSttProviders(),
       media,
-      library: createFileLibraryStore({ libraryDir: paths.libraryDir }),
+      library,
       now: () => new Date(),
     }),
     downloadMedia: createDownloadMedia({ configStore, env, media, defaultOutputDir: paths.downloadsDir }),
     getMediaInfo: createGetMediaInfo({ configStore, env, media }),
+    listTranscripts: createListTranscripts({ library }),
+    searchTranscripts: createSearchTranscripts({ library }),
+    getTranscript: createGetTranscript({ library }),
   };
 };

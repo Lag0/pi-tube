@@ -22,6 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   - `local_files.max_bytes` (default 1073741824, at most 2147483647): the largest local file pi-tube accepts.
 
   Cookie paths must be absolute; a relative one fails with `COOKIES_FILE_INVALID` (exit 6). `pi-tube config set` takes `true`/`false` and whole numbers for these keys, and `config get|list --json` print them as JSON booleans and numbers.
+- `pi-tube library list [--limit <n>] [--offset <n>] [--json]` lists the library, newest first. `library show <transcript_id> [--json]` prints a transcript's facts and file paths, or the whole saved JSON. `library search <query>` finds transcripts by name: every term must appear in the title, file name or URL, platform or source key, ignoring case and accents (the transcript text itself is not searched). An unknown id is `TRANSCRIPT_NOT_FOUND` (exit 5).
 - `pi-tube info <input> [--json]` shows what pi-tube knows about a source without downloading or transcribing it: kind, tier, URL or path and size, and for pages the platform, media id, canonical URL, title, publication date, duration, live status, chapters and description. The human output prints text from the page (title, chapters, description) as single lines without control characters, so a page cannot drive your terminal, and cuts the description at 280 characters; `--json` prints it whole, with `null` for absent fields. A live stream that has not ended is reported, not refused.
 - `pi-tube providers [--json]` lists each provider with `configured`, `key_source` (`env`, `config` or `none`) and the env var name when the key comes from the environment. `auth`, `config` and `providers` accept `--json`.
 
@@ -39,7 +40,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   | usage | 2 | `INPUT_INVALID`, `NOT_IMPLEMENTED`, `PROVIDER_INVALID` |
   | dependency | 3 | `SETUP_COMMAND_FAILED`, `YTDLP_NOT_FOUND`, `YTDLP_OUTPUT_INVALID` |
   | provider | 4 | `PROVIDER_NOT_CONFIGURED`, `PROVIDER_AUTH`, `PROVIDER_RATE_LIMIT`, `PROVIDER_UNAVAILABLE`, `PROVIDER_FAILED`, `PROVIDER_INVALID_RESPONSE` |
-  | source | 5 | `SOURCE_UNSUPPORTED`, `SOURCE_EXTRACT_FAILED`, `SOURCE_AUTH_REQUIRED`, `SOURCE_LIVE_NOT_ENDED`, `SOURCE_HOST_BLOCKED`, `YOUTUBE_EXTRACT_FAILED`, `INSTAGRAM_*`, `LOCAL_FILE_*`, `DOWNLOAD_FAILED` |
+  | source | 5 | `SOURCE_UNSUPPORTED`, `SOURCE_EXTRACT_FAILED`, `SOURCE_AUTH_REQUIRED`, `SOURCE_LIVE_NOT_ENDED`, `SOURCE_HOST_BLOCKED`, `TRANSCRIPT_NOT_FOUND`, `YOUTUBE_EXTRACT_FAILED`, `INSTAGRAM_*`, `LOCAL_FILE_*`, `DOWNLOAD_FAILED` |
   | config | 6 | `CONFIG_INVALID`, `CONFIG_IO_FAILED`, `STORAGE_IO_FAILED`, `COOKIES_FILE_INVALID` |
   | cancelled | 130 | `CANCELLED` |
   | unexpected | 1 | `UNEXPECTED` |

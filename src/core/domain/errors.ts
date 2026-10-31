@@ -112,6 +112,10 @@ export const ERROR_CATALOG = {
     category: "source",
     hint: "Check the file path and retry.",
   },
+  TRANSCRIPT_NOT_FOUND: {
+    category: "source",
+    hint: "Run `pi-tube library list` to see the transcripts in the library.",
+  },
   LOCAL_FILE_TOO_LARGE: {
     category: "source",
     hint: "Raise the limit with `pi-tube config set local_files.max_bytes <bytes>` (at most 2147483647), or use a shorter file.",
