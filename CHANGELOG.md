@@ -36,7 +36,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   | usage | 2 | `INPUT_INVALID`, `NOT_IMPLEMENTED`, `PROVIDER_INVALID` |
   | dependency | 3 | `SETUP_COMMAND_FAILED`, `YTDLP_NOT_FOUND`, `YTDLP_OUTPUT_INVALID` |
   | provider | 4 | `PROVIDER_NOT_CONFIGURED`, `PROVIDER_AUTH`, `PROVIDER_RATE_LIMIT`, `PROVIDER_UNAVAILABLE`, `PROVIDER_FAILED`, `PROVIDER_INVALID_RESPONSE` |
-  | source | 5 | `SOURCE_UNSUPPORTED`, `SOURCE_EXTRACT_FAILED`, `SOURCE_LIVE_NOT_ENDED`, `YOUTUBE_EXTRACT_FAILED`, `INSTAGRAM_*`, `LOCAL_FILE_*`, `DOWNLOAD_FAILED` |
+  | source | 5 | `SOURCE_UNSUPPORTED`, `SOURCE_EXTRACT_FAILED`, `SOURCE_LIVE_NOT_ENDED`, `SOURCE_HOST_BLOCKED`, `YOUTUBE_EXTRACT_FAILED`, `INSTAGRAM_*`, `LOCAL_FILE_*`, `DOWNLOAD_FAILED` |
   | config | 6 | `CONFIG_INVALID`, `CONFIG_IO_FAILED`, `STORAGE_IO_FAILED`, `COOKIES_FILE_INVALID` |
   | cancelled | 130 | `CANCELLED` |
   | unexpected | 1 | `UNEXPECTED` |
@@ -65,6 +65,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Security
 
 - pi-tube no longer loads a `.env` file from the current directory, so running it inside another project does not pick up that project's `.env` secrets or test hooks. The bin runs `bun --no-env-file`, which needs Bun 1.3.3 or newer (`engines.bun` is now `>=1.3.3`). Bun still reads a `bunfig.toml` from the current directory (including `preload` scripts); only run pi-tube in directories you trust until a later release closes that too.
+- Before every yt-dlp run, pi-tube resolves the page's host and refuses it with `SOURCE_HOST_BLOCKED` (exit 5) if any of its addresses is private, loopback, link-local (cloud metadata endpoints included), multicast or reserved. IP literals in any spelling (`http://2130706433/`, `http://[::ffff:127.0.0.1]/`) are checked without DNS, and a host that does not resolve is refused. Set `network.allow_private_hosts` to `true` for hosts you trust. Limits: yt-dlp resolves the host again (DNS rebinding is not covered), follows redirects to other hosts and, for unknown pages, URLs embedded in the page, and offers no option to restrict them; a direct media URL is fetched by the provider's servers, not by your machine, so it is not checked.
 - CI checks out the repository without persisting the GitHub token in the git config.
 
 Releases up to 2.2.1 predate this file: see the [npm version history](https://www.npmjs.com/package/@syxs/pi-tube?activeTab=versions) and the git log.

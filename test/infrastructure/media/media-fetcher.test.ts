@@ -47,8 +47,11 @@ const fakeRun = (answer: (request: ProcessRequest) => ProcessResult | Promise<Pr
 
 const SETTINGS: SourceSettings = { allowPrivateHosts: false, maxLocalFileBytes: 1_073_741_824 };
 
+/** No test resolves real DNS: every host resolves to a public address unless a test says otherwise. */
+const PUBLIC_LOOKUP = async () => [{ address: "93.184.216.34", family: 4 }];
+
 const fetcherWith = (run: (request: ProcessRequest) => Promise<ProcessResult>, env: Record<string, string> = {}) =>
-  createMediaFetcher({ env: { PATH: "/bin", ...env }, cwd: root, tmpDir, run });
+  createMediaFetcher({ env: { PATH: "/bin", ...env }, cwd: root, tmpDir, run, lookup: PUBLIC_LOOKUP });
 
 describe("resolve", () => {
   test("YouTube metadata comes from yt-dlp with `--` before the URL", async () => {
@@ -372,6 +375,39 @@ describe("download", () => {
   });
 });
 
+describe("host guard", () => {
+  test("resolve, fetchAudio and download refuse a private host and never run yt-dlp", async () => {
+    const { requests, run } = fakeRun(() => exited("{}"));
+    const fetcher = createMediaFetcher({
+      env: { PATH: "/bin" },
+      cwd: root,
+      tmpDir,
+      run,
+      lookup: async () => [{ address: "10.0.0.5", family: 4 }],
+    });
+    const internal = "https://intranet.example/video";
+    const source: SiteSource = {
+      kind: "site",
+      originalInput: internal,
+      normalizedUrl: internal,
+      metadata: { platform: "Generic" },
+    };
+
+    const results = [
+      await fetcher.resolve(internal, SETTINGS),
+      await fetcher.fetchAudio(source, SETTINGS),
+      await fetcher.download(source, { media: "video", outputDir: path.join(root, "out") }, SETTINGS),
+    ];
+
+    expect(results.map((result) => (result.success ? undefined : result.error.code))).toEqual([
+      "SOURCE_HOST_BLOCKED",
+      "SOURCE_HOST_BLOCKED",
+      "SOURCE_HOST_BLOCKED",
+    ]);
+    expect(requests).toHaveLength(0);
+  });
+});
+
 describe("hardening", () => {
   test("every yt-dlp run ignores yt-dlp config files, so a ./yt-dlp.conf cannot inject options", async () => {
     const { requests, run } = fakeRun((request) => {
@@ -407,7 +443,13 @@ describe("hardening", () => {
     const blocker = path.join(root, "file");
     writeFileSync(blocker, "x");
     const { requests, run } = fakeRun(() => exited(""));
-    const fetcher = createMediaFetcher({ env: { PATH: "/bin" }, cwd: root, tmpDir: path.join(blocker, "tmp"), run });
+    const fetcher = createMediaFetcher({
+      env: { PATH: "/bin" },
+      cwd: root,
+      tmpDir: path.join(blocker, "tmp"),
+      run,
+      lookup: PUBLIC_LOOKUP,
+    });
 
     const result = await fetcher.fetchAudio(YOUTUBE_SOURCE, SETTINGS);
 

@@ -84,6 +84,10 @@ export const ERROR_CATALOG = {
     category: "source",
     hint: "Pass a page from a site yt-dlp supports (`yt-dlp --list-extractors`), a direct media URL (.mp3, .mp4, ...) or a local file.",
   },
+  SOURCE_HOST_BLOCKED: {
+    category: "source",
+    hint: "pi-tube refuses private, loopback and link-local addresses. If you trust this host, run `pi-tube config set network.allow_private_hosts true`.",
+  },
   SOURCE_LIVE_NOT_ENDED: {
     category: "source",
     hint: "Retry once the stream has ended and its recording is available; pi-tube transcribes finished streams only.",

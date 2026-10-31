@@ -14,9 +14,11 @@ import {
   normalizeDirectMediaUrl,
   tryParseHttpUrl,
 } from "../../core/domain/source-policy.ts";
+import type { SourceSettings } from "../../core/domain/source-settings.ts";
 import type { MediaFetcher } from "../../core/ports/media-fetcher.ts";
 import { errnoOf } from "../errno.ts";
 import { type ProcessRequest, type ProcessResult, runProcess } from "../process/run-process.ts";
+import { checkHost, defaultLookup, type LookupHost } from "./host-guard.ts";
 import {
   AUDIO_FORMAT_SELECTOR,
   DOWNLOAD_TEMPLATE,
@@ -37,6 +39,8 @@ export interface MediaFetcherDeps {
   /** Parent of the per-run temp dirs that hold downloaded audio. */
   readonly tmpDir: string;
   readonly run?: (request: ProcessRequest) => Promise<ProcessResult>;
+  /** Host resolution for the SSRF guard; tests pass a fake so no test resolves real DNS. */
+  readonly lookup?: LookupHost;
 }
 
 const METADATA_PURPOSE: Readonly<Record<SiteKind, YtDlpPurpose>> = {
@@ -81,15 +85,20 @@ const resolveLocalFile = async (input: string, cwd: string): Promise<Result<Reso
 /** `MediaFetcher` on yt-dlp, run through the hardened process runner. */
 export const createMediaFetcher = (deps: MediaFetcherDeps): MediaFetcher => {
   const run = deps.run ?? runProcess;
+  const lookupHost = deps.lookup ?? defaultLookup;
 
+  // The only path to yt-dlp: every run passes the host guard first.
   const ytDlp = async (
     args: readonly string[],
     purpose: YtDlpPurpose,
     url: string,
     defaultTimeoutMs: number,
+    settings: SourceSettings,
     options: OperationOptions | undefined,
     isInstagram: boolean,
   ): Promise<Result<string>> => {
+    const allowed = await checkHost(url, settings, lookupHost, purpose);
+    if (!allowed.success) return allowed;
     const timeoutMs = resolveYtDlpTimeoutMs(deps.env, defaultTimeoutMs);
     const result = await run({
       command: "yt-dlp",
@@ -102,7 +111,7 @@ export const createMediaFetcher = (deps: MediaFetcherDeps): MediaFetcher => {
   };
 
   return {
-    resolve: async (rawInput, _settings, options) => {
+    resolve: async (rawInput, settings, options) => {
       const input = rawInput.trim();
       if (input.length === 0) return err(createError("INPUT_INVALID", "Input cannot be empty."));
 
@@ -120,6 +129,7 @@ export const createMediaFetcher = (deps: MediaFetcherDeps): MediaFetcher => {
             METADATA_PURPOSE[classification],
             normalizedUrl,
             METADATA_TIMEOUT_MS,
+            settings,
             options,
             classification === "instagram",
           );
@@ -139,7 +149,7 @@ export const createMediaFetcher = (deps: MediaFetcherDeps): MediaFetcher => {
       }
     },
 
-    fetchAudio: async (source, _settings, options) => {
+    fetchAudio: async (source, settings, options) => {
       if (source.kind === "local_file")
         return ok({ audio: { kind: "file", path: source.absolutePath }, release: async () => {} });
       if (source.kind === "direct_url")
@@ -161,6 +171,7 @@ export const createMediaFetcher = (deps: MediaFetcherDeps): MediaFetcher => {
         "download",
         source.normalizedUrl,
         MEDIA_TIMEOUT_MS,
+        settings,
         options,
         source.kind === "instagram",
       );
@@ -180,7 +191,7 @@ export const createMediaFetcher = (deps: MediaFetcherDeps): MediaFetcher => {
       return ok({ audio: { kind: "file", path: filePath }, release });
     },
 
-    download: async (source, request, _settings, options) => {
+    download: async (source, request, settings, options) => {
       const outputDir = path.resolve(deps.cwd, request.outputDir);
       const created = await makeDir(outputDir);
       if (!created.success) return created;
@@ -208,6 +219,7 @@ export const createMediaFetcher = (deps: MediaFetcherDeps): MediaFetcher => {
         "download",
         source.normalizedUrl,
         MEDIA_TIMEOUT_MS,
+        settings,
         options,
         source.kind === "instagram",
       );

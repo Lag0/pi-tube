@@ -5,6 +5,8 @@ import type { CliIo, CliSystem } from "../../src/adapters/cli/io.ts";
 import { runCli } from "../../src/adapters/cli/run-cli.ts";
 import { type AppOverrides, createApp } from "../../src/bootstrap.ts";
 
+const PUBLIC_LOOKUP = async () => [{ address: "93.184.216.34", family: 4 }];
+
 export interface CliRunOptions {
   /** Merged over a hermetic env (temp HOME and config path); `process.env` is never inherited. */
   readonly env?: Record<string, string | undefined>;
@@ -58,7 +60,8 @@ export const runCliInProcess = async (argv: string[], options: CliRunOptions = {
 
   try {
     const exitCode = await runCli(argv, {
-      app: createApp({ env, cwd: process.cwd(), homedir: () => home }, options.fakes),
+      // No test resolves real DNS: hosts resolve to a public address unless a test passes its own lookup.
+      app: createApp({ env, cwd: process.cwd(), homedir: () => home }, { lookup: PUBLIC_LOOKUP, ...options.fakes }),
       io,
       system,
       ...(signal ? { listenForCancel: () => signal } : {}),
