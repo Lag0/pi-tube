@@ -24,10 +24,18 @@ const BASE_ARGS = ["--ignore-config", "--no-warnings", "--no-playlist"] as const
 
 const malformedOutput = (): PiTubeError => createError("YTDLP_OUTPUT_INVALID", "yt-dlp returned malformed output.");
 
-/** `PI_TUBE_YTDLP_TIMEOUT_MS`, when set to a positive integer, replaces both default timeouts. */
+/** The longest delay `setTimeout` honours (about 24.8 days); a longer one fires at once. */
+const MAX_TIMER_MS = 2_147_483_647;
+
+/**
+ * `PI_TUBE_YTDLP_TIMEOUT_MS`, when set to a positive whole number of milliseconds, replaces both default
+ * timeouts, capped at `MAX_TIMER_MS`. Anything else (`30s`, `1e3`, `0`) keeps the default.
+ */
 export const resolveYtDlpTimeoutMs = (env: Readonly<Record<string, string | undefined>>, fallback: number): number => {
-  const parsed = Number.parseInt(env[YTDLP_TIMEOUT_ENV]?.trim() ?? "", 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+  const raw = env[YTDLP_TIMEOUT_ENV]?.trim() ?? "";
+  if (!/^\d+$/.test(raw)) return fallback;
+  const parsed = Number(raw);
+  return parsed > 0 ? Math.min(parsed, MAX_TIMER_MS) : fallback;
 };
 
 /** Every argv ends in `--` and the URL, so an input that starts with `-` is never read as an option. */

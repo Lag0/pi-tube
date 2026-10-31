@@ -138,6 +138,20 @@ describe("resolve", () => {
     expect(requests[0]?.timeoutMs).toBe(5000);
   });
 
+  test.each([
+    ["30s", 120_000],
+    ["1e3", 120_000],
+    ["0", 120_000],
+    ["-5", 120_000],
+    ["3000000000", 2_147_483_647],
+  ])("PI_TUBE_YTDLP_TIMEOUT_MS=%s gives a %i ms timeout", async (value, expected) => {
+    const { requests, run } = fakeRun(() => exited(JSON.stringify({ url: "https://m.example.com/a" })));
+
+    await fetcherWith(run, { PI_TUBE_YTDLP_TIMEOUT_MS: value }).resolve(YOUTUBE);
+
+    expect(requests[0]?.timeoutMs).toBe(expected);
+  });
+
   test("a local file resolves without yt-dlp", async () => {
     writeFileSync(path.join(root, "clip.mp3"), "x");
     const { requests, run } = fakeRun(() => exited(""));
