@@ -338,7 +338,7 @@ describe("library cache", () => {
     expect(stt.deepgram.requests).toHaveLength(1);
   });
 
-  test("--force transcribes again into <id>-2 and keeps the first", async () => {
+  test("--force transcribes again into <id>-2, keeps the first, and later runs get <id>-2", async () => {
     const { stt, transcribe } = cached({ source: youtube });
 
     const first = await transcribe({ input: YOUTUBE, provider: "groq", format: "markdown" });
@@ -347,7 +347,7 @@ describe("library cache", () => {
 
     if (!first.success || !forced.success || !again.success) throw new Error("transcribe failed");
     expect(forced.data).toMatchObject({ cacheHit: false, transcriptId: `${first.data.transcriptId}-2` });
-    expect(again.data).toMatchObject({ cacheHit: true, transcriptId: first.data.transcriptId });
+    expect(again.data).toMatchObject({ cacheHit: true, transcriptId: `${first.data.transcriptId}-2` });
     expect(stt.groq.requests).toHaveLength(2);
   });
 

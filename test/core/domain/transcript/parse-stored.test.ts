@@ -80,6 +80,16 @@ describe("parseStoredArtifact", () => {
     expect(parsed.success ? parsed.data.transcript.full_text : undefined).toBe("hello world");
   });
 
+  test("a newer 1.x transcript is read with the fields this version knows", () => {
+    const payload = JSON.parse(renderJson(artifactOf(direct)));
+    payload.schema_version = "1.9.0";
+    payload.future_field = { x: 1 };
+
+    const parsed = parseStoredArtifact(JSON.stringify(payload));
+
+    expect(parsed.success ? parsed.data.transcript.full_text : undefined).toBe("hello world");
+  });
+
   test.each([
     ["{", "Stored transcript is not valid JSON."],
     ['{"schema_version":"1.3.0","transcript":{}}', "Stored transcript is missing `transcript.full_text`."],

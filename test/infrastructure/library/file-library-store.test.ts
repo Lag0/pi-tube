@@ -1,9 +1,11 @@
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
+  renameSync,
   rmSync,
   statSync,
   utimesSync,
@@ -142,7 +144,7 @@ describe("save and find", () => {
     expect(readdirSync(dir).filter((name) => name.endsWith(".json") && name !== "source.json")).toHaveLength(1);
   });
 
-  test("a fresh save keeps the first transcript and writes <id>-2", async () => {
+  test("a fresh save keeps the first transcript, writes <id>-2, and the cache serves <id>-2 from then on", async () => {
     const store = createFileLibraryStore({ libraryDir });
     const input = { key: keyOf(), source: youtube(), artifact: artifactOf(youtube()) };
     const first = await store.save(input);
@@ -154,7 +156,70 @@ describe("save and find", () => {
     expect(fresh.success ? fresh.data.transcriptId : undefined).toBe(`${id}-2`);
     expect(fresh.success ? fresh.data.artifact.transcript_id : undefined).toBe(`${id}-2`);
     const found = await store.find(keyOf());
-    expect(found.success ? found.data?.transcriptId : undefined).toBe(id);
+    expect(found.success ? found.data?.transcriptId : undefined).toBe(`${id}-2`);
+    expect(existsSync(path.join(path.dirname(fresh.success ? fresh.data.paths.json : ""), `${id}.json`))).toBe(true);
+  });
+
+  test("a missing Markdown file is written again from the saved JSON", async () => {
+    const store = createFileLibraryStore({ libraryDir });
+    const saved = await store.save({ key: keyOf(), source: youtube(), artifact: artifactOf(youtube()) });
+    if (!saved.success) throw new Error("save failed");
+    rmSync(saved.data.paths.markdown);
+
+    const found = await store.find(keyOf());
+
+    expect(found.success ? found.data?.paths.markdown : undefined).toBe(saved.data.paths.markdown);
+    expect(existsSync(saved.data.paths.markdown)).toBe(true);
+    expect(readFileSync(saved.data.paths.markdown, "utf8")).toContain("Me at the zoo");
+  });
+
+  test("a save leaves no temp files behind", async () => {
+    const store = createFileLibraryStore({ libraryDir });
+    const saved = await store.save({ key: keyOf(), source: youtube(), artifact: artifactOf(youtube()) });
+    if (!saved.success) throw new Error("save failed");
+
+    expect(readdirSync(path.dirname(saved.data.paths.json)).filter((name) => name.endsWith(".tmp"))).toEqual([]);
+  });
+
+  test("a source.json that cannot be written does not lose the transcript", async () => {
+    const store = createFileLibraryStore({ libraryDir });
+    mkdirSync(path.join(libraryDir, sourceDirName("youtube:jNQXAC9IVRw"), "source.json"), { recursive: true });
+
+    const saved = await store.save({ key: keyOf(), source: youtube(), artifact: artifactOf(youtube()) });
+
+    expect(saved.success).toBe(true);
+    expect(saved.success ? existsSync(saved.data.paths.json) && existsSync(saved.data.paths.markdown) : false).toBe(
+      true,
+    );
+  });
+
+  test("a corrupt saved transcript names its file and how to get past it", async () => {
+    const store = createFileLibraryStore({ libraryDir });
+    const saved = await store.save({ key: keyOf(), source: youtube(), artifact: artifactOf(youtube()) });
+    if (!saved.success) throw new Error("save failed");
+    writeFileSync(saved.data.paths.json, "{");
+
+    const found = await store.find(keyOf());
+
+    expect(found.success).toBe(false);
+    if (found.success) return;
+    expect(found.error.code).toBe("STORAGE_IO_FAILED");
+    expect(found.error.message).toContain(saved.data.paths.json);
+    expect(found.error.hint).toContain("--force");
+  });
+
+  test("without hard links the transcript is still published once, never overwritten", async () => {
+    const noLinks = { link: async () => Promise.reject(Object.assign(new Error("EPERM"), { code: "EPERM" })) };
+    const store = createFileLibraryStore({ libraryDir, fs: noLinks });
+    const input = { key: keyOf(), source: youtube(), artifact: artifactOf(youtube()) };
+
+    const first = await store.save(input);
+    const second = await store.save({ ...input, artifact: artifactOf(youtube(), "en", "2027-01-01T00:00:00.000Z") });
+
+    expect(first.success && second.success).toBe(true);
+    if (!first.success || !second.success) return;
+    expect(second.data.transcriptId).toBe(first.data.transcriptId);
+    expect(second.data.artifact.generated_at).toBe("2026-10-31T00:00:00.000Z");
   });
 
   test("source.json keeps no credentials", async () => {
@@ -174,6 +239,19 @@ describe("save and find", () => {
 });
 
 describe("get and entries", () => {
+  test("a stray file at the library root (.DS_Store) does not break get", async () => {
+    const store = createFileLibraryStore({ libraryDir });
+    const saved = await store.save({ key: keyOf(), source: youtube(), artifact: artifactOf(youtube()) });
+    if (!saved.success) throw new Error("save failed");
+    writeFileSync(path.join(libraryDir, ".DS_Store"), "x");
+
+    const found = await store.get(saved.data.transcriptId);
+    const entries = await store.entries();
+
+    expect(found.success ? found.data?.transcriptId : undefined).toBe(saved.data.transcriptId);
+    expect(entries.success ? entries.data.length : 0).toBe(1);
+  });
+
   test("get finds a transcript by id, and an unknown id is undefined", async () => {
     const store = createFileLibraryStore({ libraryDir });
     const saved = await store.save({ key: keyOf(), source: youtube(), artifact: artifactOf(youtube()) });
@@ -426,6 +504,45 @@ describe("audio", () => {
     expect(kept.success).toBe(true);
     expect(audioLeft()).toHaveLength(1);
   });
+
+  test("across file systems (EXDEV) the audio is copied through a temp file and nothing partial is left", async () => {
+    const crossDevice = {
+      rename: async (from: string, to: string) => {
+        if (path.dirname(from) !== path.dirname(to)) throw Object.assign(new Error("EXDEV"), { code: "EXDEV" });
+        renameSync(from, to);
+      },
+    };
+    const store = createFileLibraryStore({ libraryDir, fs: crossDevice });
+    const { dir } = await seedSource(store, "aaaaaaaaaaa");
+    const downloaded = audioFile("a.m4a");
+
+    const kept = await store.keepAudio("youtube:aaaaaaaaaaa", downloaded);
+
+    expect(kept).toEqual({ success: true, data: path.join(dir, "audio.m4a") });
+    expect(readFileSync(path.join(dir, "audio.m4a"), "utf8")).toBe("x".repeat(10));
+    expect(readdirSync(dir).filter((name) => name.endsWith(".tmp"))).toEqual([]);
+    expect(existsSync(downloaded)).toBe(false);
+  });
+
+  test.skipIf(isWindows || process.getuid?.() === 0)(
+    "an eviction that cannot delete old audio does not fail the new keep",
+    async () => {
+      const store = createFileLibraryStore({ libraryDir });
+      const old = await seedSource(store, "aaaaaaaaaaa");
+      const kept = await store.keepAudio("youtube:aaaaaaaaaaa", audioFile("a.m4a"));
+      if (!kept.success) throw new Error("keep failed");
+      age(kept.data, 3);
+      await seedSource(store, "bbbbbbbbbbb");
+      chmodSync(old.dir, 0o500);
+
+      try {
+        const second = await store.keepAudio("youtube:bbbbbbbbbbb", audioFile("b.m4a"), 15);
+        expect(second.success).toBe(true);
+      } finally {
+        chmodSync(old.dir, 0o700);
+      }
+    },
+  );
 
   test("prune without --yes reports and deletes nothing; with it, deletes audio only", async () => {
     const store = createFileLibraryStore({ libraryDir });

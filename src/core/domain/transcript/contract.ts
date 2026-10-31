@@ -3,8 +3,8 @@ import type { LiveStatus, SourceKind, SourceTier } from "../source.ts";
 
 export const OUTPUT_SCHEMA_VERSION = "1.3.0" as const;
 
-/** Schema versions a stored transcript may carry; 1.2.0 lacks the library fields. */
-export type OutputSchemaVersion = typeof OUTPUT_SCHEMA_VERSION | "1.2.0";
+/** Schema versions a stored transcript may carry: any 1.x; 1.2.0 lacks the library fields. */
+export type OutputSchemaVersion = `1.${number}.${number}`;
 
 export interface OutputArtifactChapter {
   title: string;

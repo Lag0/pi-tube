@@ -115,6 +115,8 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 const AUDIO_PREFIX = "audio.";
+/** `audio.<ext>`, not a temp copy in progress. */
+const isAudioName = (name: string): boolean => name.startsWith(AUDIO_PREFIX) && !name.endsWith(".tmp");
 const DAY_MS = 86_400_000;
 const SITE_KINDS: ReadonlySet<string> = new Set(["youtube", "instagram", "site"]);
 
@@ -167,29 +169,72 @@ const pageSourceOf = (saved: Record<string, unknown>): ResolvedSource | undefine
 };
 
 /** Library on files: `<libraryDir>/<source dir>/{source.json, <TranscriptId>.json, <TranscriptId>.md}`. */
+/** File operations the store needs that differ between file systems; tests replace them to simulate one. */
+export interface LibraryFileSystem {
+  readonly link?: (existing: string, target: string) => Promise<void>;
+  readonly rename?: (from: string, to: string) => Promise<void>;
+}
+
 export const createFileLibraryStore = (deps: {
   readonly libraryDir: string;
   readonly now?: () => Date;
+  readonly fs?: LibraryFileSystem;
 }): LibraryStore => {
   const now = deps.now ?? (() => new Date());
+  const linkFile = deps.fs?.link ?? link;
+  const renameFile = deps.fs?.rename ?? rename;
   const dirOf = (sourceKey: SourceKey): string => path.join(deps.libraryDir, sourceDirName(sourceKey));
 
-  const readTranscript = async (file: string): Promise<Result<StoredTranscript | undefined>> => {
+  /**
+   * Reads a saved transcript. With `repair`, a Markdown file that is missing (a crash between the two writes, or a
+   * concurrent save still writing it) is rendered again from the JSON, which is the canonical copy.
+   */
+  const readTranscript = async (file: string, repair = false): Promise<Result<StoredTranscript | undefined>> => {
     let text: string;
     try {
       text = await readFile(file, "utf8");
     } catch (error) {
-      return errnoOf(error) === "ENOENT" ? ok(undefined) : err(ioError("read", file, error));
+      const code = errnoOf(error);
+      return code === "ENOENT" || code === "ENOTDIR" ? ok(undefined) : err(ioError("read", file, error));
     }
     const artifact = parseStoredArtifact(text);
-    if (!artifact.success) return artifact;
+    if (!artifact.success) {
+      return err(
+        createError("STORAGE_IO_FAILED", `${artifact.error.message.replace(/\.$/, "")}: \`${file}\`.`, {
+          hint: `Delete \`${file}\`, or run the command again with \`--force\` to transcribe anew.`,
+        }),
+      );
+    }
     const transcriptId = path.basename(file, ".json");
+    const markdown = path.join(path.dirname(file), `${transcriptId}.md`);
+    if (repair) {
+      const exists = await stat(markdown).then(
+        () => true,
+        () => false,
+      );
+      if (!exists) {
+        const written = await publish(markdown, renderMarkdown(artifact.data));
+        if (!written.success) return written;
+      }
+    }
     return ok({
       transcriptId,
       sourceKey: artifact.data.source.source_key ?? "",
-      paths: { json: file, markdown: path.join(path.dirname(file), `${transcriptId}.md`) },
+      paths: { json: file, markdown },
       artifact: artifact.data,
     });
+  };
+
+  /** The newest copy of a transcript: `<id>-<n>` with the highest n, written by `--force`, else `<id>`. */
+  const newestCopy = async (dir: string, transcriptId: string): Promise<string> => {
+    let best = { copy: 1, file: path.join(dir, `${transcriptId}.json`) };
+    for (const name of await listDir(dir)) {
+      const match = /^(.+?)(?:-(\d+))?\.json$/.exec(name);
+      if (match?.[1] !== transcriptId || match[2] === undefined) continue;
+      const copy = Number(match[2]);
+      if (copy > best.copy) best = { copy, file: path.join(dir, name) };
+    }
+    return best.file;
   };
 
   /** Merges the source description into source.json atomically (temp file + rename), keeping other fields. */
@@ -214,21 +259,31 @@ export const createFileLibraryStore = (deps: {
     }
   };
 
-  /** Publishes `content` at `target` only if nothing is there: a complete temp file, hard-linked in place. */
-  const publish = async (target: string, content: string): Promise<Result<boolean>> => {
+  /**
+   * Publishes `content` at `target` only if nothing is there: a complete temp file, hard-linked in place. On a file
+   * system without hard links (exFAT, FAT, some network shares), an exclusive copy keeps the no-overwrite rule.
+   */
+  async function publish(target: string, content: string): Promise<Result<boolean>> {
     const temp = `${target}.${process.pid}.${randomUUID()}.tmp`;
     try {
       await writeFile(temp, content, { encoding: "utf8", mode: 0o600, flag: "wx" });
-      await link(temp, target);
+      try {
+        await linkFile(temp, target);
+      } catch (error) {
+        if (errnoOf(error) === "EEXIST") return ok(false);
+        await copyFile(temp, target, constants.COPYFILE_EXCL);
+      }
       return ok(true);
     } catch (error) {
       return errnoOf(error) === "EEXIST" ? ok(false) : err(ioError("write", target, error));
     } finally {
       await rm(temp, { force: true }).catch(() => undefined);
     }
-  };
+  }
 
-  const listDir = (dir: string): Promise<string[]> => readdir(dir).catch(() => [] as string[]);
+  function listDir(dir: string): Promise<string[]> {
+    return readdir(dir).catch(() => [] as string[]);
+  }
 
   const filesOf = async (
     dir: string,
@@ -250,9 +305,7 @@ export const createFileLibraryStore = (deps: {
       dirs.map(async (name) => {
         const dir = path.join(deps.libraryDir, name);
         const files = await filesOf(dir);
-        return files
-          .filter((file) => path.basename(file.path).startsWith(AUDIO_PREFIX))
-          .map((file) => ({ dir, ...file }));
+        return files.filter((file) => isAudioName(path.basename(file.path))).map((file) => ({ dir, ...file }));
       }),
     );
     return perDir.flat();
@@ -305,9 +358,9 @@ export const createFileLibraryStore = (deps: {
 
     find: async (key) => {
       const dir = dirOf(key.sourceKey);
-      const exact = await readTranscript(path.join(dir, `${transcriptIdOf(key)}.json`));
+      const exact = await readTranscript(await newestCopy(dir, transcriptIdOf(key)), true);
       if (!exact.success || exact.data || key.language === undefined) return exact;
-      const auto = await readTranscript(path.join(dir, `${transcriptIdOf({ ...key, language: undefined })}.json`));
+      const auto = await readTranscript(await newestCopy(dir, transcriptIdOf({ ...key, language: undefined })), true);
       if (!auto.success) return auto;
       return ok(
         sameLanguage(key.language, auto.data?.artifact.transcription.detected_language) ? auto.data : undefined,
@@ -321,9 +374,6 @@ export const createFileLibraryStore = (deps: {
       } catch (error) {
         return err(ioError("write", dir, error));
       }
-      const sourceWritten = await writeSourceFile(dir, key.sourceKey, source);
-      if (!sourceWritten.success) return sourceWritten;
-
       const baseId = transcriptIdOf(key);
       for (let copy = 1; copy <= MAX_FRESH_COPIES; copy += 1) {
         const transcriptId = copy === 1 ? baseId : `${baseId}-${copy}`;
@@ -333,17 +383,16 @@ export const createFileLibraryStore = (deps: {
         if (!claimed.success) return claimed;
         if (!claimed.data) {
           if (fresh) continue;
-          const existing = await readTranscript(jsonPath);
+          const existing = await readTranscript(jsonPath, true);
           if (!existing.success) return existing;
           if (existing.data) return ok(existing.data);
           continue;
         }
+        // The paid JSON is saved; the Markdown is derived (and repaired on read), and source.json is best-effort,
+        // so neither can lose the transcript.
         const markdownPath = path.join(dir, `${transcriptId}.md`);
-        try {
-          await writeFile(markdownPath, renderMarkdown(stamped), { encoding: "utf8", mode: 0o600 });
-        } catch (error) {
-          return err(ioError("write", markdownPath, error));
-        }
+        await publish(markdownPath, renderMarkdown(stamped));
+        await writeSourceFile(dir, key.sourceKey, source);
         return ok({
           transcriptId,
           sourceKey: key.sourceKey,
@@ -363,7 +412,7 @@ export const createFileLibraryStore = (deps: {
         return errnoOf(error) === "ENOENT" ? ok(undefined) : err(ioError("read", deps.libraryDir, error));
       }
       for (const dir of dirs) {
-        const found = await readTranscript(path.join(deps.libraryDir, dir, `${transcriptId}.json`));
+        const found = await readTranscript(path.join(deps.libraryDir, dir, `${transcriptId}.json`), true);
         if (!found.success || found.data) return found;
       }
       return ok(undefined);
@@ -379,7 +428,7 @@ export const createFileLibraryStore = (deps: {
       }
       const source = isRecord(saved) ? pageSourceOf(saved) : undefined;
       if (!source) return ok(undefined);
-      const audio = (await listDir(dir)).find((name) => name.startsWith(AUDIO_PREFIX));
+      const audio = (await listDir(dir)).find(isAudioName);
       const stored: StoredSource = audio === undefined ? { source } : { source, audioPath: path.join(dir, audio) };
       return ok(stored);
     },
@@ -390,25 +439,32 @@ export const createFileLibraryStore = (deps: {
       try {
         await mkdir(dir, { recursive: true, mode: 0o700 });
         for (const name of await listDir(dir)) {
-          if (name.startsWith(AUDIO_PREFIX) && path.join(dir, name) !== target)
-            await rm(path.join(dir, name), { force: true });
+          if (isAudioName(name) && path.join(dir, name) !== target) await rm(path.join(dir, name), { force: true });
         }
+        // yt-dlp sets the upload date as mtime; the library ages audio from when it was kept. Stamped before the
+        // move, so another run's eviction never sees the new audio as the oldest.
+        const keptAt = now();
+        await utimes(filePath, keptAt, keptAt);
         try {
-          await rename(filePath, target);
+          await renameFile(filePath, target);
         } catch (error) {
           if (errnoOf(error) !== "EXDEV") throw error;
-          await copyFile(filePath, target);
+          // Across file systems: copy next to the target, then rename, so a reader never sees a partial audio file.
+          const temp = `${target}.${randomUUID()}.tmp`;
+          await copyFile(filePath, temp);
+          await utimes(temp, keptAt, keptAt);
+          await renameFile(temp, target);
           await unlink(filePath);
         }
         await chmod(target, 0o600).catch(() => undefined);
-        // yt-dlp sets the upload date as mtime; the library ages audio from when it was kept.
-        const keptAt = now();
-        await utimes(target, keptAt, keptAt);
       } catch (error) {
         return err(ioError("write", target, error));
       }
       if (maxAudioBytes !== undefined) {
-        for (const file of overflow(await audioFiles(), maxAudioBytes, target)) await rm(file.path, { force: true });
+        // Best-effort: audio that cannot be deleted stays, and the new audio is kept either way.
+        for (const file of overflow(await audioFiles(), maxAudioBytes, target)) {
+          await rm(file.path, { force: true }).catch(() => undefined);
+        }
       }
       return ok(target);
     },

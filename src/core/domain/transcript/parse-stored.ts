@@ -22,7 +22,8 @@ const defined = <T extends object>(value: T): T =>
 
 const invalid = (message: string): Result<never> => err(createError("STORAGE_IO_FAILED", message));
 
-const SCHEMA_VERSIONS: ReadonlySet<string> = new Set(["1.2.0", "1.3.0"]);
+/** Any 1.x: a newer minor only adds fields, which this version ignores. */
+const SCHEMA_VERSION = /^1\.\d+\.\d+$/;
 
 const chapterOf = (value: unknown): OutputArtifactChapter | undefined => {
   if (!isRecord(value)) return undefined;
@@ -72,7 +73,7 @@ const sourceOf = (value: Json): OutputArtifactSource =>
   });
 
 /**
- * Reads a transcript the library saved (`renderJson` output, schema 1.2.0 or 1.3.0) back into an artifact;
+ * Reads a transcript the library saved (`renderJson` output, schema 1.x) back into an artifact;
  * `null` fields become absent ones. A file that is not such a transcript is `STORAGE_IO_FAILED`.
  */
 export const parseStoredArtifact = (raw: string): Result<OutputArtifact> => {
@@ -87,7 +88,7 @@ export const parseStoredArtifact = (raw: string): Result<OutputArtifact> => {
   const fullText = text(transcript.full_text);
   if (fullText === undefined) return invalid("Stored transcript is missing `transcript.full_text`.");
   const schemaVersion = text(payload.schema_version);
-  if (schemaVersion === undefined || !SCHEMA_VERSIONS.has(schemaVersion)) {
+  if (schemaVersion === undefined || !SCHEMA_VERSION.test(schemaVersion)) {
     return invalid(`Stored transcript has an unsupported \`schema_version\` (${schemaVersion ?? "none"}).`);
   }
   const source = isRecord(payload.source) ? payload.source : {};
