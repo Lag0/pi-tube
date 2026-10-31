@@ -1,4 +1,4 @@
-import { createClient as createDeepgramClient } from "@deepgram/sdk";
+import { DeepgramClient } from "@deepgram/sdk";
 import { err, ok } from "../../core/domain/result.ts";
 import type { TranscriptionSegment } from "../../core/domain/transcript/types.ts";
 import type { SttProvider } from "../../core/ports/stt-provider.ts";
@@ -8,16 +8,30 @@ import {
   PROVIDER_REQUEST_TIMEOUT_MS,
   runProviderCall,
 } from "./deadline.ts";
-import { invalidResponseError, mapProviderError } from "./http-errors.ts";
+import { invalidResponseError } from "./http-errors.ts";
 
-interface DeepgramSdkResponse {
-  readonly result: unknown;
-  readonly error: { readonly message?: string; readonly status?: number } | null;
+/** What pi-tube sends with every request: a subset of the SDK's request fields. */
+interface DeepgramListenOptions {
+  readonly model: string;
+  readonly smart_format: boolean;
+  readonly language?: string;
+  readonly detect_language?: boolean;
 }
 
+/** SDK 5.x per-request options; `abortSignal` cancels the HTTP request itself. */
+interface DeepgramRequestOptions {
+  readonly abortSignal: AbortSignal;
+  readonly timeoutInSeconds: number;
+  readonly maxRetries: number;
+}
+
+/** The part of `client.listen.v1.media` pi-tube uses. HTTP failures are thrown as `DeepgramError` with `statusCode`. */
 interface DeepgramListenClient {
-  transcribeUrl(source: { url: string }, options?: Record<string, unknown>): Promise<DeepgramSdkResponse>;
-  transcribeFile(source: Buffer, options?: Record<string, unknown>): Promise<DeepgramSdkResponse>;
+  transcribeUrl(
+    request: DeepgramListenOptions & { readonly url: string },
+    options: DeepgramRequestOptions,
+  ): Promise<unknown>;
+  transcribeFile(file: Buffer, request: DeepgramListenOptions, options: DeepgramRequestOptions): Promise<unknown>;
 }
 
 export interface DeepgramProviderOptions {
@@ -106,12 +120,9 @@ function parseDeepgramResponse(payload: unknown): ParsedTranscript | undefined {
   return { transcript, detectedLanguage, segments };
 }
 
-const defaultClient = (apiKey: string): DeepgramListenClient => createDeepgramClient(apiKey).listen.prerecorded;
+const defaultClient = (apiKey: string): DeepgramListenClient => new DeepgramClient({ apiKey }).listen.v1.media;
 
-/**
- * Deepgram Nova, best value. SDK 4.x takes no per-request signal: on cancel or timeout pi-tube stops
- * waiting at once, but the HTTP request finishes in the background.
- */
+/** Deepgram Nova, best value. The SDK honors the signal, the per-request timeout and the retry count. */
 export const createDeepgramProvider = (options: DeepgramProviderOptions = {}): SttProvider => {
   const model = options.model ?? "nova-3";
   const timeoutMs = options.timeoutMs ?? PROVIDER_REQUEST_TIMEOUT_MS;
@@ -126,18 +137,22 @@ export const createDeepgramProvider = (options: DeepgramProviderOptions = {}): S
         request,
         options: operation,
         timeoutMs,
-        call: (audio) => {
-          const listenOptions: Record<string, unknown> = { model, smart_format: true };
-          if (request.language) listenOptions.language = request.language;
-          else listenOptions.detect_language = true;
+        call: (audio, signal) => {
+          const listenOptions: DeepgramListenOptions = request.language
+            ? { model, smart_format: true, language: request.language }
+            : { model, smart_format: true, detect_language: true };
+          const requestOptions: DeepgramRequestOptions = {
+            abortSignal: signal,
+            timeoutInSeconds: timeoutMs / 1000,
+            maxRetries: 2,
+          };
           const client = createClient(request.apiKey);
           return audio.kind === "url"
-            ? client.transcribeUrl({ url: audio.url }, listenOptions)
-            : client.transcribeFile(audio.bytes, listenOptions);
+            ? client.transcribeUrl({ ...listenOptions, url: audio.url }, requestOptions)
+            : client.transcribeFile(audio.bytes, listenOptions, requestOptions);
         },
         interpret: (response) => {
-          if (response.error) return err(mapProviderError("deepgram", response.error));
-          const parsed = parseDeepgramResponse(response.result);
+          const parsed = parseDeepgramResponse(response);
           return parsed ? ok(parsed) : err(invalidResponseError("deepgram"));
         },
       }),

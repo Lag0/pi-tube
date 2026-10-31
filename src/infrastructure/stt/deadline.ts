@@ -19,7 +19,7 @@ export type DeadlineOutcome<T> =
 
 /**
  * Runs `work` with a signal that fires on the caller's abort or on the timeout, and stops waiting when it
- * fires even if `work` ignores the signal (the Deepgram SDK 4.x request then finishes in the background).
+ * fires even if `work` ignores the signal. Every SDK pi-tube uses honors it, so the request is aborted too.
  */
 export const withDeadline = <T>(
   work: (signal: AbortSignal) => Promise<T>,

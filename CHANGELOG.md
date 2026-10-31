@@ -28,6 +28,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Changed
 
 - Dependencies are pinned to exact versions.
+- `@deepgram/sdk` is updated from 4.11.3 to 5.17.0. Cancelling a Deepgram transcription (Ctrl-C, SIGTERM or the 10-minute timeout) now aborts the HTTP request itself, as with Groq and ElevenLabs, instead of letting it finish in the background. Deepgram requests retry twice, like the other providers.
 - yt-dlp child processes no longer inherit stdin.
 - Ctrl-C, SIGTERM or a closed terminal (SIGHUP) during `transcribe` or `download` cancels the operation: yt-dlp and its children are stopped, temporary audio is removed, nothing partial is saved, and pi-tube exits with 130 (`[CANCELLED]`). A second Ctrl-C kills pi-tube at once.
 - **Breaking:** error codes are renamed so the CLI and the upcoming MCP server share them: `CLI_CONTRACT_VIOLATION` → `INPUT_INVALID`, `CLI_NOT_IMPLEMENTED` → `NOT_IMPLEMENTED`, `CLI_UNEXPECTED` → `UNEXPECTED`, and `TRANSCRIPTION_PROVIDER_*` → `PROVIDER_*`. `INTAKE_CLASSIFICATION_FAILED` and `YOUTUBE_URL_INVALID`, which could never be raised, are removed.
