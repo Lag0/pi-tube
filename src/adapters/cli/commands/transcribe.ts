@@ -53,7 +53,7 @@ export const runTranscribe = async (deps: CliDeps, command: TranscribeCommand): 
       timestamps: command.timestamps,
       format: command.json ? "json" : "markdown",
     },
-    { onProgress: (step) => progress.update(step), signal: deps.signal },
+    { onProgress: (step) => progress.update(step), signal: deps.listenForCancel?.() },
   );
   if (!result.success) progress.fail("Failed");
   const output = unwrapOrFail(result);

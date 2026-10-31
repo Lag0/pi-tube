@@ -54,13 +54,14 @@ export const runCliInProcess = async (argv: string[], options: CliRunOptions = {
     ...options.system,
   };
   const env = { HOME: home, PI_TUBE_CONFIG_PATH: path.join(home, "config.json"), ...options.env };
+  const { signal } = options;
 
   try {
     const exitCode = await runCli(argv, {
       app: createApp({ env, cwd: process.cwd(), homedir: () => home }, options.fakes),
       io,
       system,
-      signal: options.signal,
+      ...(signal ? { listenForCancel: () => signal } : {}),
     });
     return { exitCode, stdout: stdout.join(""), stderr: stderr.join(""), systemCalls, stdinRead };
   } finally {

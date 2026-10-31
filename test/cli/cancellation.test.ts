@@ -116,6 +116,31 @@ describe("cancellation", () => {
     },
     30_000,
   );
+
+  test.skipIf(process.platform === "win32")(
+    "SIGTERM still stops a command that cannot be cancelled (auth login --stdin waiting on stdin)",
+    async () => {
+      const child = spawn("bun", ["run", "--bun", "--no-env-file", BIN, "auth", "login", "groq", "--stdin"], {
+        env: { ...process.env, HOME: workDir, PI_TUBE_CONFIG_PATH: path.join(workDir, "config.json") },
+        stdio: ["pipe", "ignore", "ignore"],
+      });
+      const exited = new Promise<NodeJS.Signals | null>((resolve) =>
+        child.on("exit", (_code, signal) => resolve(signal)),
+      );
+      // Stdin stays open, so pi-tube is still waiting on it when the signal arrives.
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      child.kill("SIGTERM");
+      const stopped = await Promise.race([
+        exited,
+        new Promise<string>((resolve) => setTimeout(() => resolve("still running"), 5000)),
+      ]);
+      child.kill("SIGKILL");
+
+      expect(stopped).toBe("SIGTERM");
+      expect(existsSync(path.join(workDir, "config.json"))).toBe(false);
+    },
+    15_000,
+  );
 });
 
 describe("main", () => {

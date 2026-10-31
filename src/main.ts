@@ -10,20 +10,24 @@ import { runInteractiveCommand } from "./infrastructure/interactive-command.ts";
 const CANCEL_SIGNALS: readonly NodeJS.Signals[] = ["SIGINT", "SIGTERM", "SIGHUP"];
 
 /**
- * CLI entry point: binds the real process to `runCli` and returns the exit code. The first Ctrl-C, SIGHUP or
- * SIGTERM cancels the running operation (exit 130, temp files removed); a second one kills the process.
+ * CLI entry point: binds the real process to `runCli` and returns the exit code. During `transcribe` and
+ * `download`, the first Ctrl-C, SIGHUP or SIGTERM cancels the operation (exit 130, temp files removed) and a
+ * second one kills the process; every other command keeps the default signal behavior.
  */
 export const main = async (argv: readonly string[] = process.argv.slice(2)): Promise<number> => {
   const controller = new AbortController();
   const cancel = (): void => controller.abort();
-  for (const signal of CANCEL_SIGNALS) process.once(signal, cancel);
+  const listenForCancel = (): AbortSignal => {
+    for (const signal of CANCEL_SIGNALS) process.once(signal, cancel);
+    return controller.signal;
+  };
 
   try {
     return await runCli(argv, {
       app: createApp({ env: process.env, cwd: process.cwd(), homedir: os.homedir }),
       io: createProcessIo(),
       system: { platform: process.platform, runInteractive: runInteractiveCommand },
-      signal: controller.signal,
+      listenForCancel,
     });
   } catch (caught) {
     const error = toPiTubeError(caught);

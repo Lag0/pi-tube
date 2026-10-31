@@ -25,7 +25,7 @@ export const runDownload = async (deps: CliDeps, command: DownloadCommand): Prom
   const startTime = Date.now();
   const result = await deps.app.downloadMedia(
     { input: command.input, media: command.audio ? "audio" : "video", outputDir: command.output },
-    { onProgress: (step) => progress.update(step), signal: deps.signal },
+    { onProgress: (step) => progress.update(step), signal: deps.listenForCancel?.() },
   );
   if (!result.success) progress.fail("Failed");
   const downloaded = unwrapOrFail(result);
