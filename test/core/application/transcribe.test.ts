@@ -311,6 +311,23 @@ describe("library cache", () => {
     expect(stt.groq.requests).toHaveLength(2);
   });
 
+  test("a detected language name (Groq) is saved as its code, so a later request in that code is a hit", async () => {
+    const { deps } = setup({ env: { GROQ_API_KEY: "gq" } });
+    const groq = createFakeSttProvider("groq", { text: "olá", detectedLanguage: "Portuguese", segments: [] });
+    const media = createFakeMediaFetcher({
+      source: youtube,
+      audio: { kind: "url", url: "https://cdn.example.com/a.m4a" },
+    });
+    const transcribe = createTranscribe({ ...deps, media: media.fetcher, stt: { ...deps.stt, groq } });
+
+    const first = await transcribe({ input: YOUTUBE, provider: "groq", format: "json" });
+    const pt = await transcribe({ input: YOUTUBE, provider: "groq", language: "pt", format: "json" });
+
+    expect(first.success ? first.data.artifact.transcription.detected_language : undefined).toBe("pt");
+    expect(pt.success ? pt.data.cacheHit : undefined).toBe(true);
+    expect(groq.requests).toHaveLength(1);
+  });
+
   test("another provider is a miss", async () => {
     const { stt, transcribe } = cached({ source: youtube });
 

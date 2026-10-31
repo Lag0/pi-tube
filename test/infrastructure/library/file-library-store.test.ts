@@ -105,6 +105,20 @@ describe("save and find", () => {
     expect(pt.success ? pt.data : "error").toBeUndefined();
   });
 
+  test("the language rule compares primary languages, whatever form the provider used", async () => {
+    const store = createFileLibraryStore({ libraryDir });
+    // A transcript saved before normalization, with Groq's language name.
+    await store.save({ key: keyOf(), source: youtube(), artifact: artifactOf(youtube(), "Portuguese") });
+
+    const pt = await store.find(keyOf("pt"));
+    const ptBr = await store.find(keyOf("pt-br"));
+    const en = await store.find(keyOf("en"));
+
+    expect(pt.success ? pt.data?.transcriptId : undefined).toBe(transcriptIdOf(keyOf()));
+    expect(ptBr.success ? ptBr.data?.transcriptId : undefined).toBe(transcriptIdOf(keyOf()));
+    expect(en.success ? en.data : "error").toBeUndefined();
+  });
+
   test("a transcript requested in pt answers pt only", async () => {
     const store = createFileLibraryStore({ libraryDir });
     await store.save({ key: keyOf("pt"), source: youtube(), artifact: artifactOf(youtube(), "pt") });

@@ -70,6 +70,7 @@ export {
   type PiTubeError,
   toPiTubeError,
 } from "./domain/errors.ts";
+export { normalizeLanguageTag, sameLanguage } from "./domain/language.ts";
 export {
   type LibrarySettings,
   matchesName,

@@ -17,6 +17,7 @@ import {
 } from "node:fs/promises";
 import path from "node:path";
 import { createError, type PiTubeError } from "../../core/domain/errors.ts";
+import { sameLanguage } from "../../core/domain/language.ts";
 import {
   keyUrlOf,
   type SourceKey,
@@ -308,7 +309,9 @@ export const createFileLibraryStore = (deps: {
       if (!exact.success || exact.data || key.language === undefined) return exact;
       const auto = await readTranscript(path.join(dir, `${transcriptIdOf({ ...key, language: undefined })}.json`));
       if (!auto.success) return auto;
-      return ok(auto.data?.artifact.transcription.detected_language === key.language ? auto.data : undefined);
+      return ok(
+        sameLanguage(key.language, auto.data?.artifact.transcription.detected_language) ? auto.data : undefined,
+      );
     },
 
     save: async ({ key, source, artifact, fresh = false }) => {

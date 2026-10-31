@@ -1,5 +1,6 @@
 import type { EnvironmentVariables } from "../domain/config.ts";
 import { createError, type PiTubeError } from "../domain/errors.ts";
+import { normalizeLanguageTag } from "../domain/language.ts";
 import { resolveLibrarySettings, sourceKeyFromInput, type TranscriptKey } from "../domain/library.ts";
 import { type ProviderDescriptor, resolveCredential, selectProvider } from "../domain/providers.ts";
 import { err, ok } from "../domain/result.ts";
@@ -215,7 +216,8 @@ export const createTranscribe =
         model: provider.model,
         transcript: transcript.data.text,
         requestedLanguage: language,
-        detectedLanguage: transcript.data.detectedLanguage,
+        // Each provider reports the detected language in its own form; the library stores ISO 639-1.
+        detectedLanguage: normalizeLanguageTag(transcript.data.detectedLanguage),
         segments: [...transcript.data.segments],
       },
       // The library keeps one canonical transcript per key, always with its timed segments.
