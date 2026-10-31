@@ -101,7 +101,7 @@ describe("getConfigValue", () => {
 });
 
 describe("listConfigValues", () => {
-  test("lists exactly the five keys", async () => {
+  test("lists exactly the eight keys", async () => {
     const { listValues } = setup();
 
     const result = await listValues({});
@@ -109,6 +109,9 @@ describe("listConfigValues", () => {
     expect(result.success ? Object.keys(result.data.values) : undefined).toEqual([
       "defaults.provider",
       "defaults.language",
+      "network.allow_private_hosts",
+      "cookies.file",
+      "local_files.max_bytes",
       "providers.deepgram.api_key_env",
       "providers.groq.api_key_env",
       "providers.elevenlabs.api_key_env",

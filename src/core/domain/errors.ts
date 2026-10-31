@@ -32,6 +32,10 @@ export const ERROR_CATALOG = {
     category: "config",
     hint: "Check that your user can read and write the config file and its directory.",
   },
+  COOKIES_FILE_INVALID: {
+    category: "config",
+    hint: "Point `cookies.file` (or PI_TUBE_COOKIES_FILE) at a readable cookies.txt in Netscape format, given as an absolute path.",
+  },
   CANCELLED: {
     category: "cancelled",
     hint: "Run the command again to retry.",

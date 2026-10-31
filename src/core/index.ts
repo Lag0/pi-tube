@@ -22,6 +22,7 @@ export {
 } from "./application/config.ts";
 export {
   createDownloadMedia,
+  type DownloadMediaDeps,
   type DownloadMediaInput,
   type DownloadMediaOutput,
 } from "./application/download-media.ts";
@@ -42,6 +43,7 @@ export {
 } from "./application/transcribe.ts";
 export {
   CONFIG_VERSION,
+  type ConfigScalar,
   configKeysFor,
   DEFAULT_CONFIG,
   type EnvironmentVariables,
@@ -68,6 +70,13 @@ export {
 } from "./domain/providers.ts";
 export { err, type Failure, ok, type Result, type Success } from "./domain/result.ts";
 export type { AudioInput, ResolvedSource } from "./domain/source.ts";
+export {
+  COOKIES_FILE_ENV,
+  DEFAULT_MAX_LOCAL_FILE_BYTES,
+  MAX_LOCAL_FILE_BYTES_LIMIT,
+  resolveSourceSettings,
+  type SourceSettings,
+} from "./domain/source-settings.ts";
 export type { OutputArtifact } from "./domain/transcript/contract.ts";
 export { sourceReferenceOf } from "./domain/transcript/render-markdown.ts";
 export type { ConfigStore } from "./ports/config-store.ts";

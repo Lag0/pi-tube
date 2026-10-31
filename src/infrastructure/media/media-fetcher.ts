@@ -96,7 +96,7 @@ export const createMediaFetcher = (deps: MediaFetcherDeps): MediaFetcher => {
   };
 
   return {
-    resolve: async (rawInput, options) => {
+    resolve: async (rawInput, _settings, options) => {
       const input = rawInput.trim();
       if (input.length === 0) return err(createError("INPUT_INVALID", "Input cannot be empty."));
 
@@ -145,7 +145,7 @@ export const createMediaFetcher = (deps: MediaFetcherDeps): MediaFetcher => {
       }
     },
 
-    fetchAudio: async (source, options) => {
+    fetchAudio: async (source, _settings, options) => {
       if (source.kind === "local_file")
         return ok({ audio: { kind: "file", path: source.absolutePath }, release: async () => {} });
       if (source.kind === "direct_url")
@@ -186,7 +186,7 @@ export const createMediaFetcher = (deps: MediaFetcherDeps): MediaFetcher => {
       return ok({ audio: { kind: "file", path: filePath }, release });
     },
 
-    download: async (target, request, options) => {
+    download: async (target, request, _settings, options) => {
       const outputDir = path.resolve(deps.cwd, request.outputDir);
       const created = await makeDir(outputDir);
       if (!created.success) return created;

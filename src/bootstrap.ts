@@ -86,6 +86,6 @@ export const createApp = (environment: AppEnvironment, overrides: AppOverrides =
       store: createFileTranscriptStore(paths.outputDir),
       now: () => new Date(),
     }),
-    downloadMedia: createDownloadMedia({ media, defaultOutputDir: paths.downloadsDir }),
+    downloadMedia: createDownloadMedia({ configStore, env, media, defaultOutputDir: paths.downloadsDir }),
   };
 };

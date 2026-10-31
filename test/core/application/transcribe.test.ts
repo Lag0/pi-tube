@@ -243,10 +243,43 @@ describe("audio and output", () => {
   });
 });
 
+describe("source settings", () => {
+  test("resolve and fetchAudio receive the settings resolved from config and env", async () => {
+    const { media, transcribe } = setup({
+      env: { GROQ_API_KEY: "gq", PI_TUBE_COOKIES_FILE: "/a/cookies.txt" },
+      config: config({ network: { allow_private_hosts: true }, local_files: { max_bytes: 10 } }),
+    });
+
+    const result = await run(transcribe);
+
+    expect(result.success).toBe(true);
+    const expected = {
+      allowPrivateHosts: true,
+      maxLocalFileBytes: 10,
+      cookies: { file: "/a/cookies.txt", origin: "env" },
+    };
+    expect(media.calls.settings).toEqual([expected, expected]);
+  });
+
+  test("a relative PI_TUBE_COOKIES_FILE fails before the source is resolved", async () => {
+    const { media, transcribe } = setup({ env: { GROQ_API_KEY: "gq", PI_TUBE_COOKIES_FILE: "cookies.txt" } });
+
+    const result = await run(transcribe);
+
+    expect(result.success ? undefined : result.error.code).toBe("COOKIES_FILE_INVALID");
+    expect(media.calls.resolve).toHaveLength(0);
+  });
+});
+
 describe("downloadMedia", () => {
   test("a direct media URL is DOWNLOAD_FAILED and nothing is downloaded", async () => {
     const media = createFakeMediaFetcher();
-    const download = createDownloadMedia({ media: media.fetcher, defaultOutputDir: outputDir });
+    const download = createDownloadMedia({
+      configStore: createInMemoryConfigStore(config()),
+      env: {},
+      media: media.fetcher,
+      defaultOutputDir: outputDir,
+    });
 
     const result = await download({ input: INPUT, media: "audio" });
 
@@ -256,11 +289,31 @@ describe("downloadMedia", () => {
 
   test("without outputDir it downloads into the default directory", async () => {
     const media = createFakeMediaFetcher();
-    const download = createDownloadMedia({ media: media.fetcher, defaultOutputDir: outputDir });
+    const download = createDownloadMedia({
+      configStore: createInMemoryConfigStore(config()),
+      env: {},
+      media: media.fetcher,
+      defaultOutputDir: outputDir,
+    });
 
     const result = await download({ input: "https://www.youtube.com/watch?v=abc", media: "video" });
 
     expect(result.success ? result.data : undefined).toMatchObject({ sourceKind: "youtube", media: "video" });
     expect(media.calls.download[0]?.request.outputDir).toBe(outputDir);
+  });
+
+  test("passes the resolved source settings to the fetcher", async () => {
+    const media = createFakeMediaFetcher();
+    const download = createDownloadMedia({
+      configStore: createInMemoryConfigStore(config({ network: { allow_private_hosts: true } })),
+      env: {},
+      media: media.fetcher,
+      defaultOutputDir: outputDir,
+    });
+
+    const result = await download({ input: "https://www.youtube.com/watch?v=abc", media: "audio" });
+
+    expect(result.success).toBe(true);
+    expect(media.calls.settings).toEqual([{ allowPrivateHosts: true, maxLocalFileBytes: 1073741824 }]);
   });
 });

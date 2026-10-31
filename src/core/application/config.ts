@@ -1,4 +1,10 @@
-import { applyConfigValue, checkConfigKey, configKeysFor, getConfigValue } from "../domain/config.ts";
+import {
+  applyConfigValue,
+  type ConfigScalar,
+  checkConfigKey,
+  configKeysFor,
+  getConfigValue,
+} from "../domain/config.ts";
 import type { ProviderDescriptor } from "../domain/providers.ts";
 import { ok } from "../domain/result.ts";
 import type { ConfigStore } from "../ports/config-store.ts";
@@ -13,21 +19,21 @@ export interface ConfigDeps {
 /** Output of `getConfigValue`. */
 export interface ConfigValue {
   readonly key: string;
-  readonly value?: string;
+  readonly value?: ConfigScalar;
   readonly configLocation: string;
 }
 
 /** Output of `setConfigValue`; `value` is the normalized value that was stored. */
 export interface ConfigValueSet {
   readonly key: string;
-  readonly value: string;
+  readonly value: ConfigScalar;
   readonly configLocation: string;
 }
 
 /** Output of `listConfigValues`: every key from `configKeysFor`, unset ones as `undefined`. */
 export interface ConfigValues {
   readonly configLocation: string;
-  readonly values: Readonly<Record<string, string | undefined>>;
+  readonly values: Readonly<Record<string, ConfigScalar | undefined>>;
 }
 
 /** Reads one config value. */

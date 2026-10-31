@@ -2,6 +2,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, wri
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import type { SourceSettings } from "../../../src/core/domain/source-settings.ts";
 import { createMediaFetcher } from "../../../src/infrastructure/media/media-fetcher.ts";
 import type { ProcessRequest, ProcessResult } from "../../../src/infrastructure/process/run-process.ts";
 
@@ -36,6 +37,8 @@ const fakeRun = (answer: (request: ProcessRequest) => ProcessResult | Promise<Pr
   return { requests, run };
 };
 
+const SETTINGS: SourceSettings = { allowPrivateHosts: false, maxLocalFileBytes: 1_073_741_824 };
+
 const fetcherWith = (run: (request: ProcessRequest) => Promise<ProcessResult>, env: Record<string, string> = {}) =>
   createMediaFetcher({ env: { PATH: "/bin", ...env }, cwd: root, tmpDir, run });
 
@@ -52,7 +55,7 @@ describe("resolve", () => {
       ),
     );
 
-    const result = await fetcherWith(run).resolve(YOUTUBE);
+    const result = await fetcherWith(run).resolve(YOUTUBE, SETTINGS);
 
     expect(result).toEqual({
       success: true,
@@ -76,7 +79,7 @@ describe("resolve", () => {
     const url = "https://www.youtube.com/watch?v=-xyz";
     const { requests, run } = fakeRun(() => exited(JSON.stringify({ url: "https://m.example.com/a" })));
 
-    await fetcherWith(run).resolve(url);
+    await fetcherWith(run).resolve(url, SETTINGS);
 
     expect(requests[0]?.args.slice(-2)).toEqual(["--", url]);
   });
@@ -84,7 +87,7 @@ describe("resolve", () => {
   test.each(["-o/tmp/x", "--exec=calc"])("%s is a missing local file and never reaches yt-dlp", async (input) => {
     const { requests, run } = fakeRun(() => exited(""));
 
-    const result = await fetcherWith(run).resolve(input);
+    const result = await fetcherWith(run).resolve(input, SETTINGS);
 
     expect(result.success ? undefined : result.error.code).toBe("LOCAL_FILE_NOT_FOUND");
     expect(requests).toHaveLength(0);
@@ -93,7 +96,7 @@ describe("resolve", () => {
   test("a missing yt-dlp is YTDLP_NOT_FOUND", async () => {
     const { run } = fakeRun(() => ({ outcome: "not_found", exitCode: null, stdout: "", stderr: "" }));
 
-    const result = await fetcherWith(run).resolve(YOUTUBE);
+    const result = await fetcherWith(run).resolve(YOUTUBE, SETTINGS);
 
     expect(result.success ? undefined : result.error.code).toBe("YTDLP_NOT_FOUND");
   });
@@ -101,7 +104,7 @@ describe("resolve", () => {
   test("an Instagram timeout is INSTAGRAM_EXTRACT_FAILED, not a YouTube code", async () => {
     const { run } = fakeRun(() => ({ outcome: "timed_out", exitCode: null, stdout: "", stderr: "" }));
 
-    const result = await fetcherWith(run).resolve(INSTAGRAM);
+    const result = await fetcherWith(run).resolve(INSTAGRAM, SETTINGS);
 
     expect(result.success ? undefined : result.error.code).toBe("INSTAGRAM_EXTRACT_FAILED");
   });
@@ -109,7 +112,7 @@ describe("resolve", () => {
   test("an Instagram login wall is INSTAGRAM_AUTH_REQUIRED", async () => {
     const { run } = fakeRun(() => exited("", 1, "ERROR: login required"));
 
-    const result = await fetcherWith(run).resolve(INSTAGRAM);
+    const result = await fetcherWith(run).resolve(INSTAGRAM, SETTINGS);
 
     expect(result.success ? undefined : result.error.code).toBe("INSTAGRAM_AUTH_REQUIRED");
   });
@@ -117,7 +120,7 @@ describe("resolve", () => {
   test("an aborted run is CANCELLED", async () => {
     const { run } = fakeRun(() => ({ outcome: "aborted", exitCode: null, stdout: "", stderr: "" }));
 
-    const result = await fetcherWith(run).resolve(YOUTUBE);
+    const result = await fetcherWith(run).resolve(YOUTUBE, SETTINGS);
 
     expect(result.success ? undefined : result.error.code).toBe("CANCELLED");
   });
@@ -125,7 +128,7 @@ describe("resolve", () => {
   test("malformed JSON is YTDLP_OUTPUT_INVALID", async () => {
     const { run } = fakeRun(() => exited("{not json"));
 
-    const result = await fetcherWith(run).resolve(YOUTUBE);
+    const result = await fetcherWith(run).resolve(YOUTUBE, SETTINGS);
 
     expect(result.success ? undefined : result.error.code).toBe("YTDLP_OUTPUT_INVALID");
   });
@@ -133,7 +136,7 @@ describe("resolve", () => {
   test("PI_TUBE_YTDLP_TIMEOUT_MS from the injected env overrides the timeout", async () => {
     const { requests, run } = fakeRun(() => exited(JSON.stringify({ url: "https://m.example.com/a" })));
 
-    await fetcherWith(run, { PI_TUBE_YTDLP_TIMEOUT_MS: "5000" }).resolve(YOUTUBE);
+    await fetcherWith(run, { PI_TUBE_YTDLP_TIMEOUT_MS: "5000" }).resolve(YOUTUBE, SETTINGS);
 
     expect(requests[0]?.timeoutMs).toBe(5000);
   });
@@ -147,7 +150,7 @@ describe("resolve", () => {
   ])("PI_TUBE_YTDLP_TIMEOUT_MS=%s gives a %i ms timeout", async (value, expected) => {
     const { requests, run } = fakeRun(() => exited(JSON.stringify({ url: "https://m.example.com/a" })));
 
-    await fetcherWith(run, { PI_TUBE_YTDLP_TIMEOUT_MS: value }).resolve(YOUTUBE);
+    await fetcherWith(run, { PI_TUBE_YTDLP_TIMEOUT_MS: value }).resolve(YOUTUBE, SETTINGS);
 
     expect(requests[0]?.timeoutMs).toBe(expected);
   });
@@ -156,7 +159,7 @@ describe("resolve", () => {
     writeFileSync(path.join(root, "clip.mp3"), "x");
     const { requests, run } = fakeRun(() => exited(""));
 
-    const result = await fetcherWith(run).resolve("clip.mp3");
+    const result = await fetcherWith(run).resolve("clip.mp3", SETTINGS);
 
     expect(result.success ? result.data : undefined).toMatchObject({
       kind: "local_file",
@@ -183,7 +186,7 @@ describe("fetchAudio", () => {
       return exited(`${file}\n`);
     });
 
-    const result = await fetcherWith(run).fetchAudio(youtubeSource);
+    const result = await fetcherWith(run).fetchAudio(youtubeSource, SETTINGS);
 
     expect(result.success).toBe(true);
     if (!result.success) return;
@@ -202,7 +205,7 @@ describe("fetchAudio", () => {
       return exited("", 1, "ERROR: boom");
     });
 
-    const result = await fetcherWith(run).fetchAudio(youtubeSource);
+    const result = await fetcherWith(run).fetchAudio(youtubeSource, SETTINGS);
 
     expect(result.success ? undefined : result.error.code).toBe("DOWNLOAD_FAILED");
     expect(existsSync(tmpDir) ? readdirSync(tmpDir) : []).toEqual([]);
@@ -218,7 +221,7 @@ describe("fetchAudio", () => {
       extension: "mp3",
     };
 
-    const result = await fetcherWith(run).fetchAudio(source);
+    const result = await fetcherWith(run).fetchAudio(source, SETTINGS);
 
     expect(result.success ? result.data.audio : undefined).toEqual({
       kind: "url",
@@ -233,7 +236,11 @@ describe("download", () => {
     const file = path.join(outputDir, "Demo [abc].mp3");
     const { requests, run } = fakeRun(() => exited(`${file}\n`));
 
-    const result = await fetcherWith(run).download({ url: YOUTUBE, kind: "youtube" }, { media: "audio", outputDir });
+    const result = await fetcherWith(run).download(
+      { url: YOUTUBE, kind: "youtube" },
+      { media: "audio", outputDir },
+      SETTINGS,
+    );
 
     expect(result.success ? result.data.path : undefined).toBe(file);
     expect(result.success ? result.data.uri.startsWith("file://") : undefined).toBe(true);
@@ -249,6 +256,7 @@ describe("download", () => {
     await fetcherWith(run, { GROQ_API_KEY: "k" }).download(
       { url: YOUTUBE, kind: "youtube" },
       { media: "video", outputDir: root },
+      SETTINGS,
     );
 
     expect(requests[0]?.env).toMatchObject({ PATH: "/bin", GROQ_API_KEY: "k" });
@@ -262,6 +270,7 @@ describe("download", () => {
     const result = await fetcherWith(run).download(
       { url: YOUTUBE, kind: "youtube" },
       { media: "video", outputDir: path.join(blocker, "out") },
+      SETTINGS,
     );
 
     expect(result.success ? undefined : result.error.code).toBe("STORAGE_IO_FAILED");
@@ -277,8 +286,8 @@ describe("hardening", () => {
     });
     const fetcher = fetcherWith(run);
 
-    await fetcher.resolve(YOUTUBE);
-    await fetcher.download({ url: YOUTUBE, kind: "youtube" }, { media: "video", outputDir: root });
+    await fetcher.resolve(YOUTUBE, SETTINGS);
+    await fetcher.download({ url: YOUTUBE, kind: "youtube" }, { media: "video", outputDir: root }, SETTINGS);
 
     for (const request of requests) expect(request.args).toContain("--ignore-config");
   });
@@ -292,7 +301,11 @@ describe("hardening", () => {
       return { outcome: "aborted", exitCode: null, stdout: "", stderr: "" };
     });
 
-    const result = await fetcherWith(run).download({ url: YOUTUBE, kind: "youtube" }, { media: "video", outputDir });
+    const result = await fetcherWith(run).download(
+      { url: YOUTUBE, kind: "youtube" },
+      { media: "video", outputDir },
+      SETTINGS,
+    );
 
     expect(result.success ? undefined : result.error.code).toBe("CANCELLED");
     expect(requests[0]?.args).toEqual(expect.arrayContaining(["-P", `home:${outputDir}`]));
@@ -305,12 +318,15 @@ describe("hardening", () => {
     const { requests, run } = fakeRun(() => exited(""));
     const fetcher = createMediaFetcher({ env: { PATH: "/bin" }, cwd: root, tmpDir: path.join(blocker, "tmp"), run });
 
-    const result = await fetcher.fetchAudio({
-      kind: "youtube",
-      originalInput: YOUTUBE,
-      normalizedUrl: YOUTUBE,
-      mediaUrl: "https://media.example.com/a.m4a",
-    });
+    const result = await fetcher.fetchAudio(
+      {
+        kind: "youtube",
+        originalInput: YOUTUBE,
+        normalizedUrl: YOUTUBE,
+        mediaUrl: "https://media.example.com/a.m4a",
+      },
+      SETTINGS,
+    );
 
     expect(result.success ? undefined : result.error.code).toBe("STORAGE_IO_FAILED");
     expect(result.success ? undefined : result.error.hint).not.toContain("--output");
@@ -328,7 +344,11 @@ describe("hardening", () => {
       return exited(`${file}\n`);
     });
 
-    const result = await fetcherWith(run).download({ url: YOUTUBE, kind: "youtube" }, { media: "video", outputDir });
+    const result = await fetcherWith(run).download(
+      { url: YOUTUBE, kind: "youtube" },
+      { media: "video", outputDir },
+      SETTINGS,
+    );
 
     expect(result.success).toBe(true);
     expect(path.dirname(tempOf(requests[0]?.args ?? []))).toBe(outputDir);
@@ -345,12 +365,15 @@ describe("hardening", () => {
         writeFileSync(file, "audio");
         return exited(`${file}\n`);
       });
-      const fetched = await fetcherWith(run).fetchAudio({
-        kind: "youtube",
-        originalInput: YOUTUBE,
-        normalizedUrl: YOUTUBE,
-        mediaUrl: "https://media.example.com/a.m4a",
-      });
+      const fetched = await fetcherWith(run).fetchAudio(
+        {
+          kind: "youtube",
+          originalInput: YOUTUBE,
+          normalizedUrl: YOUTUBE,
+          mediaUrl: "https://media.example.com/a.m4a",
+        },
+        SETTINGS,
+      );
       if (!fetched.success) throw new Error("fetchAudio failed");
       chmodSync(tmpDir, 0o500);
 

@@ -12,6 +12,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Biome for formatting and linting, and a `typecheck` script.
 - CI on Linux, macOS and Windows running typecheck, lint, tests and fixture verification.
 - Provider requests time out after 10 minutes and can be cancelled. yt-dlp runs get 2 minutes for metadata and 30 minutes for downloads (`PI_TUBE_YTDLP_TIMEOUT_MS`, a positive whole number of milliseconds capped at 2147483647, overrides both; other values such as `30s` keep the defaults), stop with their whole process tree, receive `--` before the URL, and see only an allowlisted environment (no provider keys). Transcripts are saved with mode 600 and never overwrite an existing file, and directories pi-tube creates for transcripts, temp audio and downloads are mode 700; an unwritable transcripts directory is caught before the provider is called; a save that fails is `STORAGE_IO_FAILED` (exit 6) instead of `UNEXPECTED`.
+- Source settings in the config, read on every `transcribe` and `download`:
+  - `network.allow_private_hosts` (default `false`): set it to `true` to let pi-tube reach private, loopback and link-local hosts;
+  - `cookies.file`: a cookies.txt (Netscape format) for sites that need a login; `PI_TUBE_COOKIES_FILE` wins over it;
+  - `local_files.max_bytes` (default 1073741824, at most 2147483647): the largest local file pi-tube accepts.
+
+  Cookie paths must be absolute; a relative one fails with `COOKIES_FILE_INVALID` (exit 6). `pi-tube config set` takes `true`/`false` and whole numbers for these keys, and `config get|list --json` print them as JSON booleans and numbers.
 - `pi-tube providers [--json]` lists each provider with `configured`, `key_source` (`env`, `config` or `none`) and the env var name when the key comes from the environment. `auth`, `config` and `providers` accept `--json`.
 
 ### Changed
@@ -28,7 +34,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   | dependency | 3 | `SETUP_COMMAND_FAILED`, `YTDLP_NOT_FOUND`, `YTDLP_OUTPUT_INVALID` |
   | provider | 4 | `PROVIDER_NOT_CONFIGURED`, `PROVIDER_AUTH`, `PROVIDER_RATE_LIMIT`, `PROVIDER_UNAVAILABLE`, `PROVIDER_FAILED`, `PROVIDER_INVALID_RESPONSE` |
   | source | 5 | `UNSUPPORTED_URL_NOT_DIRECT_MEDIA`, `YOUTUBE_EXTRACT_FAILED`, `INSTAGRAM_*`, `LOCAL_FILE_*`, `DOWNLOAD_FAILED` |
-  | config | 6 | `CONFIG_INVALID`, `CONFIG_IO_FAILED`, `STORAGE_IO_FAILED` |
+  | config | 6 | `CONFIG_INVALID`, `CONFIG_IO_FAILED`, `STORAGE_IO_FAILED`, `COOKIES_FILE_INVALID` |
   | cancelled | 130 | `CANCELLED` |
   | unexpected | 1 | `UNEXPECTED` |
 

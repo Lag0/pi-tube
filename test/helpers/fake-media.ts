@@ -3,6 +3,7 @@ import { pathToFileURL } from "node:url";
 import { createError, type PiTubeError } from "../../src/core/domain/errors.ts";
 import { err, ok } from "../../src/core/domain/result.ts";
 import type { AudioInput, ResolvedSource } from "../../src/core/domain/source.ts";
+import type { SourceSettings } from "../../src/core/domain/source-settings.ts";
 import type { DownloadRequest, DownloadTarget, MediaFetcher } from "../../src/core/ports/media-fetcher.ts";
 import { waitForAbort } from "./fake-stt.ts";
 
@@ -22,6 +23,8 @@ export interface FakeMedia {
     readonly resolve: string[];
     readonly fetchAudio: ResolvedSource[];
     readonly download: Array<{ target: DownloadTarget; request: DownloadRequest }>;
+    /** The settings each call received, in call order. */
+    readonly settings: SourceSettings[];
   };
   /** How many times a fetched audio was released. */
   readonly released: () => number;
@@ -39,16 +42,18 @@ const cancelled = (): PiTubeError => createError("CANCELLED", "Operation cancell
 
 /** A `MediaFetcher` that answers from `options` and records its calls; never runs yt-dlp. */
 export const createFakeMediaFetcher = (options: FakeMediaOptions = {}): FakeMedia => {
-  const calls: FakeMedia["calls"] = { resolve: [], fetchAudio: [], download: [] };
+  const calls: FakeMedia["calls"] = { resolve: [], fetchAudio: [], download: [], settings: [] };
   let released = 0;
   const fetcher: MediaFetcher = {
-    resolve: async (input) => {
+    resolve: async (input, settings) => {
       calls.resolve.push(input);
+      calls.settings.push(settings);
       if (options.resolveError) return err(options.resolveError);
       return ok(options.source ?? directSource(input));
     },
-    fetchAudio: async (source, operation) => {
+    fetchAudio: async (source, settings, operation) => {
       calls.fetchAudio.push(source);
+      calls.settings.push(settings);
       if (options.waitForAbort === "fetchAudio") {
         await waitForAbort(operation?.signal);
         return err(cancelled());
@@ -66,8 +71,9 @@ export const createFakeMediaFetcher = (options: FakeMediaOptions = {}): FakeMedi
         },
       });
     },
-    download: async (target, request, operation) => {
+    download: async (target, request, settings, operation) => {
       calls.download.push({ target, request });
+      calls.settings.push(settings);
       if (options.waitForAbort === "download") {
         await waitForAbort(operation?.signal);
         return err(cancelled());

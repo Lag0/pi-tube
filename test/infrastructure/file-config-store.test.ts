@@ -98,6 +98,23 @@ describe("file config store", () => {
     });
   });
 
+  test("writes a source section and keeps the unknown keys inside it", async () => {
+    writeRaw(JSON.stringify({ version: 1, network: { future: 1 } }));
+
+    await createFileConfigStore(configFile).write({ ...SAMPLE, network: { allow_private_hosts: true } });
+
+    expect(JSON.parse(readFileSync(configFile, "utf8")).network).toEqual({ future: 1, allow_private_hosts: true });
+  });
+
+  test("does not add empty source sections to a file that lacks them", async () => {
+    writeRaw(JSON.stringify(SAMPLE));
+
+    await createFileConfigStore(configFile).write({ ...SAMPLE, defaults: { provider: "deepgram" } });
+
+    const written = JSON.parse(readFileSync(configFile, "utf8"));
+    expect(Object.keys(written)).toEqual(["version", "defaults", "providers"]);
+  });
+
   test("removes fields that became undefined", async () => {
     writeRaw(JSON.stringify(SAMPLE));
 
