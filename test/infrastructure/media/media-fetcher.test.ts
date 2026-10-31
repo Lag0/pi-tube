@@ -300,6 +300,24 @@ describe("hardening", () => {
     expect(existsSync(tmpDir) ? readdirSync(tmpDir) : []).toEqual([]);
   });
 
+  test("a temp audio dir that cannot be created is STORAGE_IO_FAILED with a hint that fits transcribe", async () => {
+    const blocker = path.join(root, "file");
+    writeFileSync(blocker, "x");
+    const { requests, run } = fakeRun(() => exited(""));
+    const fetcher = createMediaFetcher({ env: { PATH: "/bin" }, cwd: root, tmpDir: path.join(blocker, "tmp"), run });
+
+    const result = await fetcher.fetchAudio({
+      kind: "youtube",
+      originalInput: YOUTUBE,
+      normalizedUrl: YOUTUBE,
+      mediaUrl: "https://media.example.com/a.m4a",
+    });
+
+    expect(result.success ? undefined : result.error.code).toBe("STORAGE_IO_FAILED");
+    expect(result.success ? undefined : result.error.hint).not.toContain("--output");
+    expect(requests).toHaveLength(0);
+  });
+
   test("download stages its temp files inside the output dir, so the final move never crosses filesystems", async () => {
     const outputDir = path.join(root, "out");
     const tempOf = (args: readonly string[]): string =>

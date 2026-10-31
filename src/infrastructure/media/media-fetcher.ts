@@ -43,12 +43,16 @@ export interface MediaFetcherDeps {
 const removeDir = (dir: string): Promise<void> =>
   rm(dir, { recursive: true, force: true, maxRetries: 3 }).catch(() => undefined);
 
-const makeDir = async (dir: string): Promise<Result<void>> => {
+const TEMP_DIR_HINT =
+  "Check that your user can create and write to this directory; pi-tube keeps temporary audio there.";
+
+/** Without `hint`, the catalog hint applies: it is about the output directory and `--output`. */
+const makeDir = async (dir: string, hint?: string): Promise<Result<void>> => {
   try {
     await mkdir(dir, { recursive: true, mode: 0o700 });
     return ok(undefined);
   } catch (error) {
-    return err(createError("STORAGE_IO_FAILED", `Cannot create directory \`${dir}\` (${errnoOf(error)}).`));
+    return err(createError("STORAGE_IO_FAILED", `Cannot create directory \`${dir}\` (${errnoOf(error)}).`, { hint }));
   }
 };
 
@@ -148,7 +152,7 @@ export const createMediaFetcher = (deps: MediaFetcherDeps): MediaFetcher => {
         return ok({ audio: { kind: "url", url: source.mediaUrl }, release: async () => {} });
 
       const dir = path.join(deps.tmpDir, randomUUID());
-      const created = await makeDir(dir);
+      const created = await makeDir(dir, TEMP_DIR_HINT);
       if (!created.success) return created;
       const stdout = await ytDlp(
         [
