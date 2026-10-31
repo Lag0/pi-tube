@@ -201,7 +201,9 @@ describe("audio and output", () => {
 
     expect(result.success).toBe(true);
     if (!result.success) return;
-    expect(path.basename(result.data.paths.markdown)).toBe(`${result.data.transcriptId}.md`);
+    expect(path.basename(result.data.paths.markdown)).toBe(
+      `2026-10-30-demo-${result.data.transcriptId.slice(0, 8)}.md`,
+    );
     expect(readFileSync(result.data.paths.markdown, "utf8")).toBe(renderMarkdown(result.data.artifact));
     if (process.platform !== "win32") expect(statSync(result.data.paths.markdown).mode & 0o777).toBe(0o600);
   });

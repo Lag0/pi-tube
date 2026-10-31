@@ -62,7 +62,8 @@ export interface LibraryStore {
   find(key: TranscriptKey): Promise<Result<StoredTranscript | undefined>>;
   /**
    * Stamps the transcript id and source key on `artifact`, then writes source.json (merged), `<id>.json` and
-   * `<id>.md`. An existing transcript is returned as is; with `fresh`, the next free `<id>-<n>` is written.
+   * `<date>-<title>-<id8>.md`. An existing transcript is returned as is; with `fresh`, the next free `<id>-<n>` is
+   * written.
    */
   save(input: {
     readonly key: TranscriptKey;

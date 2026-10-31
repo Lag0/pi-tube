@@ -37,6 +37,7 @@ import {
 import { tierOf } from "../../core/domain/source-policy.ts";
 import { toPersistedUrl, withoutCredentials } from "../../core/domain/transcript/build-artifact.ts";
 import type { OutputArtifact } from "../../core/domain/transcript/contract.ts";
+import { markdownFileName } from "../../core/domain/transcript/file-name.ts";
 import { parseStoredArtifact } from "../../core/domain/transcript/parse-stored.ts";
 import { renderJson } from "../../core/domain/transcript/render-json.ts";
 import { renderMarkdown } from "../../core/domain/transcript/render-markdown.ts";
@@ -168,7 +169,10 @@ const pageSourceOf = (saved: Record<string, unknown>): ResolvedSource | undefine
   };
 };
 
-/** Library on files: `<libraryDir>/<source dir>/{source.json, <TranscriptId>.json, <TranscriptId>.md}`. */
+/**
+ * Library on files: `<libraryDir>/<source dir>/{source.json, <TranscriptId>.json, <date>-<title>-<id8>.md}`. The
+ * JSON is the canonical copy; the Markdown name comes from it (`markdownFileName`).
+ */
 /** File operations the store needs that differ between file systems; tests replace them to simulate one. */
 export interface LibraryFileSystem {
   readonly link?: (existing: string, target: string) => Promise<void>;
@@ -206,7 +210,7 @@ export const createFileLibraryStore = (deps: {
       );
     }
     const transcriptId = path.basename(file, ".json");
-    const markdown = path.join(path.dirname(file), `${transcriptId}.md`);
+    const markdown = path.join(path.dirname(file), markdownFileName(artifact.data, transcriptId));
     if (repair) {
       const exists = await stat(markdown).then(
         () => true,
@@ -390,7 +394,7 @@ export const createFileLibraryStore = (deps: {
         }
         // The paid JSON is saved; the Markdown is derived (and repaired on read), and source.json is best-effort,
         // so neither can lose the transcript.
-        const markdownPath = path.join(dir, `${transcriptId}.md`);
+        const markdownPath = path.join(dir, markdownFileName(stamped, transcriptId));
         await publish(markdownPath, renderMarkdown(stamped));
         await writeSourceFile(dir, key.sourceKey, source);
         return ok({

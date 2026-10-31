@@ -98,7 +98,7 @@ describe("library show", () => {
     const payload = JSON.parse((await library(["show", id ?? "", "--json"])).stdout);
 
     expect(payload.transcript_id).toBe(id);
-    expect(payload.markdown_path).toMatch(new RegExp(`${id}\\.md$`));
+    expect(payload.markdown_path).toMatch(new RegExp(`2026-10-31-aula-de-acao-penal-${id?.slice(0, 8)}\\.md$`));
     expect(payload.json_path).toMatch(new RegExp(`${id}\\.json$`));
     expect(payload.transcript.transcript.full_text).toBe("text 0");
   });

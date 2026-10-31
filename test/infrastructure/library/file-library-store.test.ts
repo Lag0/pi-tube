@@ -84,7 +84,14 @@ describe("save and find", () => {
     if (!saved.success) return;
     const dir = path.dirname(saved.data.paths.json);
     expect(readdirSync(dir).sort()).toEqual(
-      [`${saved.data.transcriptId}.json`, `${saved.data.transcriptId}.md`, "source.json"].sort(),
+      [
+        `${saved.data.transcriptId}.json`,
+        `2026-10-31-me-at-the-zoo-${saved.data.transcriptId.slice(0, 8)}.md`,
+        "source.json",
+      ].sort(),
+    );
+    expect(path.basename(saved.data.paths.markdown)).toBe(
+      `2026-10-31-me-at-the-zoo-${saved.data.transcriptId.slice(0, 8)}.md`,
     );
     expect(saved.data.artifact.transcript_id).toBe(saved.data.transcriptId);
     expect(saved.data.artifact.source.source_key).toBe("youtube:jNQXAC9IVRw");

@@ -35,7 +35,7 @@ describe("CLI output contract", () => {
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("[OUTPUT_FILE]");
     expect(result.stdout).toContain("[OUTPUT_FILE_URI]");
-    expect(path.basename(outputPath)).toMatch(/^[0-9a-f]{20}\.md$/);
+    expect(path.basename(outputPath)).toMatch(/^\d{4}-\d{2}-\d{2}-demo-[0-9a-f]{8}\.md$/);
     expect(fileContent).toContain('---\nschema_version: "1.3.0"');
     expect(fileContent).toContain('source_kind: "direct_url"');
     expect(fileContent).toContain('provider: "deepgram"');
