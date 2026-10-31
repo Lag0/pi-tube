@@ -23,10 +23,15 @@ export const runDownload = async (deps: CliDeps, command: DownloadCommand): Prom
 
   const progress = createProgressReporter({ color: command.color, stream: deps.io.progressStream });
   const startTime = Date.now();
-  const result = await deps.app.downloadMedia(
-    { input: command.input, media: command.audio ? "audio" : "video", outputDir: command.output },
-    { onProgress: (step) => progress.update(step), signal: deps.listenForCancel?.() },
-  );
+  const result = await deps.app
+    .downloadMedia(
+      { input: command.input, media: command.audio ? "audio" : "video", outputDir: command.output },
+      { onProgress: (step) => progress.update(step), signal: deps.listenForCancel?.() },
+    )
+    .catch((error: unknown) => {
+      progress.fail("Failed");
+      throw error;
+    });
   if (!result.success) progress.fail("Failed");
   const downloaded = unwrapOrFail(result);
   progress.succeed(downloaded.path, Date.now() - startTime);

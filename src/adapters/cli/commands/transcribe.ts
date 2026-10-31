@@ -45,16 +45,21 @@ export const runTranscribe = async (deps: CliDeps, command: TranscribeCommand): 
 
   const progress = createProgressReporter({ color: command.color, stream: deps.io.progressStream });
   const startTime = Date.now();
-  const result = await deps.app.transcribe(
-    {
-      input: command.input,
-      provider: command.provider,
-      language: command.language,
-      timestamps: command.timestamps,
-      format: command.json ? "json" : "markdown",
-    },
-    { onProgress: (step) => progress.update(step), signal: deps.listenForCancel?.() },
-  );
+  const result = await deps.app
+    .transcribe(
+      {
+        input: command.input,
+        provider: command.provider,
+        language: command.language,
+        timestamps: command.timestamps,
+        format: command.json ? "json" : "markdown",
+      },
+      { onProgress: (step) => progress.update(step), signal: deps.listenForCancel?.() },
+    )
+    .catch((error: unknown) => {
+      progress.fail("Failed");
+      throw error;
+    });
   if (!result.success) progress.fail("Failed");
   const output = unwrapOrFail(result);
   progress.succeed(output.saved.path, Date.now() - startTime);
