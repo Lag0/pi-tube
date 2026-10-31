@@ -342,6 +342,31 @@ describe("live streams", () => {
   });
 });
 
+describe("progress detail", () => {
+  test("a page title reaches the progress line without control characters", async () => {
+    const page = "https://vimeo.com/1";
+    const media = createFakeMediaFetcher({
+      source: {
+        kind: "site",
+        originalInput: page,
+        normalizedUrl: page,
+        metadata: { platform: "Vimeo", title: "Evil\u001b[2J\ntitle" },
+      },
+      audio: { kind: "url", url: "https://cdn.example.com/v.mp3" },
+    });
+    const { deps } = setup({ env: { GROQ_API_KEY: "gq" } });
+    const transcribe = createTranscribe({ ...deps, media: media.fetcher });
+    const details: Array<string | undefined> = [];
+
+    await transcribe(
+      { input: page, timestamps: false, format: "markdown" },
+      { onProgress: (event) => details.push(event.detail) },
+    );
+
+    expect(details).toContain("(Evil [2J title)");
+  });
+});
+
 describe("downloadMedia", () => {
   test("a best-effort site is resolved, then downloaded from the resolved source", async () => {
     const vimeo = "https://vimeo.com/1";

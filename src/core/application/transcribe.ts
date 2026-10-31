@@ -5,6 +5,7 @@ import { err, ok } from "../domain/result.ts";
 import { isSiteSource, type ResolvedSource } from "../domain/source.ts";
 import { ensureFinishedMedia } from "../domain/source-policy.ts";
 import { resolveSourceSettings } from "../domain/source-settings.ts";
+import { toSafeLine } from "../domain/text.ts";
 import { buildOutputArtifact } from "../domain/transcript/build-artifact.ts";
 import type { OutputArtifact } from "../domain/transcript/contract.ts";
 import { transcriptFileName } from "../domain/transcript/file-name.ts";
@@ -57,7 +58,8 @@ const firstNonEmpty = (...values: ReadonlyArray<string | undefined>): string | u
   values.map((value) => value?.trim()).find((value) => value !== undefined && value.length > 0);
 
 const sourceDetail = (source: ResolvedSource): string => {
-  if (isSiteSource(source)) return source.metadata.title ?? source.metadata.platform;
+  // The title comes from the page: the progress line is printed to the terminal.
+  if (isSiteSource(source)) return toSafeLine(source.metadata.title ?? source.metadata.platform);
   return source.kind === "local_file" ? source.kind : "direct url";
 };
 
