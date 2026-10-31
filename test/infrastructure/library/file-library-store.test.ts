@@ -260,7 +260,41 @@ describe("sourceKeyOf", () => {
     expect(withCredentials).toEqual(plain);
   });
 
-  test("a direct URL ignores its query", async () => {
+  test("two Generic pages with the same base name get different keys (yt-dlp gives both the same id)", async () => {
+    const generic = (url: string): ResolvedSource => ({
+      kind: "site",
+      originalInput: url,
+      normalizedUrl: url,
+      metadata: { platform: "Generic", mediaId: "video" },
+    });
+
+    const first = await store().sourceKeyOf(generic("https://a.example/video.php?id=1"));
+    const second = await store().sourceKeyOf(generic("https://a.example/video.php?id=2"));
+
+    expect(first.success ? first.data : "").toMatch(/^url:[0-9a-f]{64}$/);
+    expect(second).not.toEqual(first);
+  });
+
+  test("a direct URL keeps the query that names the media and drops only signature parameters", async () => {
+    const direct = (query: string): ResolvedSource => ({
+      kind: "direct_url",
+      originalInput: `https://cdn.example.com/play.mp3${query}`,
+      normalizedUrl: `https://cdn.example.com/play.mp3${query}`,
+      mediaUrl: `https://cdn.example.com/play.mp3${query}`,
+      extension: "mp3",
+    });
+
+    const episode12 = await store().sourceKeyOf(direct("?episode=12"));
+    const episode13 = await store().sourceKeyOf(direct("?episode=13"));
+    const signedA = await store().sourceKeyOf(direct("?episode=12&X-Amz-Signature=a&X-Amz-Expires=60"));
+    const signedB = await store().sourceKeyOf(direct("?X-Amz-Expires=99&episode=12&X-Amz-Signature=b#t=3"));
+
+    expect(episode13).not.toEqual(episode12);
+    expect(signedA).toEqual(episode12);
+    expect(signedB).toEqual(episode12);
+  });
+
+  test("a direct URL ignores a signature parameter", async () => {
     const direct = (query: string): ResolvedSource => ({
       kind: "direct_url",
       originalInput: `https://cdn.example.com/a.mp3${query}`,

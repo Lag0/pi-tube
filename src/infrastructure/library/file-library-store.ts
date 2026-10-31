@@ -17,7 +17,13 @@ import {
 } from "node:fs/promises";
 import path from "node:path";
 import { createError, type PiTubeError } from "../../core/domain/errors.ts";
-import { type SourceKey, siteSourceKey, type TranscriptKey, transcriptKeyText } from "../../core/domain/library.ts";
+import {
+  keyUrlOf,
+  type SourceKey,
+  siteSourceKey,
+  type TranscriptKey,
+  transcriptKeyText,
+} from "../../core/domain/library.ts";
 import { err, ok, type Result } from "../../core/domain/result.ts";
 import {
   type Chapter,
@@ -284,10 +290,11 @@ export const createFileLibraryStore = (deps: {
     sourceKeyOf: async (source) => {
       if (isSiteSource(source)) {
         const { platform, mediaId, canonicalUrl } = source.metadata;
-        if (mediaId) return ok(siteSourceKey(platform, mediaId));
-        return ok(`url:${sha256(withoutCredentials(canonicalUrl ?? source.normalizedUrl))}`);
+        // yt-dlp's Generic extractor uses the URL's base name as the id, so `video.php?id=1` and `?id=2` would collide.
+        if (mediaId && platform.toLowerCase() !== "generic") return ok(siteSourceKey(platform, mediaId));
+        return ok(`url:${sha256(keyUrlOf(canonicalUrl ?? source.normalizedUrl))}`);
       }
-      if (source.kind === "direct_url") return ok(`url:${sha256(toPersistedUrl(source.normalizedUrl))}`);
+      if (source.kind === "direct_url") return ok(`url:${sha256(keyUrlOf(source.normalizedUrl))}`);
       try {
         return ok(`file:${await hashFile(source.absolutePath)}`);
       } catch (error) {

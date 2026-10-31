@@ -88,3 +88,49 @@ export const matchesName = (entry: NamedEntry, query: string): boolean => {
   const terms = foldForSearch(query).split(/\s+/).filter(Boolean);
   return terms.length > 0 && terms.every((term) => haystack.includes(term));
 };
+
+// Query parameters that sign or expire a URL (S3, GCS, CloudFront, Azure SAS, Akamai and common CDNs): they change
+// on every request without changing the media, so a key ignores them.
+const SIGNATURE_PARAMS: ReadonlySet<string> = new Set([
+  "signature",
+  "expires",
+  "key-pair-id",
+  "policy",
+  "sig",
+  "se",
+  "sp",
+  "sv",
+  "sr",
+  "st",
+  "token",
+  "exp",
+  "hdnts",
+  "hmac",
+]);
+const SIGNATURE_PREFIXES = ["x-amz-", "x-goog-"];
+
+const isSignatureParam = (name: string): boolean => {
+  const lower = name.toLowerCase();
+  return SIGNATURE_PARAMS.has(lower) || SIGNATURE_PREFIXES.some((prefix) => lower.startsWith(prefix));
+};
+
+/**
+ * The form of a URL a source key is hashed from: no credentials, no fragment, no signature parameters, and the
+ * remaining query sorted, so `?a=1&b=2` and `?b=2&a=1` are one source. A string that is not a URL is returned as is.
+ */
+export const keyUrlOf = (input: string): string => {
+  let url: URL;
+  try {
+    url = new URL(input);
+  } catch {
+    return input;
+  }
+  url.username = "";
+  url.password = "";
+  url.hash = "";
+  const kept = [...url.searchParams.entries()]
+    .filter(([name]) => !isSignatureParam(name))
+    .sort(([left], [right]) => left.localeCompare(right));
+  url.search = new URLSearchParams(kept).toString();
+  return url.toString();
+};
