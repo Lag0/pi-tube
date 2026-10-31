@@ -60,6 +60,7 @@ export {
   type PiTubeError,
   toPiTubeError,
 } from "./domain/errors.ts";
+export { type SourceKey, siteSourceKey, sourceKeyFromInput, type TranscriptKey } from "./domain/library.ts";
 export { describeSource, type MediaInfo } from "./domain/media-info.ts";
 export {
   findProvider,
@@ -97,6 +98,7 @@ export { toSafeLine } from "./domain/text.ts";
 export type { OutputArtifact } from "./domain/transcript/contract.ts";
 export { sourceReferenceOf } from "./domain/transcript/render-markdown.ts";
 export type { ConfigStore } from "./ports/config-store.ts";
+export type { LibraryEntry, LibraryStore, StoredTranscript } from "./ports/library-store.ts";
 export type {
   DownloadedMedia,
   DownloadRequest,

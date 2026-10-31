@@ -13,9 +13,16 @@ describe("resolvePiTubePaths", () => {
       home: path.join(FAKE_HOME, ".pi-tube"),
       configFile: path.join(FAKE_HOME, ".pi-tube", "config.json"),
       outputDir: path.join(FAKE_HOME, ".pi-tube"),
+      libraryDir: path.join(FAKE_HOME, ".pi-tube", "library"),
       tmpDir: path.join(FAKE_HOME, ".pi-tube", "tmp"),
       downloadsDir: path.join(FAKE_HOME, ".pi-tube", "downloads"),
     });
+  });
+
+  test("resolves a relative PI_TUBE_LIBRARY_DIR against the cwd", () => {
+    const paths = resolvePiTubePaths({ env: { PI_TUBE_LIBRARY_DIR: "lib" }, cwd: CWD, homedir: () => FAKE_HOME });
+
+    expect(paths.libraryDir).toBe(path.join(CWD, "lib"));
   });
 
   test("prefers HOME over homedir()", () => {
