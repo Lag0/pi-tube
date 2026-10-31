@@ -66,20 +66,31 @@ const makeDir = async (dir: string, hint?: string): Promise<Result<void>> => {
   }
 };
 
-const resolveLocalFile = async (input: string, cwd: string): Promise<Result<ResolvedSource>> => {
+/** `stat` follows symlinks, so the type and size checks apply to the file a link points to. */
+const resolveLocalFile = async (
+  input: string,
+  cwd: string,
+  settings: SourceSettings,
+): Promise<Result<ResolvedSource>> => {
   const absolutePath = path.resolve(cwd, input);
-  const isFile = await stat(absolutePath).then(
-    (stats) => stats.isFile(),
-    () => false,
-  );
-  if (!isFile) return err(createError("LOCAL_FILE_NOT_FOUND", `Local file not found: \`${absolutePath}\`.`));
+  const stats = await stat(absolutePath).catch(() => undefined);
+  if (!stats) return err(createError("LOCAL_FILE_NOT_FOUND", `Local file not found: \`${absolutePath}\`.`));
+  if (!stats.isFile()) return err(createError("LOCAL_FILE_NOT_FOUND", `\`${absolutePath}\` is not a regular file.`));
   const extension = getLocalFileExtension(absolutePath);
   if (!extension) {
     return err(
       createError("LOCAL_FILE_UNSUPPORTED_EXTENSION", `Local file extension is not supported: \`${absolutePath}\`.`),
     );
   }
-  return ok({ kind: "local_file", originalInput: input, absolutePath, extension });
+  if (stats.size > settings.maxLocalFileBytes) {
+    return err(
+      createError(
+        "LOCAL_FILE_TOO_LARGE",
+        `Local file \`${absolutePath}\` is ${stats.size} bytes; the limit is ${settings.maxLocalFileBytes} bytes.`,
+      ),
+    );
+  }
+  return ok({ kind: "local_file", originalInput: input, absolutePath, extension, sizeBytes: stats.size });
 };
 
 /** `MediaFetcher` on yt-dlp, run through the hardened process runner. */
@@ -145,7 +156,7 @@ export const createMediaFetcher = (deps: MediaFetcherDeps): MediaFetcher => {
           return ok({ kind: "direct_url", originalInput: input, normalizedUrl, mediaUrl: normalizedUrl, extension });
         }
         case "local_file":
-          return resolveLocalFile(input, deps.cwd);
+          return resolveLocalFile(input, deps.cwd, settings);
       }
     },
 

@@ -66,6 +66,7 @@ describe("persisted URLs", () => {
       originalInput: "./a.mp3",
       absolutePath: "/tmp/a.mp3",
       extension: "mp3",
+      sizeBytes: 1,
     });
 
     expect(artifact.source).toMatchObject({ original_input: "./a.mp3", absolute_path: "/tmp/a.mp3" });

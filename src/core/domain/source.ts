@@ -57,6 +57,7 @@ export interface LocalFileSource {
   readonly originalInput: string;
   readonly absolutePath: string;
   readonly extension: string;
+  readonly sizeBytes: number;
 }
 
 /** An input after `MediaFetcher.resolve`. */

@@ -78,8 +78,13 @@ describe("ensureFinishedMedia", () => {
       }).success,
     ).toBe(true);
     expect(
-      ensureFinishedMedia({ kind: "local_file", originalInput: "a.mp3", absolutePath: "/a.mp3", extension: "mp3" })
-        .success,
+      ensureFinishedMedia({
+        kind: "local_file",
+        originalInput: "a.mp3",
+        absolutePath: "/a.mp3",
+        extension: "mp3",
+        sizeBytes: 1,
+      }).success,
     ).toBe(true);
   });
 });

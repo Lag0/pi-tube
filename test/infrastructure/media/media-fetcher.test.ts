@@ -1,4 +1,13 @@
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
@@ -245,6 +254,50 @@ describe("resolve", () => {
       );
     },
   );
+
+  test("a local file over local_files.max_bytes is LOCAL_FILE_TOO_LARGE", async () => {
+    writeFileSync(path.join(root, "a.mp3"), "0123456789");
+    const { requests, run } = fakeRun(() => exited(""));
+
+    const result = await fetcherWith(run).resolve("a.mp3", { ...SETTINGS, maxLocalFileBytes: 9 });
+
+    expect(result.success ? undefined : result.error).toMatchObject({
+      code: "LOCAL_FILE_TOO_LARGE",
+      message: `Local file \`${path.join(root, "a.mp3")}\` is 10 bytes; the limit is 9 bytes.`,
+    });
+    expect(requests).toHaveLength(0);
+  });
+
+  test("a local file at the limit resolves with its size", async () => {
+    writeFileSync(path.join(root, "a.mp3"), "0123456789");
+    const { run } = fakeRun(() => exited(""));
+
+    const result = await fetcherWith(run).resolve("a.mp3", { ...SETTINGS, maxLocalFileBytes: 10 });
+
+    expect(result.success ? result.data : undefined).toMatchObject({ kind: "local_file", sizeBytes: 10 });
+  });
+
+  test("a directory named like media is not a regular file", async () => {
+    mkdirSync(path.join(root, "x.mp4"));
+    const { run } = fakeRun(() => exited(""));
+
+    const result = await fetcherWith(run).resolve("x.mp4", SETTINGS);
+
+    expect(result.success ? undefined : result.error).toMatchObject({
+      code: "LOCAL_FILE_NOT_FOUND",
+      message: `\`${path.join(root, "x.mp4")}\` is not a regular file.`,
+    });
+  });
+
+  test.skipIf(process.platform === "win32")("the size limit applies to the target of a symlink", async () => {
+    writeFileSync(path.join(root, "big.mp3"), "0123456789");
+    symlinkSync(path.join(root, "big.mp3"), path.join(root, "link.mp3"));
+    const { run } = fakeRun(() => exited(""));
+
+    const result = await fetcherWith(run).resolve("link.mp3", { ...SETTINGS, maxLocalFileBytes: 9 });
+
+    expect(result.success ? undefined : result.error.code).toBe("LOCAL_FILE_TOO_LARGE");
+  });
 
   test("a local file resolves without yt-dlp", async () => {
     writeFileSync(path.join(root, "clip.mp3"), "x");

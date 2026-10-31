@@ -60,6 +60,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **Breaking:** yt-dlp runs with `--ignore-config`: yt-dlp configuration files (yours, or a `yt-dlp.conf` in the current or output directory) no longer apply to pi-tube's runs, so none can inject options such as `--exec`.
 - **Breaking:** untitled YouTube and Instagram transcripts are named from the page URL instead of the media URL (for example `…-watch.md` and `…-www-instagram-com.md`).
 - **Breaking:** the slug in a transcript file name is capped at 80 characters, so a long title no longer fails the save with `ENAMETOOLONG` after a paid transcription.
+- A local file larger than `local_files.max_bytes` (default 1 GiB) fails with `LOCAL_FILE_TOO_LARGE` (exit 5) before anything is sent to a provider; the check follows symlinks, and a directory with a media extension is reported as not a regular file. pi-tube still reads the whole audio file into memory before uploading it, so the limit also bounds that memory.
+- A failure to read the audio file now names its cause: `LOCAL_FILE_NOT_FOUND` only when the file is missing, `LOCAL_FILE_TOO_LARGE` above the 2 GiB that `readFile` can read, and `STORAGE_IO_FAILED` (with the errno) for anything else. Every read failure, including a file over 2 GiB, used to be `LOCAL_FILE_NOT_FOUND`.
 - **Breaking:** without `HOME` (the Windows default) pi-tube uses the OS home directory for `~/.pi-tube` instead of `./.pi-tube` in the working directory.
 
 ### Security

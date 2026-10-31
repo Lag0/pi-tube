@@ -112,6 +112,10 @@ export const ERROR_CATALOG = {
     category: "source",
     hint: "Check the file path and retry.",
   },
+  LOCAL_FILE_TOO_LARGE: {
+    category: "source",
+    hint: "Raise the limit with `pi-tube config set local_files.max_bytes <bytes>` (at most 2147483647), or use a shorter file.",
+  },
   LOCAL_FILE_UNSUPPORTED_EXTENSION: {
     category: "source",
     hint: "Use an audio or video file (.mp3, .wav, .m4a, .mp4, .mov, ...).",

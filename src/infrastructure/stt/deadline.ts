@@ -7,6 +7,7 @@ import { err, ok, type Result } from "../../core/domain/result.ts";
 import type { AudioInput } from "../../core/domain/source.ts";
 import type { TranscriptionSegment } from "../../core/domain/transcript/types.ts";
 import type { SttRequest, SttTranscript } from "../../core/ports/stt-provider.ts";
+import { errnoOf } from "../errno.ts";
 import { mapProviderError } from "./http-errors.ts";
 
 /** Per-request limit for a cloud transcription call. */
@@ -79,12 +80,29 @@ export type LoadedAudio =
   | { readonly kind: "url"; readonly url: string }
   | { readonly kind: "file"; readonly bytes: Buffer; readonly name: string };
 
+/** The error for an audio file that cannot be read: missing, over the 2 GiB `readFile` limit, or anything else. */
+export const audioReadError = (audioPath: string, error: unknown): PiTubeError => {
+  const code = errnoOf(error);
+  if (code === "ENOENT") return createError("LOCAL_FILE_NOT_FOUND", `Cannot read audio file \`${audioPath}\`.`);
+  if (code === "ERR_FS_FILE_TOO_LARGE") {
+    return createError(
+      "LOCAL_FILE_TOO_LARGE",
+      `Audio file \`${audioPath}\` is larger than 2 GiB, the most pi-tube can read in one request.`,
+      { hint: "Use a shorter recording." },
+    );
+  }
+  return createError("STORAGE_IO_FAILED", `Cannot read audio file \`${audioPath}\` (${code}).`, {
+    hint: "Check that your user can read the file.",
+  });
+};
+
+// The whole file is read into memory: the local file limit (`local_files.max_bytes`) bounds it.
 const loadAudio = async (audio: AudioInput): Promise<Result<LoadedAudio>> => {
   if (audio.kind === "url") return ok(audio);
   try {
     return ok({ kind: "file", bytes: await readFile(audio.path), name: path.basename(audio.path) });
-  } catch {
-    return err(createError("LOCAL_FILE_NOT_FOUND", `Cannot read audio file \`${audio.path}\`.`));
+  } catch (error) {
+    return err(audioReadError(audio.path, error));
   }
 };
 
