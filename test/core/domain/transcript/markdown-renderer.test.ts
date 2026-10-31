@@ -24,7 +24,7 @@ describe("markdown renderer", () => {
     });
     const markdown = renderMarkdown(artifact);
 
-    expect(markdown).toContain('---\nschema_version: "1.1.0"');
+    expect(markdown).toContain('---\nschema_version: "1.2.0"');
     expect(markdown).toContain('generated_at: "2026-03-02T23:30:00.000Z"');
     expect(markdown).toContain('source_kind: "direct_url"');
     expect(markdown).toContain('source_reference: "https://cdn.example.com/audio/demo.wav"');

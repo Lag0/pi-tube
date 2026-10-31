@@ -1,10 +1,23 @@
 import type { ProviderId } from "../providers.ts";
-import type { ResolvedSource } from "../source.ts";
+import type { LiveStatus, SourceKind, SourceTier } from "../source.ts";
 
-export const OUTPUT_SCHEMA_VERSION = "1.1.0" as const;
+export const OUTPUT_SCHEMA_VERSION = "1.2.0" as const;
+
+export interface OutputArtifactChapter {
+  title: string;
+  start_ms: number;
+  end_ms: number;
+}
 
 export interface OutputArtifactSource {
-  kind: ResolvedSource["kind"];
+  kind: SourceKind;
+  tier: SourceTier;
+  platform?: string;
+  media_id?: string;
+  canonical_url?: string;
+  duration_seconds?: number;
+  live_status?: LiveStatus;
+  chapters?: OutputArtifactChapter[];
   original_input: string;
   normalized_url?: string;
   media_url?: string;
@@ -31,6 +44,8 @@ export interface OutputArtifactSegment {
   start_ms: number;
   end_ms: number;
   text: string;
+  /** Index into `source.chapters`; absent before the first chapter or when the source has none. */
+  chapter?: number;
 }
 
 export interface OutputArtifactTranscript {

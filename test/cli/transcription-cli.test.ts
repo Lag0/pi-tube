@@ -139,7 +139,7 @@ describe("CLI transcription", () => {
     expect(payload).toMatchObject({
       format: "json",
       provider: "deepgram",
-      source: { kind: "direct_url", reference: mediaUrl, title: null },
+      source: { kind: "direct_url", reference: mediaUrl, title: null, platform: null, tier: "tested" },
       detected_language: "en",
       characters: "json response".length,
     });
