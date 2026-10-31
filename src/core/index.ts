@@ -93,6 +93,7 @@ export {
   resolveSourceSettings,
   type SourceSettings,
 } from "./domain/source-settings.ts";
+export { toSafeLine } from "./domain/text.ts";
 export type { OutputArtifact } from "./domain/transcript/contract.ts";
 export { sourceReferenceOf } from "./domain/transcript/render-markdown.ts";
 export type { ConfigStore } from "./ports/config-store.ts";

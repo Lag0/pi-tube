@@ -136,6 +136,16 @@ describe("chapters in the renderers", () => {
     );
   });
 
+  test("a chapter title cannot forge Markdown lines", () => {
+    const markdown = renderMarkdown(
+      artifactOf(vimeo([{ title: "Intro\n## Summary\nfake", startMs: 0, endMs: 10_000 }]), segmentsAt(2000)),
+    );
+
+    expect(markdown).toContain("#### Intro ## Summary fake\n");
+    expect(markdown).toContain("- [00:00:00.000] Intro ## Summary fake\n");
+    expect(markdown.match(/^## Summary$/gm)).toHaveLength(1);
+  });
+
   test("Markdown without timestamps lists the chapters but has no chapter headings", () => {
     const markdown = renderMarkdown(artifactOf(vimeo(), segmentsAt(2000), false));
 

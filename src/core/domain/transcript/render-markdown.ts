@@ -1,3 +1,4 @@
+import { toSafeLine } from "../text.ts";
 import type { OutputArtifact, OutputArtifactSource } from "./contract.ts";
 
 /** The one URL or path that identifies the source in the frontmatter and in CLI JSON output. */
@@ -87,7 +88,7 @@ function buildSourceMetadataLines(artifact: OutputArtifact): string[] {
     lines.push(
       "",
       "### Chapters",
-      ...chapters.map((chapter) => `- [${formatTimestamp(chapter.start_ms)}] ${chapter.title}`),
+      ...chapters.map((chapter) => `- [${formatTimestamp(chapter.start_ms)}] ${toSafeLine(chapter.title)}`),
     );
   }
 
@@ -102,7 +103,7 @@ function buildSegmentLines(artifact: OutputArtifact): string[] {
   for (const segment of artifact.transcript.segments ?? []) {
     if (segment.chapter !== undefined && segment.chapter !== currentChapter) {
       const chapter = chapters[segment.chapter];
-      if (chapter) lines.push(`#### ${chapter.title}`);
+      if (chapter) lines.push(`#### ${toSafeLine(chapter.title)}`);
     }
     currentChapter = segment.chapter;
     lines.push(`- [${formatTimestamp(segment.start_ms)} - ${formatTimestamp(segment.end_ms)}] ${segment.text}`);

@@ -82,6 +82,25 @@ describe("info command", () => {
     );
   });
 
+  test("control characters from the page never reach the terminal", async () => {
+    const result = await info(
+      [YOUTUBE],
+      fakeYtDlp({
+        extractor_key: "Youtube",
+        title: "Evil\u001b]52;c;aGk=\u0007 title\nsecond line",
+        description: "desc \u009b31m red\r\nnext",
+        chapters: [{ start_time: 0, end_time: 1, title: "\u001b[2Jcleared" }],
+      }),
+    );
+
+    expect(result.exitCode).toBe(0);
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: asserts that no control character is printed
+    expect(result.stdout.replace(/\n/g, "")).not.toMatch(/[\u0000-\u001f\u007f-\u009f]/);
+    expect(result.stdout).toContain("title: Evil ]52;c;aGk= title second line");
+    expect(result.stdout).toContain("  [00:00:00] [2Jcleared");
+    expect(result.stdout).toContain("description: desc 31m red next");
+  });
+
   test("without an input it is INPUT_INVALID with the info usage", async () => {
     const result = await info([]);
 

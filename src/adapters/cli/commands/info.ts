@@ -1,4 +1,4 @@
-import { createError, type MediaInfo } from "../../../core/index.ts";
+import { createError, type MediaInfo, toSafeLine } from "../../../core/index.ts";
 import { CliFailure, unwrapOrFail } from "../error-output.ts";
 import type { CliDeps } from "../io.ts";
 import { createProgressReporter } from "../progress.ts";
@@ -48,15 +48,16 @@ const clock = (milliseconds: number): string => {
 };
 
 const preview = (description: string): string => {
-  const flat = description.replace(/\r?\n/g, " ");
+  const flat = toSafeLine(description);
   return flat.length > DESCRIPTION_PREVIEW_CHARS ? `${flat.slice(0, DESCRIPTION_PREVIEW_CHARS)}...` : flat;
 };
 
-/** One line per field that is present, in a fixed order. */
+/** One line per field that is present, in a fixed order; text from the page goes through `toSafeLine`. */
 const toMediaInfoLines = (info: MediaInfo): string[] => {
   const metadata = info.metadata;
-  const lines = [`[MEDIA_INFO] kind=${info.kind} tier=${info.tier}${metadata ? ` platform=${metadata.platform}` : ""}`];
-  if (metadata?.title) lines.push(`title: ${metadata.title}`);
+  const platform = metadata ? ` platform=${toSafeLine(metadata.platform)}` : "";
+  const lines = [`[MEDIA_INFO] kind=${info.kind} tier=${info.tier}${platform}`];
+  if (metadata?.title) lines.push(`title: ${toSafeLine(metadata.title)}`);
   if (metadata?.publishedAt) lines.push(`published_at: ${metadata.publishedAt}`);
   if (metadata?.durationSeconds !== undefined) lines.push(`duration_seconds: ${metadata.durationSeconds}`);
   if (metadata?.liveStatus) lines.push(`live_status: ${metadata.liveStatus}`);
@@ -67,7 +68,7 @@ const toMediaInfoLines = (info: MediaInfo): string[] => {
   if (chapters.length > 0) {
     lines.push(
       `chapters: ${chapters.length}`,
-      ...chapters.map((chapter) => `  [${clock(chapter.startMs)}] ${chapter.title}`),
+      ...chapters.map((chapter) => `  [${clock(chapter.startMs)}] ${toSafeLine(chapter.title)}`),
     );
   }
   if (metadata?.description) lines.push(`description: ${preview(metadata.description)}`);
