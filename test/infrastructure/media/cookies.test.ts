@@ -81,6 +81,37 @@ describe("prepareCookies", () => {
     );
   });
 
+  test("an entry without 7 tab-separated fields is refused by line number, without its content", async () => {
+    writeFileSync(userFile, `${HEADER}\n# a comment\n\n.youtube.com TRUE / TRUE 0 SID super-secret\n`);
+
+    const prepared = await prepareCookies(settingsWith(), tmpDir);
+
+    expect(prepared.success ? undefined : prepared.error).toMatchObject({
+      code: "COOKIES_FILE_INVALID",
+      message:
+        "The cookies file set by `cookies.file` has a malformed entry on line 4: each cookie needs 7 tab-separated fields.",
+    });
+    expect(JSON.stringify(prepared)).not.toContain("super-secret");
+    expect(existsSync(tmpDir)).toBe(false);
+  });
+
+  test("#HttpOnly_ lines are entries, and CRLF line ends are fine", async () => {
+    writeFileSync(userFile, `${HEADER}\r\n#HttpOnly_.example.com\tTRUE\t/\tTRUE\t0\tsid\tabc\r\n`);
+
+    const prepared = await prepareCookies(settingsWith(), tmpDir);
+
+    expect(prepared.success).toBe(true);
+    if (prepared.success) await prepared.data.cleanup();
+  });
+
+  test("a malformed #HttpOnly_ entry is refused", async () => {
+    writeFileSync(userFile, `${HEADER}\n#HttpOnly_.example.com TRUE / TRUE 0 sid abc\n`);
+
+    const prepared = await prepareCookies(settingsWith(), tmpDir);
+
+    expect(prepared.success ? undefined : prepared.error.message).toContain("line 2");
+  });
+
   test("a UTF-8 BOM is dropped from the copy", async () => {
     writeFileSync(userFile, `﻿${HEADER}\n`);
 

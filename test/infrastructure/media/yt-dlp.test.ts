@@ -156,6 +156,25 @@ describe("interpretYtDlpRun", () => {
     expect(JSON.stringify(result)).not.toContain("/tmp/x");
   });
 
+  test("cookie values and stdout never reach the message", () => {
+    const result = interpretYtDlpRun(
+      {
+        outcome: "exited",
+        exitCode: 1,
+        stdout: '{"formats":[{"cookies":"SID=stdout-secret"}]}\nnull',
+        stderr: `WARNING: skipping cookie file entry due to invalid length 1: '.youtube.com TRUE / TRUE 0 SID super-secret\\n'\n${BOT}`,
+      },
+      "youtube_metadata",
+      { url: URL_, timeoutMs: 1000, cookies: "config" },
+    );
+
+    expect(result.success ? undefined : result.error.code).toBe("SOURCE_AUTH_REQUIRED");
+    const text = JSON.stringify(result);
+    expect(text).not.toContain("super-secret");
+    expect(text).not.toContain("stdout-secret");
+    expect(text).not.toMatch(/ null\)/);
+  });
+
   test("a geo restriction stays an extraction error", () => {
     const result = interpretYtDlpRun(
       failed("ERROR: [youtube] abc: The uploader has not made this video available in your country"),

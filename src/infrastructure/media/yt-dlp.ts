@@ -80,8 +80,14 @@ export const interpretYtDlpRun = (
       return err(extractionError(purpose, `yt-dlp timed out after ${Math.round(input.timeoutMs / 1000)}s`));
     case "exited": {
       if (result.exitCode === 0) return ok(result.stdout);
+      // Only stderr: on a failed `-J`, stdout holds `null` or a whole JSON with format cookies and signed URLs.
+      // yt-dlp prints each skipped cookie line, value included, on stderr even with --no-warnings: those go too.
       const detail =
-        [result.stderr.trim(), result.stdout.trim()].filter(Boolean).join(" ").trim() || `exit code ${result.exitCode}`;
+        result.stderr
+          .split(/\r?\n/)
+          .filter((line) => line.trim().length > 0 && !line.includes("skipping cookie file entry"))
+          .join("\n")
+          .trim() || `exit code ${result.exitCode}`;
       // The detail names the temporary copy, never the user's file, but it is still left out of the message.
       if (/does not look like a Netscape format cookies file|Cookies file must be Netscape formatted/.test(detail)) {
         const origin = cookiesOriginName(input.cookies ?? "config");

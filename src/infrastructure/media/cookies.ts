@@ -17,6 +17,10 @@ const NETSCAPE_HEADER = /^#( Netscape)? HTTP Cookie File/i;
 
 const NO_COOKIES: PreparedCookies = { args: [], cleanup: async () => {} };
 
+/** A cookie line, as opposed to a blank line or a comment; `#HttpOnly_` marks an entry, not a comment. */
+const isEntry = (line: string): boolean =>
+  line.trim().length > 0 && (!line.startsWith("#") || line.startsWith("#HttpOnly_"));
+
 /** Where the cookies file was set, for messages that must never show its path. */
 export const cookiesOriginName = (origin: "env" | "config"): string =>
   origin === "env" ? COOKIES_FILE_ENV : "cookies.file";
@@ -41,11 +45,23 @@ export const prepareCookies = async (settings: SourceSettings, tmpDir: string): 
       createError("COOKIES_FILE_INVALID", `The cookies file set by \`${name}\` cannot be read (${errnoOf(error)}).`),
     );
   }
-  if (!NETSCAPE_HEADER.test(content.split(/\r?\n/, 1)[0] ?? "")) {
+  const lines = content.split(/\r?\n/);
+  if (!NETSCAPE_HEADER.test(lines[0] ?? "")) {
     return err(
       createError(
         "COOKIES_FILE_INVALID",
         `The cookies file set by \`${name}\` is not in Netscape format: its first line must be \`# Netscape HTTP Cookie File\`.`,
+      ),
+    );
+  }
+
+  // yt-dlp skips a malformed entry and prints it, value included; refusing the file here keeps it out of any output.
+  const malformed = lines.findIndex((line, index) => index > 0 && isEntry(line) && line.split("\t").length !== 7);
+  if (malformed > 0) {
+    return err(
+      createError(
+        "COOKIES_FILE_INVALID",
+        `The cookies file set by \`${name}\` has a malformed entry on line ${malformed + 1}: each cookie needs 7 tab-separated fields.`,
       ),
     );
   }
