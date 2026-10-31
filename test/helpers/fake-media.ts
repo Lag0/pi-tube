@@ -2,9 +2,10 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { createError, type PiTubeError } from "../../src/core/domain/errors.ts";
 import { err, ok } from "../../src/core/domain/result.ts";
-import type { AudioInput, ResolvedSource } from "../../src/core/domain/source.ts";
+import type { AudioInput, ResolvedSource, SiteSource } from "../../src/core/domain/source.ts";
+import { classifyInput } from "../../src/core/domain/source-policy.ts";
 import type { SourceSettings } from "../../src/core/domain/source-settings.ts";
-import type { DownloadRequest, DownloadTarget, MediaFetcher } from "../../src/core/ports/media-fetcher.ts";
+import type { DownloadRequest, MediaFetcher } from "../../src/core/ports/media-fetcher.ts";
 import { waitForAbort } from "./fake-stt.ts";
 
 export interface FakeMediaOptions {
@@ -22,7 +23,7 @@ export interface FakeMedia {
   readonly calls: {
     readonly resolve: string[];
     readonly fetchAudio: ResolvedSource[];
-    readonly download: Array<{ target: DownloadTarget; request: DownloadRequest }>;
+    readonly download: Array<{ source: SiteSource; request: DownloadRequest }>;
     /** The settings each call received, in call order. */
     readonly settings: SourceSettings[];
   };
@@ -30,13 +31,20 @@ export interface FakeMedia {
   readonly released: () => number;
 }
 
-const directSource = (input: string): ResolvedSource => ({
-  kind: "direct_url",
-  originalInput: input,
-  normalizedUrl: input,
-  mediaUrl: input,
-  extension: path.extname(new URL(input).pathname).slice(1) || "mp3",
-});
+/** A page input resolves as that page with no metadata; anything else as a direct media URL. */
+const defaultSource = (input: string): ResolvedSource => {
+  const kind = classifyInput(input);
+  if (kind === "youtube" || kind === "instagram" || kind === "site") {
+    return { kind, originalInput: input, normalizedUrl: input, metadata: { platform: kind } };
+  }
+  return {
+    kind: "direct_url",
+    originalInput: input,
+    normalizedUrl: input,
+    mediaUrl: input,
+    extension: path.extname(new URL(input).pathname).slice(1) || "mp3",
+  };
+};
 
 const cancelled = (): PiTubeError => createError("CANCELLED", "Operation cancelled.");
 
@@ -49,7 +57,7 @@ export const createFakeMediaFetcher = (options: FakeMediaOptions = {}): FakeMedi
       calls.resolve.push(input);
       calls.settings.push(settings);
       if (options.resolveError) return err(options.resolveError);
-      return ok(options.source ?? directSource(input));
+      return ok(options.source ?? defaultSource(input));
     },
     fetchAudio: async (source, settings, operation) => {
       calls.fetchAudio.push(source);
@@ -63,7 +71,7 @@ export const createFakeMediaFetcher = (options: FakeMediaOptions = {}): FakeMedi
         options.audio ??
         (source.kind === "local_file"
           ? { kind: "file", path: source.absolutePath }
-          : { kind: "url", url: source.mediaUrl });
+          : { kind: "url", url: source.kind === "direct_url" ? source.mediaUrl : source.normalizedUrl });
       return ok({
         audio,
         release: async () => {
@@ -71,8 +79,8 @@ export const createFakeMediaFetcher = (options: FakeMediaOptions = {}): FakeMedi
         },
       });
     },
-    download: async (target, request, settings, operation) => {
-      calls.download.push({ target, request });
+    download: async (source, request, settings, operation) => {
+      calls.download.push({ source, request });
       calls.settings.push(settings);
       if (options.waitForAbort === "download") {
         await waitForAbort(operation?.signal);

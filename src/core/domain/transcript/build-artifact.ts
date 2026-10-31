@@ -44,25 +44,20 @@ export function toPersistedUrl(url: string): string {
   }
 }
 
-// The yt-dlp media URL of YouTube and Instagram is signed and expires, so it is never persisted.
+// A page source carries no media URL: the one yt-dlp resolves is signed and expires, so pi-tube never keeps it.
 function mapSource(source: ResolvedSource): OutputArtifactSource {
   switch (source.kind) {
     case "youtube":
-      return {
-        kind: source.kind,
-        original_input: withoutCredentials(source.originalInput),
-        normalized_url: withoutCredentials(source.normalizedUrl),
-        title: source.title,
-        published_at: source.publishedAt,
-        description: source.description,
-        description_links: source.descriptionLinks,
-      };
     case "instagram":
+    case "site":
       return {
         kind: source.kind,
         original_input: withoutCredentials(source.originalInput),
         normalized_url: withoutCredentials(source.normalizedUrl),
-        title: source.title,
+        title: source.metadata.title,
+        published_at: source.metadata.publishedAt,
+        description: source.metadata.description,
+        description_links: source.metadata.descriptionLinks ? [...source.metadata.descriptionLinks] : undefined,
       };
     case "direct_url":
       return {

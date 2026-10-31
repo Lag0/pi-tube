@@ -2,12 +2,20 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, wri
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import type { SiteSource } from "../../../src/core/domain/source.ts";
 import type { SourceSettings } from "../../../src/core/domain/source-settings.ts";
 import { createMediaFetcher } from "../../../src/infrastructure/media/media-fetcher.ts";
 import type { ProcessRequest, ProcessResult } from "../../../src/infrastructure/process/run-process.ts";
 
 const YOUTUBE = "https://www.youtube.com/watch?v=abc";
 const INSTAGRAM = "https://www.instagram.com/reel/abc/";
+const VIMEO = "https://vimeo.com/1";
+const YOUTUBE_SOURCE: SiteSource = {
+  kind: "youtube",
+  originalInput: YOUTUBE,
+  normalizedUrl: YOUTUBE,
+  metadata: { platform: "Youtube" },
+};
 
 let root: string;
 let tmpDir: string;
@@ -47,7 +55,9 @@ describe("resolve", () => {
     const { requests, run } = fakeRun(() =>
       exited(
         JSON.stringify({
-          url: "https://media.example.com/a.m4a",
+          id: "abc",
+          extractor_key: "Youtube",
+          webpage_url: YOUTUBE,
           title: "Demo",
           upload_date: "20260102",
           description: "See https://example.com/x.",
@@ -63,13 +73,19 @@ describe("resolve", () => {
         kind: "youtube",
         originalInput: YOUTUBE,
         normalizedUrl: YOUTUBE,
-        mediaUrl: "https://media.example.com/a.m4a",
-        title: "Demo",
-        publishedAt: "2026-01-02",
-        description: "See https://example.com/x.",
-        descriptionLinks: ["https://example.com/x"],
+        metadata: {
+          platform: "Youtube",
+          mediaId: "abc",
+          canonicalUrl: YOUTUBE,
+          title: "Demo",
+          publishedAt: "2026-01-02",
+          description: "See https://example.com/x.",
+          descriptionLinks: ["https://example.com/x"],
+        },
       },
     });
+    expect(requests[0]?.args).not.toContain("-f");
+    expect(requests[0]?.args).toContain("--ignore-no-formats-error");
     expect(requests[0]?.command).toBe("yt-dlp");
     expect(requests[0]?.args.slice(-2)).toEqual(["--", YOUTUBE]);
     expect(requests[0]?.timeoutMs).toBe(120_000);
@@ -155,6 +171,63 @@ describe("resolve", () => {
     expect(requests[0]?.timeoutMs).toBe(expected);
   });
 
+  test("any other page goes to yt-dlp as a best-effort site", async () => {
+    const { requests, run } = fakeRun(() => exited(JSON.stringify({ id: "1", extractor_key: "Vimeo", title: "V" })));
+
+    const result = await fetcherWith(run).resolve(VIMEO, SETTINGS);
+
+    expect(result.success ? result.data : undefined).toEqual({
+      kind: "site",
+      originalInput: VIMEO,
+      normalizedUrl: VIMEO,
+      metadata: { platform: "Vimeo", mediaId: "1", title: "V" },
+    });
+    expect(requests[0]?.args).toEqual([
+      "--ignore-config",
+      "--no-warnings",
+      "--no-playlist",
+      "--dump-single-json",
+      "--ignore-no-formats-error",
+      "--",
+      VIMEO,
+    ]);
+  });
+
+  test.each([
+    "ERROR: Unsupported URL: https://example.com/page",
+    "ERROR: No suitable extractor found for URL https://example.com/page",
+  ])("%s is SOURCE_UNSUPPORTED", async (stderr) => {
+    const { run } = fakeRun(() => exited("", 1, stderr));
+
+    const result = await fetcherWith(run).resolve("https://example.com/page", SETTINGS);
+
+    expect(result.success ? undefined : result.error.code).toBe("SOURCE_UNSUPPORTED");
+  });
+
+  test("a failed site resolve is SOURCE_EXTRACT_FAILED", async () => {
+    const { run } = fakeRun(() => exited("", 1, "ERROR: [vimeo] 1: boom"));
+
+    const result = await fetcherWith(run).resolve(VIMEO, SETTINGS);
+
+    expect(result.success ? undefined : result.error).toMatchObject({
+      code: "SOURCE_EXTRACT_FAILED",
+      message: "Failed to resolve media via yt-dlp (ERROR: [vimeo] 1: boom).",
+    });
+  });
+
+  test("a playlist is SOURCE_UNSUPPORTED with a single-video hint", async () => {
+    const url = "https://www.youtube.com/playlist?list=PL1";
+    const { run } = fakeRun(() => exited(JSON.stringify({ _type: "playlist", id: "PL1", entries: [] })));
+
+    const result = await fetcherWith(run).resolve(url, SETTINGS);
+
+    expect(result.success ? undefined : result.error).toEqual({
+      code: "SOURCE_UNSUPPORTED",
+      message: `\`${url}\` is a playlist or channel; pi-tube takes one video at a time.`,
+      hint: "Pass the URL of a single video.",
+    });
+  });
+
   test("a local file resolves without yt-dlp", async () => {
     writeFileSync(path.join(root, "clip.mp3"), "x");
     const { requests, run } = fakeRun(() => exited(""));
@@ -170,12 +243,7 @@ describe("resolve", () => {
 });
 
 describe("fetchAudio", () => {
-  const youtubeSource = {
-    kind: "youtube" as const,
-    originalInput: YOUTUBE,
-    normalizedUrl: YOUTUBE,
-    mediaUrl: "https://media.example.com/a.m4a",
-  };
+  const youtubeSource = YOUTUBE_SOURCE;
 
   test("downloads YouTube audio into its own temp dir and release removes it", async () => {
     const { requests, run } = fakeRun((request) => {
@@ -236,11 +304,7 @@ describe("download", () => {
     const file = path.join(outputDir, "Demo [abc].mp3");
     const { requests, run } = fakeRun(() => exited(`${file}\n`));
 
-    const result = await fetcherWith(run).download(
-      { url: YOUTUBE, kind: "youtube" },
-      { media: "audio", outputDir },
-      SETTINGS,
-    );
+    const result = await fetcherWith(run).download(YOUTUBE_SOURCE, { media: "audio", outputDir }, SETTINGS);
 
     expect(result.success ? result.data.path : undefined).toBe(file);
     expect(result.success ? result.data.uri.startsWith("file://") : undefined).toBe(true);
@@ -250,11 +314,27 @@ describe("download", () => {
     expect(requests[0]?.args.slice(-2)).toEqual(["--", YOUTUBE]);
   });
 
+  test("a best-effort site downloads from its normalized URL", async () => {
+    const file = path.join(root, "V [1].mp4");
+    const { requests, run } = fakeRun(() => exited(`${file}\n`));
+    const source: SiteSource = {
+      kind: "site",
+      originalInput: VIMEO,
+      normalizedUrl: VIMEO,
+      metadata: { platform: "Vimeo" },
+    };
+
+    const result = await fetcherWith(run).download(source, { media: "video", outputDir: root }, SETTINGS);
+
+    expect(result.success ? result.data.path : undefined).toBe(file);
+    expect(requests[0]?.args.slice(-2)).toEqual(["--", VIMEO]);
+  });
+
   test("passes the injected env to the runner, which filters it", async () => {
     const { requests, run } = fakeRun(() => exited(`${path.join(root, "a.mp4")}\n`));
 
     await fetcherWith(run, { GROQ_API_KEY: "k" }).download(
-      { url: YOUTUBE, kind: "youtube" },
+      YOUTUBE_SOURCE,
       { media: "video", outputDir: root },
       SETTINGS,
     );
@@ -268,7 +348,7 @@ describe("download", () => {
     const { run } = fakeRun(() => exited(""));
 
     const result = await fetcherWith(run).download(
-      { url: YOUTUBE, kind: "youtube" },
+      YOUTUBE_SOURCE,
       { media: "video", outputDir: path.join(blocker, "out") },
       SETTINGS,
     );
@@ -287,7 +367,7 @@ describe("hardening", () => {
     const fetcher = fetcherWith(run);
 
     await fetcher.resolve(YOUTUBE, SETTINGS);
-    await fetcher.download({ url: YOUTUBE, kind: "youtube" }, { media: "video", outputDir: root }, SETTINGS);
+    await fetcher.download(YOUTUBE_SOURCE, { media: "video", outputDir: root }, SETTINGS);
 
     for (const request of requests) expect(request.args).toContain("--ignore-config");
   });
@@ -301,11 +381,7 @@ describe("hardening", () => {
       return { outcome: "aborted", exitCode: null, stdout: "", stderr: "" };
     });
 
-    const result = await fetcherWith(run).download(
-      { url: YOUTUBE, kind: "youtube" },
-      { media: "video", outputDir },
-      SETTINGS,
-    );
+    const result = await fetcherWith(run).download(YOUTUBE_SOURCE, { media: "video", outputDir }, SETTINGS);
 
     expect(result.success ? undefined : result.error.code).toBe("CANCELLED");
     expect(requests[0]?.args).toEqual(expect.arrayContaining(["-P", `home:${outputDir}`]));
@@ -318,15 +394,7 @@ describe("hardening", () => {
     const { requests, run } = fakeRun(() => exited(""));
     const fetcher = createMediaFetcher({ env: { PATH: "/bin" }, cwd: root, tmpDir: path.join(blocker, "tmp"), run });
 
-    const result = await fetcher.fetchAudio(
-      {
-        kind: "youtube",
-        originalInput: YOUTUBE,
-        normalizedUrl: YOUTUBE,
-        mediaUrl: "https://media.example.com/a.m4a",
-      },
-      SETTINGS,
-    );
+    const result = await fetcher.fetchAudio(YOUTUBE_SOURCE, SETTINGS);
 
     expect(result.success ? undefined : result.error.code).toBe("STORAGE_IO_FAILED");
     expect(result.success ? undefined : result.error.hint).not.toContain("--output");
@@ -344,11 +412,7 @@ describe("hardening", () => {
       return exited(`${file}\n`);
     });
 
-    const result = await fetcherWith(run).download(
-      { url: YOUTUBE, kind: "youtube" },
-      { media: "video", outputDir },
-      SETTINGS,
-    );
+    const result = await fetcherWith(run).download(YOUTUBE_SOURCE, { media: "video", outputDir }, SETTINGS);
 
     expect(result.success).toBe(true);
     expect(path.dirname(tempOf(requests[0]?.args ?? []))).toBe(outputDir);
@@ -365,15 +429,7 @@ describe("hardening", () => {
         writeFileSync(file, "audio");
         return exited(`${file}\n`);
       });
-      const fetched = await fetcherWith(run).fetchAudio(
-        {
-          kind: "youtube",
-          originalInput: YOUTUBE,
-          normalizedUrl: YOUTUBE,
-          mediaUrl: "https://media.example.com/a.m4a",
-        },
-        SETTINGS,
-      );
+      const fetched = await fetcherWith(run).fetchAudio(YOUTUBE_SOURCE, SETTINGS);
       if (!fetched.success) throw new Error("fetchAudio failed");
       chmodSync(tmpDir, 0o500);
 

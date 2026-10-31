@@ -4,6 +4,7 @@ import {
   getLocalFileExtension,
   isDirectMediaUrl,
   normalizeDirectMediaUrl,
+  tierOf,
 } from "../../../src/core/domain/source-policy.ts";
 
 describe("classifyInput", () => {
@@ -12,12 +13,25 @@ describe("classifyInput", () => {
     ["https://youtu.be/abc", "youtube"],
     ["https://www.instagram.com/reel/abc/", "instagram"],
     ["https://cdn.example.com/a.mp3", "direct_url"],
-    ["https://example.com/page", "unsupported_url"],
+    ["https://example.com/page", "site"],
+    ["https://vimeo.com/76979871", "site"],
     ["./clip.mp4", "local_file"],
     ["-o/tmp/x", "local_file"],
     ["--exec=calc", "local_file"],
   ] as const)("%s is %s", (input, kind) => {
     expect(classifyInput(input)).toBe(kind);
+  });
+});
+
+describe("tierOf", () => {
+  test.each([
+    ["youtube", "tested"],
+    ["instagram", "tested"],
+    ["direct_url", "tested"],
+    ["local_file", "tested"],
+    ["site", "best_effort"],
+  ] as const)("%s is %s", (kind, tier) => {
+    expect(tierOf(kind)).toBe(tier);
   });
 });
 

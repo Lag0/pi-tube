@@ -1,4 +1,4 @@
-import type { SourceClassification } from "./source.ts";
+import type { SourceKind, SourceTier } from "./source.ts";
 
 // Pure source rules: no I/O and no node:path, so the domain stays portable.
 
@@ -115,7 +115,8 @@ export function getLocalFileExtension(filePath: string): string | null {
   return isSupportedMediaExtension(extension) ? extension : null;
 }
 
-export function classifyInput(input: string): SourceClassification {
+/** Any http(s) URL that is not YouTube, Instagram or a direct media URL is a `site` for yt-dlp to try. */
+export function classifyInput(input: string): SourceKind {
   if (isYouTubeUrl(input)) {
     return "youtube";
   }
@@ -125,8 +126,11 @@ export function classifyInput(input: string): SourceClassification {
   }
 
   if (isHttpUrl(input)) {
-    return isDirectMediaUrl(input) ? "direct_url" : "unsupported_url";
+    return isDirectMediaUrl(input) ? "direct_url" : "site";
   }
 
   return "local_file";
 }
+
+/** Only `site` is best-effort; the other kinds have contract tests. */
+export const tierOf = (kind: SourceKind): SourceTier => (kind === "site" ? "best_effort" : "tested");

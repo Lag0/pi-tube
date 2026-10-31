@@ -85,13 +85,13 @@ describe("CLI error exits and formatting", () => {
   });
 
   test("returns deterministic intake error code and guidance formatting", () => {
-    const result = runCli(["transcribe", "https://example.com/blog"], { DEEPGRAM_API_KEY: "dg-test-key" });
+    const result = runCli(["transcribe", "./missing-clip.mp3"], { DEEPGRAM_API_KEY: "dg-test-key" });
     const stderr = result.stderr.toString();
     const lines = stderr.trim().split("\n");
 
     expect(result.exitCode).toBe(5);
     expect(lines).toHaveLength(2);
-    expect(lines[0]).toContain("[UNSUPPORTED_URL_NOT_DIRECT_MEDIA]");
+    expect(lines[0]).toContain("[LOCAL_FILE_NOT_FOUND]");
     expect(lines[1]?.startsWith("hint: ")).toBe(true);
   });
 

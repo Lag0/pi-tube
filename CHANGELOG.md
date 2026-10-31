@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Biome for formatting and linting, and a `typecheck` script.
 - CI on Linux, macOS and Windows running typecheck, lint, tests and fixture verification.
 - Provider requests time out after 10 minutes and can be cancelled. yt-dlp runs get 2 minutes for metadata and 30 minutes for downloads (`PI_TUBE_YTDLP_TIMEOUT_MS`, a positive whole number of milliseconds capped at 2147483647, overrides both; other values such as `30s` keep the defaults), stop with their whole process tree, receive `--` before the URL, and see only an allowlisted environment (no provider keys). Transcripts are saved with mode 600 and never overwrite an existing file, and directories pi-tube creates for transcripts, temp audio and downloads are mode 700; an unwritable transcripts directory is caught before the provider is called; a save that fails is `STORAGE_IO_FAILED` (exit 6) instead of `UNEXPECTED`.
+- `transcribe` and `download` accept any page yt-dlp supports. YouTube, Instagram, direct media URLs and local files are the `tested` tier; any other site is `best_effort`.
 - Source settings in the config, read on every `transcribe` and `download`:
   - `network.allow_private_hosts` (default `false`): set it to `true` to let pi-tube reach private, loopback and link-local hosts;
   - `cookies.file`: a cookies.txt (Netscape format) for sites that need a login; `PI_TUBE_COOKIES_FILE` wins over it;
@@ -33,7 +34,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   | usage | 2 | `INPUT_INVALID`, `NOT_IMPLEMENTED`, `PROVIDER_INVALID` |
   | dependency | 3 | `SETUP_COMMAND_FAILED`, `YTDLP_NOT_FOUND`, `YTDLP_OUTPUT_INVALID` |
   | provider | 4 | `PROVIDER_NOT_CONFIGURED`, `PROVIDER_AUTH`, `PROVIDER_RATE_LIMIT`, `PROVIDER_UNAVAILABLE`, `PROVIDER_FAILED`, `PROVIDER_INVALID_RESPONSE` |
-  | source | 5 | `UNSUPPORTED_URL_NOT_DIRECT_MEDIA`, `YOUTUBE_EXTRACT_FAILED`, `INSTAGRAM_*`, `LOCAL_FILE_*`, `DOWNLOAD_FAILED` |
+  | source | 5 | `SOURCE_UNSUPPORTED`, `SOURCE_EXTRACT_FAILED`, `YOUTUBE_EXTRACT_FAILED`, `INSTAGRAM_*`, `LOCAL_FILE_*`, `DOWNLOAD_FAILED` |
   | config | 6 | `CONFIG_INVALID`, `CONFIG_IO_FAILED`, `STORAGE_IO_FAILED`, `COOKIES_FILE_INVALID` |
   | cancelled | 130 | `CANCELLED` |
   | unexpected | 1 | `UNEXPECTED` |
@@ -49,8 +50,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **Breaking:** `transcribe --json` prints the result on stdout as one JSON object (`output_path`, `output_uri`, `format`, `provider`, `source`, `requested_language`, `detected_language`, `summary`, `characters`, `segments`) instead of the `[OUTPUT_FILE]` lines; the saved file is still JSON. The full text stays in the file.
 - **Breaking:** a failed audio download during `transcribe` is `DOWNLOAD_FAILED` (exit 5) instead of `PROVIDER_FAILED`, and an Instagram failure no longer reports a YouTube error code. One table maps provider errors for every provider: 401/403 `PROVIDER_AUTH`, 429 `PROVIDER_RATE_LIMIT`, 408, 5xx or no status `PROVIDER_UNAVAILABLE` (some of these were `PROVIDER_FAILED`), any other 4xx `PROVIDER_FAILED` (Groq and ElevenLabs used to report 400/422 as `PROVIDER_INVALID_RESPONSE`). `YTDLP_NOT_FOUND` now means only that the yt-dlp binary is missing; v2 also used it for any yt-dlp error that said "not found".
 - **Breaking:** `download` saves into `~/.pi-tube/downloads` by default instead of `./downloads` in the current directory; `--output` still picks another directory. `download --json` prints `{"output_path", "output_uri", "source_kind", "media"}`. While a download runs, yt-dlp keeps its partial files in a hidden `.pi-tube-tmp-*` directory inside the output directory, removed when the run ends, so a failed or cancelled download leaves no `.part` files behind (a second Ctrl-C, which kills pi-tube at once, can leave that directory behind).
-- **Breaking:** the `INSTAGRAM_URL_INVALID` code is removed: a non-public Instagram URL is not recognized as Instagram, so it fails as `UNSUPPORTED_URL_NOT_DIRECT_MEDIA` like any other page URL.
+- **Breaking:** the `INSTAGRAM_URL_INVALID` code is removed: a non-public Instagram URL is not recognized as Instagram, so yt-dlp reads it as a best-effort site, like any other page URL.
 - **Breaking:** saved transcripts no longer store signed or expiring media URLs. For YouTube and Instagram, `media_url` is gone (`null` in JSON) and the Markdown `source_reference` is the page URL; for a direct media URL, the query string and fragment are dropped from `original_input`, `normalized_url` and `media_url`.
+- **Breaking:** `UNSUPPORTED_URL_NOT_DIRECT_MEDIA` is replaced by `SOURCE_UNSUPPORTED`, which pi-tube reports only when yt-dlp cannot read the page (or the URL is a playlist or channel). A best-effort site that yt-dlp fails to read is the new `SOURCE_EXTRACT_FAILED`.
+- **Breaking:** `download` takes any page yt-dlp supports and reads its metadata first. Direct media URLs and local files fail with `DOWNLOAD_FAILED`, since they are already files. `download --json` reports `source_kind: "site"` for a best-effort site.
+- Reading metadata no longer asks yt-dlp for a format (`--dump-single-json --ignore-no-formats-error`), so it no longer fails on a video without a usable format URL, and pi-tube no longer reads the media URL of YouTube and Instagram at all.
 - **Breaking:** yt-dlp runs with `--ignore-config`: yt-dlp configuration files (yours, or a `yt-dlp.conf` in the current or output directory) no longer apply to pi-tube's runs, so none can inject options such as `--exec`.
 - **Breaking:** untitled YouTube and Instagram transcripts are named from the page URL instead of the media URL (for example `…-watch.md` and `…-www-instagram-com.md`).
 - **Breaking:** the slug in a transcript file name is capped at 80 characters, so a long title no longer fails the save with `ENAMETOOLONG` after a paid transcription.

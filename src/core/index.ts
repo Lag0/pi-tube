@@ -69,7 +69,21 @@ export {
   resolveCredential,
 } from "./domain/providers.ts";
 export { err, type Failure, ok, type Result, type Success } from "./domain/result.ts";
-export type { AudioInput, ResolvedSource } from "./domain/source.ts";
+export {
+  type AudioInput,
+  type Chapter,
+  type DirectUrlSource,
+  isSiteSource,
+  type LiveStatus,
+  type LocalFileSource,
+  type MediaMetadata,
+  type ResolvedSource,
+  type SiteKind,
+  type SiteSource,
+  type SourceKind,
+  type SourceTier,
+} from "./domain/source.ts";
+export { tierOf } from "./domain/source-policy.ts";
 export {
   COOKIES_FILE_ENV,
   DEFAULT_MAX_LOCAL_FILE_BYTES,
@@ -83,7 +97,6 @@ export type { ConfigStore } from "./ports/config-store.ts";
 export type {
   DownloadedMedia,
   DownloadRequest,
-  DownloadTarget,
   FetchedAudio,
   MediaFetcher,
 } from "./ports/media-fetcher.ts";

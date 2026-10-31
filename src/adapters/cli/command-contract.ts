@@ -37,7 +37,7 @@ const ROOT_HELP_DOCUMENT: HelpDocument = {
       title: "Core",
       rows: [
         { term: `${COMMAND_IDENTITY} transcribe <input>`, description: "Transcribe a URL or local media file." },
-        { term: `${COMMAND_IDENTITY} download <url>`, description: "Download YouTube/Instagram media." },
+        { term: `${COMMAND_IDENTITY} download <url>`, description: "Download media from a page yt-dlp supports." },
       ],
     },
     {
@@ -122,7 +122,7 @@ const TRANSCRIBE_HELP_DOCUMENT: HelpDocument = {
 
 const DOWNLOAD_HELP_DOCUMENT: HelpDocument = {
   title: `${COMMAND_IDENTITY} download`,
-  summary: "Download public YouTube or Instagram media with yt-dlp.",
+  summary: "Download the video or audio of a page yt-dlp supports.",
   usage: [`${COMMAND_IDENTITY} download <url> [--audio] [--output <dir>]`],
   options: [
     { term: "--audio", description: "Download audio only instead of video." },
@@ -134,7 +134,11 @@ const DOWNLOAD_HELP_DOCUMENT: HelpDocument = {
     `${COMMAND_IDENTITY} download "https://youtube.com/watch?v=dQw4w9WgXcQ" --audio`,
     `${COMMAND_IDENTITY} download "https://instagram.com/reel/abc123" --output ./media`,
   ],
-  notes: ["Requires `yt-dlp` on PATH.", "Instagram downloads support public URLs only."],
+  notes: [
+    "Requires `yt-dlp` on PATH.",
+    "YouTube and Instagram are tested; any other site yt-dlp supports is best-effort.",
+    "Direct media URLs and local files are not downloaded: they are already files.",
+  ],
 };
 
 const AUTH_HELP_DOCUMENT: HelpDocument = {

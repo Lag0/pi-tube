@@ -165,8 +165,8 @@ function createProgram(setAction: (action: CliAction) => void): Command {
 
   program
     .command("download")
-    .description("Download YouTube/Instagram media.")
-    .argument("[input]", "YouTube or Instagram URL")
+    .description("Download media from a page yt-dlp supports.")
+    .argument("[input]", "page URL")
     .argument("[extraPositionals...]", "extra URL inputs")
     .option("--audio", "Download audio only.")
     .option("--output <dir>", "Output directory (default: ~/.pi-tube/downloads).")

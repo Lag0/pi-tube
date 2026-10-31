@@ -1,18 +1,10 @@
 import { createError, type PiTubeError } from "../../core/domain/errors.ts";
 import { err, ok, type Result } from "../../core/domain/result.ts";
+import type { Chapter, LiveStatus, MediaMetadata } from "../../core/domain/source.ts";
 import type { ProcessResult } from "../process/run-process.ts";
 
-/** Metadata pi-tube reads from `yt-dlp --dump-single-json`. */
-export interface YtDlpResult {
-  mediaUrl: string;
-  title?: string;
-  publishedAt?: string;
-  description?: string;
-  descriptionLinks?: string[];
-}
-
 /** What a yt-dlp run was for; decides which source error a failure maps to. */
-export type YtDlpPurpose = "youtube_metadata" | "instagram_metadata" | "download";
+export type YtDlpPurpose = "youtube_metadata" | "instagram_metadata" | "site_metadata" | "download";
 
 export const METADATA_TIMEOUT_MS = 120_000;
 export const MEDIA_TIMEOUT_MS = 1_800_000;
@@ -49,7 +41,11 @@ export const parseDownloadedPath = (stdout: string): string | undefined =>
     .filter(Boolean)
     .at(-1);
 
-const extractionError = (purpose: YtDlpPurpose, detail: string): PiTubeError => {
+/** The error a failed run maps to when nothing more specific matched: one code per purpose. */
+export const extractionError = (purpose: YtDlpPurpose, detail: string): PiTubeError => {
+  if (purpose === "site_metadata") {
+    return createError("SOURCE_EXTRACT_FAILED", `Failed to resolve media via yt-dlp (${detail}).`);
+  }
   if (purpose === "youtube_metadata") {
     return createError("YOUTUBE_EXTRACT_FAILED", `Failed to resolve YouTube media via yt-dlp (${detail}).`);
   }
@@ -82,6 +78,9 @@ export const interpretYtDlpRun = (
       if (result.exitCode === 0) return ok(result.stdout);
       const detail =
         [result.stderr.trim(), result.stdout.trim()].filter(Boolean).join(" ").trim() || `exit code ${result.exitCode}`;
+      if (/Unsupported URL|No suitable extractor found/.test(detail)) {
+        return err(createError("SOURCE_UNSUPPORTED", `yt-dlp cannot read \`${input.url}\` (${detail}).`));
+      }
       if (input.isInstagram && isInstagramAuthRequiredFailure(detail)) {
         return err(
           createError("INSTAGRAM_AUTH_REQUIRED", `Instagram URL requires authentication for \`${input.url}\`.`),
@@ -92,16 +91,7 @@ export const interpretYtDlpRun = (
   }
 };
 
-// Parsing below is ported unchanged from the pre-v3 intake (src/intake/tools/yt-dlp.ts).
-
-interface ParsedFormatLike {
-  url?: unknown;
-  protocol?: unknown;
-  ext?: unknown;
-  vcodec?: unknown;
-  acodec?: unknown;
-  format_note?: unknown;
-}
+// Date and link parsing below is ported unchanged from the pre-v3 intake (src/intake/tools/yt-dlp.ts).
 
 function isString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
@@ -171,86 +161,100 @@ function extractDescriptionLinks(description: string | undefined): string[] | un
   return links.length > 0 ? links : undefined;
 }
 
-function isLikelyImage(format: ParsedFormatLike): boolean {
-  const ext = isString(format.ext) ? format.ext.toLowerCase() : "";
-  const note = isString(format.format_note) ? format.format_note.toLowerCase() : "";
-  return (
-    ext === "jpg" || ext === "jpeg" || ext === "png" || ext === "webp" || ext === "gif" || note.includes("storyboard")
-  );
-}
+const LIVE_STATUSES: ReadonlySet<string> = new Set(["not_live", "is_live", "is_upcoming", "was_live", "post_live"]);
 
-function isSupportedProtocol(format: ParsedFormatLike): boolean {
-  const protocol = isString(format.protocol) ? format.protocol.toLowerCase() : "";
-  return protocol !== "mhtml";
-}
+const isLiveStatus = (value: unknown): value is LiveStatus => typeof value === "string" && LIVE_STATUSES.has(value);
 
-function hasUsableMediaUrl(format: ParsedFormatLike): format is ParsedFormatLike & { url: string } {
-  return isString(format.url) && isSupportedProtocol(format) && !isLikelyImage(format);
-}
-
-function isAudioOnly(format: ParsedFormatLike): boolean {
-  const vcodec = isString(format.vcodec) ? format.vcodec.toLowerCase() : "";
-  const acodec = isString(format.acodec) ? format.acodec.toLowerCase() : "";
-  return vcodec === "none" && acodec !== "" && acodec !== "none";
-}
-
-function pickPreferredMediaUrl(parsed: Record<string, unknown>): string | undefined {
-  if (isString(parsed.url)) {
-    return parsed.url;
+const parseLiveStatus = (info: Record<string, unknown>): LiveStatus | undefined => {
+  if (info.live_status !== undefined && info.live_status !== null) {
+    return isLiveStatus(info.live_status) ? info.live_status : undefined;
   }
-
-  const requestedFormats = Array.isArray(parsed.requested_formats)
-    ? (parsed.requested_formats as ParsedFormatLike[])
-    : [];
-  const requestedCandidates = requestedFormats.filter(hasUsableMediaUrl);
-  const requestedAudio = requestedCandidates.find(isAudioOnly);
-  if (requestedAudio?.url) {
-    return requestedAudio.url;
-  }
-  if (requestedCandidates[0]?.url) {
-    return requestedCandidates[0].url;
-  }
-
-  const formats = Array.isArray(parsed.formats) ? (parsed.formats as ParsedFormatLike[]) : [];
-  const formatCandidates = formats.filter(hasUsableMediaUrl);
-  const formatAudio = formatCandidates.find(isAudioOnly);
-  if (formatAudio?.url) {
-    return formatAudio.url;
-  }
-  if (formatCandidates[0]?.url) {
-    return formatCandidates[0].url;
-  }
-
+  if (info.is_live === true) return "is_live";
+  if (info.was_live === true) return "was_live";
   return undefined;
-}
+};
 
-export function parseYtDlpOutput(stdout: string, withMetadata = false): Result<YtDlpResult> {
-  let parsed: Record<string, unknown>;
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
 
+const isFiniteNumber = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
+
+/**
+ * Sorted chapters with every end filled: a missing end takes the next chapter's start, then the duration,
+ * then the chapter's own start. Entries without a numeric start, or that end before they start, are dropped.
+ */
+const parseChapters = (value: unknown, durationSeconds: number | undefined): Chapter[] | undefined => {
+  if (!Array.isArray(value)) return undefined;
+  const entries = value
+    .filter(isRecord)
+    .filter((entry) => isFiniteNumber(entry.start_time) && entry.start_time >= 0)
+    .map((entry) => ({
+      startMs: Math.round((entry.start_time as number) * 1000),
+      endMs: isFiniteNumber(entry.end_time) ? Math.round(entry.end_time * 1000) : undefined,
+      title: isString(entry.title) ? entry.title.trim() : undefined,
+    }))
+    .filter((entry) => entry.endMs === undefined || entry.endMs >= entry.startMs)
+    .sort((left, right) => left.startMs - right.startMs);
+  if (entries.length === 0) return undefined;
+  return entries.map((entry, index) => ({
+    title: entry.title ?? `Chapter ${index + 1}`,
+    startMs: entry.startMs,
+    endMs:
+      entry.endMs ??
+      entries[index + 1]?.startMs ??
+      (durationSeconds === undefined ? entry.startMs : durationSeconds * 1000),
+  }));
+};
+
+const isHttpUrlString = (value: unknown): value is string => {
+  if (!isString(value)) return false;
   try {
-    parsed = JSON.parse(stdout) as Record<string, unknown>;
+    const { protocol } = new URL(value);
+    return protocol === "http:" || protocol === "https:";
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Reads the metadata pi-tube keeps from `yt-dlp --dump-single-json`. No format or media URL is needed, so a page
+ * without downloadable formats still resolves. A playlist or channel is `SOURCE_UNSUPPORTED`, named by `url`.
+ */
+export const parseYtDlpInfo = (stdout: string, url: string): Result<MediaMetadata> => {
+  let info: unknown;
+  try {
+    info = JSON.parse(stdout);
   } catch {
     return err(malformedOutput());
   }
-
-  const mediaUrl = pickPreferredMediaUrl(parsed);
-
-  if (!mediaUrl) {
-    return err(malformedOutput());
+  if (!isRecord(info)) return err(malformedOutput());
+  if (info._type === "playlist") {
+    return err(
+      createError("SOURCE_UNSUPPORTED", `\`${url}\` is a playlist or channel; pi-tube takes one video at a time.`, {
+        hint: "Pass the URL of a single video.",
+      }),
+    );
   }
 
-  const title = typeof parsed.title === "string" ? parsed.title : undefined;
-
-  if (!withMetadata) {
-    return ok({ mediaUrl, title });
-  }
-
-  const description = isString(parsed.description) ? parsed.description : undefined;
-  const publishedAt = normalizeTimestamp(parsed.timestamp) ?? normalizeUploadDate(parsed.upload_date);
-  const descriptionLinks = extractDescriptionLinks(description);
-
-  return ok({ mediaUrl, title, publishedAt, description, descriptionLinks });
-}
+  const description = isString(info.description) ? info.description : undefined;
+  const durationSeconds = isFiniteNumber(info.duration) && info.duration > 0 ? Math.round(info.duration) : undefined;
+  return ok({
+    platform: isString(info.extractor_key) ? info.extractor_key : isString(info.extractor) ? info.extractor : "unknown",
+    mediaId: isString(info.id) ? info.id : undefined,
+    canonicalUrl: isHttpUrlString(info.webpage_url) ? info.webpage_url : undefined,
+    title: isString(info.title) ? info.title : undefined,
+    publishedAt:
+      normalizeTimestamp(info.timestamp) ??
+      normalizeTimestamp(info.release_timestamp) ??
+      normalizeUploadDate(info.upload_date) ??
+      normalizeUploadDate(info.release_date),
+    description,
+    descriptionLinks: extractDescriptionLinks(description),
+    durationSeconds,
+    liveStatus: parseLiveStatus(info),
+    chapters: parseChapters(info.chapters, durationSeconds),
+  });
+};
 
 export function isInstagramAuthRequiredFailure(detail: string): boolean {
   return /(login required|requires login|you need to log in|challenge_required|checkpoint_required|private content|not available due to login)/i.test(

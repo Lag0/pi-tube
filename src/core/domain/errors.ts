@@ -80,9 +80,13 @@ export const ERROR_CATALOG = {
     category: "provider",
     hint: "Retry; if it keeps failing, pass `--provider` with another configured provider.",
   },
-  UNSUPPORTED_URL_NOT_DIRECT_MEDIA: {
+  SOURCE_UNSUPPORTED: {
     category: "source",
-    hint: "Pass a YouTube or Instagram URL, a direct media URL (.mp3, .mp4, ...) or a local file.",
+    hint: "Pass a page from a site yt-dlp supports (`yt-dlp --list-extractors`), a direct media URL (.mp3, .mp4, ...) or a local file.",
+  },
+  SOURCE_EXTRACT_FAILED: {
+    category: "source",
+    hint: "Check that the page opens in a browser and update yt-dlp (`yt-dlp -U`, `brew upgrade yt-dlp` or `pipx upgrade yt-dlp`); support for this site is best-effort.",
   },
   YOUTUBE_EXTRACT_FAILED: {
     category: "source",
@@ -106,7 +110,7 @@ export const ERROR_CATALOG = {
   },
   DOWNLOAD_FAILED: {
     category: "source",
-    hint: "Check that the URL is a public YouTube or Instagram video and retry.",
+    hint: "Check that the page opens in a browser and retry; `download` takes a page URL that yt-dlp supports.",
   },
 } as const satisfies Record<string, ErrorCatalogEntry>;
 

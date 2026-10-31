@@ -16,8 +16,10 @@ describe("persisted URLs", () => {
       kind: "youtube",
       originalInput: "https://youtu.be/abc",
       normalizedUrl: "https://www.youtube.com/watch?v=abc",
-      mediaUrl: "https://rr1.googlevideo.com/videoplayback?expire=1&sig=abc",
-      title: "Demo",
+      metadata: {
+        platform: "Youtube",
+        title: "Demo",
+      },
     });
 
     expect(artifact.source.media_url).toBeUndefined();
@@ -33,7 +35,7 @@ describe("persisted URLs", () => {
       kind: "instagram",
       originalInput: "https://www.instagram.com/reel/abc/",
       normalizedUrl: "https://www.instagram.com/reel/abc/",
-      mediaUrl: "https://scontent.cdninstagram.com/v/t.mp4?oh=token&oe=1",
+      metadata: { platform: "Instagram" },
     });
 
     expect(artifact.source.media_url).toBeUndefined();
@@ -88,7 +90,7 @@ describe("URL credentials", () => {
       kind: "youtube",
       originalInput: "https://bob:pw@www.youtube.com/watch?v=abc",
       normalizedUrl: "https://bob:pw@www.youtube.com/watch?v=abc",
-      mediaUrl: "https://rr1.googlevideo.com/videoplayback?sig=abc",
+      metadata: { platform: "Youtube" },
     });
 
     for (const artifact of [direct, youtube]) {

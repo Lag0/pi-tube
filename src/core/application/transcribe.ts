@@ -2,7 +2,7 @@ import type { EnvironmentVariables } from "../domain/config.ts";
 import { createError, type PiTubeError } from "../domain/errors.ts";
 import { type ProviderDescriptor, resolveCredential, selectProvider } from "../domain/providers.ts";
 import { err, ok } from "../domain/result.ts";
-import type { ResolvedSource } from "../domain/source.ts";
+import { isSiteSource, type ResolvedSource } from "../domain/source.ts";
 import { resolveSourceSettings } from "../domain/source-settings.ts";
 import { buildOutputArtifact } from "../domain/transcript/build-artifact.ts";
 import type { OutputArtifact } from "../domain/transcript/contract.ts";
@@ -56,7 +56,7 @@ const firstNonEmpty = (...values: ReadonlyArray<string | undefined>): string | u
   values.map((value) => value?.trim()).find((value) => value !== undefined && value.length > 0);
 
 const sourceDetail = (source: ResolvedSource): string => {
-  if (source.kind === "youtube" || source.kind === "instagram") return source.title ?? source.kind;
+  if (isSiteSource(source)) return source.metadata.title ?? source.metadata.platform;
   return source.kind === "local_file" ? source.kind : "direct url";
 };
 

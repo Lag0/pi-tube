@@ -6,7 +6,7 @@ import type { EnvironmentVariables } from "../../core/domain/config.ts";
 import { createError } from "../../core/domain/errors.ts";
 import type { OperationOptions } from "../../core/domain/operation.ts";
 import { err, ok, type Result } from "../../core/domain/result.ts";
-import type { ResolvedSource } from "../../core/domain/source.ts";
+import type { ResolvedSource, SiteKind } from "../../core/domain/source.ts";
 import {
   classifyInput,
   getLocalFileExtension,
@@ -24,7 +24,7 @@ import {
   MEDIA_TIMEOUT_MS,
   METADATA_TIMEOUT_MS,
   parseDownloadedPath,
-  parseYtDlpOutput,
+  parseYtDlpInfo,
   resolveYtDlpTimeoutMs,
   withUrl,
   type YtDlpPurpose,
@@ -38,6 +38,12 @@ export interface MediaFetcherDeps {
   readonly tmpDir: string;
   readonly run?: (request: ProcessRequest) => Promise<ProcessResult>;
 }
+
+const METADATA_PURPOSE: Readonly<Record<SiteKind, YtDlpPurpose>> = {
+  youtube: "youtube_metadata",
+  instagram: "instagram_metadata",
+  site: "site_metadata",
+};
 
 // Best-effort: a temp dir that cannot be removed (a Windows antivirus lock) must not fail a finished operation.
 const removeDir = (dir: string): Promise<void> =>
@@ -104,31 +110,23 @@ export const createMediaFetcher = (deps: MediaFetcherDeps): MediaFetcher => {
       const url = tryParseHttpUrl(input);
       switch (classification) {
         case "youtube":
-        case "instagram": {
+        case "instagram":
+        case "site": {
           const normalizedUrl = url?.toString() ?? input;
-          const isYouTube = classification === "youtube";
+          // `--ignore-no-formats-error`: an upcoming live, or a page whose formats need a login, still reports its
+          // metadata; the guards and the audio download then fail with the precise error.
           const stdout = await ytDlp(
-            isYouTube ? ["--dump-single-json", "-f", AUDIO_FORMAT_SELECTOR] : ["--dump-single-json"],
-            isYouTube ? "youtube_metadata" : "instagram_metadata",
+            ["--dump-single-json", "--ignore-no-formats-error"],
+            METADATA_PURPOSE[classification],
             normalizedUrl,
             METADATA_TIMEOUT_MS,
             options,
-            !isYouTube,
+            classification === "instagram",
           );
           if (!stdout.success) return stdout;
-          const media = parseYtDlpOutput(stdout.data, isYouTube);
-          if (!media.success) return media;
-          return ok(
-            isYouTube
-              ? { kind: "youtube", originalInput: input, normalizedUrl, ...media.data }
-              : {
-                  kind: "instagram",
-                  originalInput: input,
-                  normalizedUrl,
-                  mediaUrl: media.data.mediaUrl,
-                  title: media.data.title,
-                },
-          );
+          const metadata = parseYtDlpInfo(stdout.data, normalizedUrl);
+          if (!metadata.success) return metadata;
+          return ok({ kind: classification, originalInput: input, normalizedUrl, metadata: metadata.data });
         }
         case "direct_url": {
           if (!url) throw new Error("classifyInput returned direct_url for a non-URL input");
@@ -136,10 +134,6 @@ export const createMediaFetcher = (deps: MediaFetcherDeps): MediaFetcher => {
           const extension = getMediaExtensionFromPathname(url.pathname) ?? "";
           return ok({ kind: "direct_url", originalInput: input, normalizedUrl, mediaUrl: normalizedUrl, extension });
         }
-        case "unsupported_url":
-          return err(
-            createError("UNSUPPORTED_URL_NOT_DIRECT_MEDIA", `Input URL is not a direct media URL: \`${input}\`.`),
-          );
         case "local_file":
           return resolveLocalFile(input, deps.cwd);
       }
@@ -186,7 +180,7 @@ export const createMediaFetcher = (deps: MediaFetcherDeps): MediaFetcher => {
       return ok({ audio: { kind: "file", path: filePath }, release });
     },
 
-    download: async (target, request, _settings, options) => {
+    download: async (source, request, _settings, options) => {
       const outputDir = path.resolve(deps.cwd, request.outputDir);
       const created = await makeDir(outputDir);
       if (!created.success) return created;
@@ -212,10 +206,10 @@ export const createMediaFetcher = (deps: MediaFetcherDeps): MediaFetcher => {
           ...format,
         ],
         "download",
-        target.url,
+        source.normalizedUrl,
         MEDIA_TIMEOUT_MS,
         options,
-        target.kind === "instagram",
+        source.kind === "instagram",
       );
       await removeDir(tempDir);
       if (!stdout.success) return stdout;

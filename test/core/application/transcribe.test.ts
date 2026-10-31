@@ -271,7 +271,51 @@ describe("source settings", () => {
   });
 });
 
+describe("site sources", () => {
+  test("the progress detail of an untitled site is its platform", async () => {
+    const vimeo = "https://vimeo.com/1";
+    const media = createFakeMediaFetcher({
+      source: { kind: "site", originalInput: vimeo, normalizedUrl: vimeo, metadata: { platform: "Vimeo" } },
+      audio: { kind: "url", url: "https://cdn.example.com/v.mp3" },
+    });
+    const { deps } = setup({ env: { GROQ_API_KEY: "gq" } });
+    const transcribe = createTranscribe({ ...deps, media: media.fetcher });
+    const details: Array<string | undefined> = [];
+
+    const result = await transcribe(
+      { input: vimeo, timestamps: false, format: "markdown" },
+      { onProgress: (event) => details.push(event.detail) },
+    );
+
+    expect(result.success).toBe(true);
+    expect(details).toContain("(Vimeo)");
+  });
+});
+
 describe("downloadMedia", () => {
+  test("a best-effort site is resolved, then downloaded from the resolved source", async () => {
+    const vimeo = "https://vimeo.com/1";
+    const source = {
+      kind: "site" as const,
+      originalInput: vimeo,
+      normalizedUrl: vimeo,
+      metadata: { platform: "Vimeo" },
+    };
+    const media = createFakeMediaFetcher({ source });
+    const download = createDownloadMedia({
+      configStore: createInMemoryConfigStore(config()),
+      env: {},
+      media: media.fetcher,
+      defaultOutputDir: outputDir,
+    });
+
+    const result = await download({ input: vimeo, media: "video" });
+
+    expect(result.success ? result.data.sourceKind : undefined).toBe("site");
+    expect(media.calls.resolve).toEqual([vimeo]);
+    expect(media.calls.download[0]?.source).toEqual(source);
+  });
+
   test("a direct media URL is DOWNLOAD_FAILED and nothing is downloaded", async () => {
     const media = createFakeMediaFetcher();
     const download = createDownloadMedia({
@@ -283,7 +327,11 @@ describe("downloadMedia", () => {
 
     const result = await download({ input: INPUT, media: "audio" });
 
-    expect(result.success ? undefined : result.error.code).toBe("DOWNLOAD_FAILED");
+    expect(result.success ? undefined : result.error).toMatchObject({
+      code: "DOWNLOAD_FAILED",
+      message: "`download` takes a page URL that yt-dlp supports; direct media URLs and local files are already files.",
+    });
+    expect(media.calls.resolve).toHaveLength(0);
     expect(media.calls.download).toHaveLength(0);
   });
 
@@ -314,6 +362,7 @@ describe("downloadMedia", () => {
     const result = await download({ input: "https://www.youtube.com/watch?v=abc", media: "audio" });
 
     expect(result.success).toBe(true);
-    expect(media.calls.settings).toEqual([{ allowPrivateHosts: true, maxLocalFileBytes: 1073741824 }]);
+    const expected = { allowPrivateHosts: true, maxLocalFileBytes: 1073741824 };
+    expect(media.calls.settings).toEqual([expected, expected]);
   });
 });
