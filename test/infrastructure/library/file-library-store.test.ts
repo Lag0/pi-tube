@@ -1,4 +1,14 @@
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
@@ -280,5 +290,156 @@ describe("sourceKeyOf", () => {
 
     expect(a.success ? a.data : "").toMatch(/^file:[0-9a-f]{64}$/);
     expect(b).toEqual(a);
+  });
+});
+
+describe("audio", () => {
+  const DAY_MS = 86_400_000;
+  const audioFile = (name: string, bytes = 10): string => {
+    const file = path.join(root, name);
+    writeFileSync(file, "x".repeat(bytes));
+    return file;
+  };
+  const seedSource = async (store: ReturnType<typeof createFileLibraryStore>, id: string) => {
+    const source = youtube(id, `Video ${id}`);
+    const key = { sourceKey: `youtube:${id}`, provider: "groq", model: "whisper-large-v3" };
+    const saved = await store.save({ key, source, artifact: artifactOf(source) });
+    if (!saved.success) throw new Error("save failed");
+    return { key, dir: path.dirname(saved.data.paths.json) };
+  };
+  const audioLeft = (): string[] =>
+    readdirSync(libraryDir).flatMap((dir) =>
+      readdirSync(path.join(libraryDir, dir))
+        .filter((name) => name.startsWith("audio."))
+        .map((name) => `${dir}/${name}`),
+    );
+  const transcriptsLeft = (): number =>
+    readdirSync(libraryDir).flatMap((dir) =>
+      readdirSync(path.join(libraryDir, dir)).filter((name) => name.endsWith(".md")),
+    ).length;
+  const age = (target: string, days: number): void => {
+    const when = new Date(Date.now() - days * DAY_MS);
+    utimesSync(target, when, when);
+  };
+
+  test("keepAudio moves the file into the source directory, and storedSource gives source and audio back", async () => {
+    const store = createFileLibraryStore({ libraryDir });
+    const { dir } = await seedSource(store, "aaaaaaaaaaa");
+    const downloaded = audioFile("abc.m4a");
+
+    const kept = await store.keepAudio("youtube:aaaaaaaaaaa", downloaded);
+    const stored = await store.storedSource("youtube:aaaaaaaaaaa");
+
+    expect(kept).toEqual({ success: true, data: path.join(dir, "audio.m4a") });
+    expect(existsSync(downloaded)).toBe(false);
+    if (!isWindows) expect(statSync(path.join(dir, "audio.m4a")).mode & 0o777).toBe(0o600);
+    expect(stored.success ? stored.data : undefined).toEqual({
+      source: {
+        kind: "youtube",
+        originalInput: "https://www.youtube.com/watch?v=aaaaaaaaaaa",
+        normalizedUrl: "https://www.youtube.com/watch?v=aaaaaaaaaaa",
+        metadata: { platform: "Youtube", mediaId: "aaaaaaaaaaa", title: "Video aaaaaaaaaaa" },
+      },
+      audioPath: path.join(dir, "audio.m4a"),
+    });
+  });
+
+  test("a source without kept audio has a stored source but no audio path", async () => {
+    const store = createFileLibraryStore({ libraryDir });
+    await seedSource(store, "aaaaaaaaaaa");
+
+    const stored = await store.storedSource("youtube:aaaaaaaaaaa");
+    const missing = await store.storedSource("youtube:zzzzzzzzzzz");
+
+    expect(stored.success ? stored.data?.audioPath : "error").toBeUndefined();
+    expect(missing.success ? missing.data : "error").toBeUndefined();
+  });
+
+  test("past max_audio_bytes the oldest audio goes, never the new one and never a transcript", async () => {
+    const store = createFileLibraryStore({ libraryDir });
+    for (const [index, id] of ["aaaaaaaaaaa", "bbbbbbbbbbb", "ccccccccccc"].entries()) {
+      await seedSource(store, id);
+      const kept = await store.keepAudio(`youtube:${id}`, audioFile(`${index}.m4a`), 15);
+      if (!kept.success) throw new Error("keep failed");
+      age(kept.data, 3 - index);
+    }
+
+    expect(audioLeft()).toHaveLength(1);
+    expect(audioLeft()[0]).toContain("youtube-ccccccccccc");
+    expect(transcriptsLeft()).toBe(3);
+  });
+
+  test("a new audio larger than max_audio_bytes on its own is still kept", async () => {
+    const store = createFileLibraryStore({ libraryDir });
+    await seedSource(store, "aaaaaaaaaaa");
+
+    const kept = await store.keepAudio("youtube:aaaaaaaaaaa", audioFile("big.m4a", 10), 5);
+
+    expect(kept.success).toBe(true);
+    expect(audioLeft()).toHaveLength(1);
+  });
+
+  test("prune without --yes reports and deletes nothing; with it, deletes audio only", async () => {
+    const store = createFileLibraryStore({ libraryDir });
+    await seedSource(store, "aaaaaaaaaaa");
+    await store.keepAudio("youtube:aaaaaaaaaaa", audioFile("a.m4a"));
+
+    const dry = await store.prune({ includeTranscripts: false, dryRun: true });
+    expect(dry).toEqual({ success: true, data: { audioFiles: 1, sourceDirs: 0, bytes: 10, dryRun: true } });
+    expect(audioLeft()).toHaveLength(1);
+
+    const real = await store.prune({ includeTranscripts: false, dryRun: false });
+    expect(real.success ? real.data : undefined).toMatchObject({
+      audioFiles: 1,
+      sourceDirs: 0,
+      bytes: 10,
+      dryRun: false,
+    });
+    expect(audioLeft()).toHaveLength(0);
+    expect(transcriptsLeft()).toBe(1);
+  });
+
+  test("prune --older-than keeps recent audio", async () => {
+    const store = createFileLibraryStore({ libraryDir });
+    await seedSource(store, "aaaaaaaaaaa");
+    await seedSource(store, "bbbbbbbbbbb");
+    const old = await store.keepAudio("youtube:aaaaaaaaaaa", audioFile("a.m4a"));
+    await store.keepAudio("youtube:bbbbbbbbbbb", audioFile("b.m4a"));
+    if (!old.success) throw new Error("keep failed");
+    age(old.data, 40);
+
+    const pruned = await store.prune({ olderThanDays: 30, includeTranscripts: false, dryRun: false });
+
+    expect(pruned.success ? pruned.data.audioFiles : undefined).toBe(1);
+    expect(audioLeft().map((entry) => entry.split("/")[0]?.startsWith("youtube-bbbbbbbbbbb"))).toEqual([true]);
+  });
+
+  test("prune --include-transcripts removes whole directories older than the cutoff only", async () => {
+    const store = createFileLibraryStore({ libraryDir });
+    const old = await seedSource(store, "aaaaaaaaaaa");
+    await seedSource(store, "bbbbbbbbbbb");
+    for (const name of readdirSync(old.dir)) age(path.join(old.dir, name), 40);
+
+    const pruned = await store.prune({ olderThanDays: 30, includeTranscripts: true, dryRun: false });
+
+    expect(pruned.success ? pruned.data.sourceDirs : undefined).toBe(1);
+    expect(existsSync(old.dir)).toBe(false);
+    expect(transcriptsLeft()).toBe(1);
+  });
+
+  test("prune applies max_audio_bytes: the oldest audio goes until the rest fits", async () => {
+    const store = createFileLibraryStore({ libraryDir });
+    for (const [index, id] of ["aaaaaaaaaaa", "bbbbbbbbbbb", "ccccccccccc"].entries()) {
+      await seedSource(store, id);
+      const kept = await store.keepAudio(`youtube:${id}`, audioFile(`${index}.m4a`));
+      if (!kept.success) throw new Error("keep failed");
+      age(kept.data, 3 - index);
+    }
+
+    const pruned = await store.prune({ includeTranscripts: false, dryRun: false, maxAudioBytes: 15 });
+
+    expect(pruned.success ? pruned.data.audioFiles : undefined).toBe(2);
+    expect(audioLeft()).toHaveLength(1);
+    expect(audioLeft()[0]).toContain("youtube-ccccccccccc");
   });
 });

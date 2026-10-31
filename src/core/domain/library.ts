@@ -1,3 +1,4 @@
+import type { PiTubeConfig } from "./config.ts";
 import type { ProviderId } from "./providers.ts";
 import { tryParseHttpUrl } from "./source-policy.ts";
 
@@ -44,6 +45,20 @@ export const sourceKeyFromInput = (input: string): SourceKey | undefined => {
   const isPost = section === "p" || section === "reel" || section === "tv";
   return isPost && code !== undefined && INSTAGRAM_CODE.test(code) ? siteSourceKey("Instagram", code) : undefined;
 };
+
+/** How the library treats audio, from the `library` config section. */
+export interface LibrarySettings {
+  /** Keep the audio pi-tube downloads for a page, so another provider or language reuses it. Default `true`. */
+  readonly keepAudio: boolean;
+  /** Most bytes of kept audio; the oldest audio goes first. No limit when absent. */
+  readonly maxAudioBytes?: number;
+}
+
+/** Library settings from the config; an absent section means its defaults. */
+export const resolveLibrarySettings = (config: PiTubeConfig): LibrarySettings => ({
+  keepAudio: config.library?.keep_audio ?? true,
+  ...(config.library?.max_audio_bytes === undefined ? {} : { maxAudioBytes: config.library.max_audio_bytes }),
+});
 
 /** The text a library hashes into a `TranscriptId`. */
 export const transcriptKeyText = (key: TranscriptKey): string =>

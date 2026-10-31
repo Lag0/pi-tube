@@ -349,6 +349,50 @@ describe("library cache", () => {
   });
 });
 
+describe("kept audio", () => {
+  const YOUTUBE = "https://www.youtube.com/watch?v=jNQXAC9IVRw";
+  const youtube = {
+    kind: "youtube" as const,
+    originalInput: YOUTUBE,
+    normalizedUrl: YOUTUBE,
+    metadata: { platform: "Youtube", mediaId: "jNQXAC9IVRw", title: "Me at the zoo" },
+  };
+  const withDownloadedAudio = (configOverrides: Partial<PiTubeConfig> = {}) => {
+    const downloaded = path.join(outputDir, "downloaded.m4a");
+    writeFileSync(downloaded, "audio");
+    const { stt, deps } = setup({
+      env: { GROQ_API_KEY: "gq", DEEPGRAM_API_KEY: "dg" },
+      config: config(configOverrides),
+    });
+    const media = createFakeMediaFetcher({ source: youtube, audio: { kind: "file", path: downloaded } });
+    return { stt, media, transcribe: createTranscribe({ ...deps, media: media.fetcher }) };
+  };
+
+  test("another provider reuses the kept audio and the stored source: no resolve, no download", async () => {
+    const { stt, media, transcribe } = withDownloadedAudio();
+
+    await transcribe({ input: YOUTUBE, provider: "groq", format: "markdown" });
+    const second = await transcribe({ input: YOUTUBE, provider: "deepgram", format: "markdown" });
+
+    expect(second.success ? second.data.cacheHit : undefined).toBe(false);
+    expect(media.calls.resolve).toHaveLength(1);
+    expect(media.calls.fetchAudio).toHaveLength(1);
+    const audio = stt.deepgram.requests[0]?.audio;
+    expect(audio?.kind).toBe("file");
+    expect(audio?.kind === "file" ? audio.path : "").toMatch(/youtube-jnqxac9ivrw-[0-9a-f]{10}[\\/]audio\.m4a$/);
+    expect(audio?.kind === "file" ? audio.path.startsWith(outputDir) : false).toBe(true);
+  });
+
+  test("with library.keep_audio false the audio is not kept and is downloaded again", async () => {
+    const { media, transcribe } = withDownloadedAudio({ library: { keep_audio: false } });
+
+    await transcribe({ input: YOUTUBE, provider: "groq", format: "markdown" });
+    await transcribe({ input: YOUTUBE, provider: "deepgram", format: "markdown" });
+
+    expect(media.calls.fetchAudio).toHaveLength(2);
+  });
+});
+
 describe("source settings", () => {
   test("resolve and fetchAudio receive the settings resolved from config and env", async () => {
     const { media, transcribe } = setup({

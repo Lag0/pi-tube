@@ -29,6 +29,29 @@ export interface LibraryEntry {
   readonly characters: number;
 }
 
+/** A source the library already knows, with the audio it kept for it, if any. */
+export interface StoredSource {
+  readonly source: ResolvedSource;
+  readonly audioPath?: string;
+}
+
+/** What `prune` removed, or would remove when `dryRun`. */
+export interface PruneReport {
+  readonly audioFiles: number;
+  readonly sourceDirs: number;
+  readonly bytes: number;
+  readonly dryRun: boolean;
+}
+
+/** What `prune` removes: audio (all of it, or older than `olderThanDays`, or past `maxAudioBytes`), or whole sources. */
+export interface PruneRequest {
+  readonly olderThanDays?: number;
+  /** Removes whole source directories, transcripts included, older than `olderThanDays` (required then). */
+  readonly includeTranscripts: boolean;
+  readonly dryRun: boolean;
+  readonly maxAudioBytes?: number;
+}
+
 /** The local transcript library. Its files are the source of truth; nothing is kept elsewhere. */
 export interface LibraryStore {
   /** Checks that the library can be written, before any paid work starts. */
@@ -50,4 +73,12 @@ export interface LibraryStore {
   get(transcriptId: string): Promise<Result<StoredTranscript | undefined>>;
   /** Every transcript, newest first; list and search paginate it in the core. */
   entries(): Promise<Result<readonly LibraryEntry[]>>;
+  /** The page source saved for `sourceKey`, and its kept audio; undefined for an unknown key or a non-page source. */
+  storedSource(sourceKey: SourceKey): Promise<Result<StoredSource | undefined>>;
+  /**
+   * Moves downloaded audio into the source's directory as `audio.<ext>` (mode 600, stamped now) and returns its
+   * new path. Past `maxAudioBytes`, the oldest audio of other sources is removed; transcripts never are.
+   */
+  keepAudio(sourceKey: SourceKey, filePath: string, maxAudioBytes?: number): Promise<Result<string>>;
+  prune(request: PruneRequest): Promise<Result<PruneReport>>;
 }

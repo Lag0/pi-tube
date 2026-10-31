@@ -29,6 +29,7 @@ export interface PiTubeConfig {
   readonly network?: { readonly allow_private_hosts?: boolean };
   readonly cookies?: { readonly file?: string };
   readonly local_files?: { readonly max_bytes?: number };
+  readonly library?: { readonly keep_audio?: boolean; readonly max_audio_bytes?: number };
 }
 
 /** Config used when the file does not exist yet. */
@@ -54,6 +55,9 @@ const readStringFields = <F extends string>(
   return ok(parsed);
 };
 
+const isAudioBytes = (value: unknown): value is number =>
+  typeof value === "number" && Number.isSafeInteger(value) && value >= 1;
+
 const isMaxBytes = (value: unknown): value is number =>
   typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= MAX_LOCAL_FILE_BYTES_LIMIT;
 
@@ -74,7 +78,7 @@ const parseSection = <T>(
 const parseSourceSections = (
   raw: Record<string, unknown>,
   fail: Fail,
-): Result<Pick<PiTubeConfig, "network" | "cookies" | "local_files">> => {
+): Result<Pick<PiTubeConfig, "network" | "cookies" | "local_files" | "library">> => {
   const network = parseSection(raw.network, "network", fail, (section) => {
     const allow = section.allow_private_hosts;
     if (allow !== undefined && typeof allow !== "boolean") return fail("network.allow_private_hosts", "a boolean");
@@ -93,10 +97,24 @@ const parseSourceSections = (
     return ok(maxBytes === undefined ? {} : { max_bytes: maxBytes });
   });
   if (!localFiles.success) return localFiles;
+  const library = parseSection(raw.library, "library", fail, (section) => {
+    const keepAudio = section.keep_audio;
+    if (keepAudio !== undefined && typeof keepAudio !== "boolean") return fail("library.keep_audio", "a boolean");
+    const maxAudioBytes = section.max_audio_bytes;
+    if (maxAudioBytes !== undefined && !isAudioBytes(maxAudioBytes)) {
+      return fail("library.max_audio_bytes", "a whole number of 1 or more");
+    }
+    return ok({
+      ...(keepAudio === undefined ? {} : { keep_audio: keepAudio }),
+      ...(maxAudioBytes === undefined ? {} : { max_audio_bytes: maxAudioBytes }),
+    });
+  });
+  if (!library.success) return library;
   return ok({
     ...(network.data ? { network: network.data } : {}),
     ...(cookies.data ? { cookies: cookies.data } : {}),
     ...(localFiles.data ? { local_files: localFiles.data } : {}),
+    ...(library.data ? { library: library.data } : {}),
   });
 };
 
@@ -149,6 +167,8 @@ export const configKeysFor = (descriptors: readonly ProviderDescriptor[]): reado
   "network.allow_private_hosts",
   "cookies.file",
   "local_files.max_bytes",
+  "library.keep_audio",
+  "library.max_audio_bytes",
   ...descriptors.map((descriptor) => `providers.${descriptor.id}.api_key_env`),
 ];
 
@@ -177,6 +197,8 @@ export const getConfigValue = (config: PiTubeConfig, key: string): ConfigScalar 
   if (key === "network.allow_private_hosts") return config.network?.allow_private_hosts;
   if (key === "cookies.file") return config.cookies?.file;
   if (key === "local_files.max_bytes") return config.local_files?.max_bytes;
+  if (key === "library.keep_audio") return config.library?.keep_audio;
+  if (key === "library.max_audio_bytes") return config.library?.max_audio_bytes;
   const providerId = API_KEY_ENV_PATTERN.exec(key)?.[1];
   return providerId === undefined ? undefined : config.providers[providerId]?.api_key_env;
 };
@@ -223,6 +245,24 @@ export const applyConfigValue = (
       );
     }
     return ok({ ...config, cookies: { ...config.cookies, file: trimmedValue } });
+  }
+  if (checkedKey.data === "library.keep_audio") {
+    const normalized = trimmedValue.toLowerCase();
+    if (normalized !== "true" && normalized !== "false") {
+      return err(
+        createError("INPUT_INVALID", "`library.keep_audio` must be true or false.", { hint: "Use `true` or `false`." }),
+      );
+    }
+    return ok({ ...config, library: { ...config.library, keep_audio: normalized === "true" } });
+  }
+  if (checkedKey.data === "library.max_audio_bytes") {
+    const maxAudioBytes = /^\d+$/.test(trimmedValue) ? Number(trimmedValue) : Number.NaN;
+    if (!isAudioBytes(maxAudioBytes)) {
+      return err(
+        createError("INPUT_INVALID", "`library.max_audio_bytes` must be a whole number of bytes of 1 or more."),
+      );
+    }
+    return ok({ ...config, library: { ...config.library, max_audio_bytes: maxAudioBytes } });
   }
   if (checkedKey.data === "local_files.max_bytes") {
     const maxBytes = /^\d+$/.test(trimmedValue) ? Number(trimmedValue) : Number.NaN;

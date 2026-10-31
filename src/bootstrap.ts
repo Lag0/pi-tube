@@ -11,6 +11,7 @@ import {
   createListTranscripts,
   createLoginProvider,
   createLogoutProvider,
+  createPruneLibrary,
   createSearchTranscripts,
   createSetConfigValue,
   createTranscribe,
@@ -26,6 +27,8 @@ import {
   type MediaInfo,
   type ProviderDescriptor,
   type ProviderListing,
+  type PruneInput,
+  type PruneReport,
   type StoredTranscript,
   type SttProvider,
   type TranscribeInput,
@@ -73,6 +76,7 @@ export interface App {
     LibraryPage
   >;
   readonly getTranscript: UseCase<{ readonly transcriptId: string }, StoredTranscript>;
+  readonly pruneLibrary: UseCase<PruneInput, PruneReport>;
 }
 
 /** Wires the core and the infrastructure for one environment. */
@@ -115,5 +119,6 @@ export const createApp = (environment: AppEnvironment, overrides: AppOverrides =
     listTranscripts: createListTranscripts({ library }),
     searchTranscripts: createSearchTranscripts({ library }),
     getTranscript: createGetTranscript({ library }),
+    pruneLibrary: createPruneLibrary({ library, configStore }),
   };
 };

@@ -1,18 +1,39 @@
 import { createHash, randomUUID } from "node:crypto";
 import { constants, createReadStream } from "node:fs";
-import { access, link, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import {
+  access,
+  chmod,
+  copyFile,
+  link,
+  mkdir,
+  readdir,
+  readFile,
+  rename,
+  rm,
+  stat,
+  unlink,
+  utimes,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 import { createError, type PiTubeError } from "../../core/domain/errors.ts";
 import { type SourceKey, siteSourceKey, type TranscriptKey, transcriptKeyText } from "../../core/domain/library.ts";
 import { err, ok, type Result } from "../../core/domain/result.ts";
-import { isSiteSource, type ResolvedSource } from "../../core/domain/source.ts";
+import {
+  type Chapter,
+  isSiteSource,
+  type LiveStatus,
+  type MediaMetadata,
+  type ResolvedSource,
+  type SiteKind,
+} from "../../core/domain/source.ts";
 import { tierOf } from "../../core/domain/source-policy.ts";
 import { toPersistedUrl, withoutCredentials } from "../../core/domain/transcript/build-artifact.ts";
 import type { OutputArtifact } from "../../core/domain/transcript/contract.ts";
 import { parseStoredArtifact } from "../../core/domain/transcript/parse-stored.ts";
 import { renderJson } from "../../core/domain/transcript/render-json.ts";
 import { renderMarkdown } from "../../core/domain/transcript/render-markdown.ts";
-import type { LibraryEntry, LibraryStore, StoredTranscript } from "../../core/ports/library-store.ts";
+import type { LibraryEntry, LibraryStore, StoredSource, StoredTranscript } from "../../core/ports/library-store.ts";
 import { errnoOf } from "../errno.ts";
 
 const MAX_FRESH_COPIES = 999;
@@ -86,6 +107,58 @@ const describeForLibrary = (sourceKey: SourceKey, source: ResolvedSource): Recor
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
+const AUDIO_PREFIX = "audio.";
+const DAY_MS = 86_400_000;
+const SITE_KINDS: ReadonlySet<string> = new Set(["youtube", "instagram", "site"]);
+
+interface AudioFile {
+  readonly dir: string;
+  readonly path: string;
+  readonly bytes: number;
+  readonly mtimeMs: number;
+}
+
+const text = (value: unknown): string | undefined => (typeof value === "string" ? value : undefined);
+const num = (value: unknown): number | undefined => (typeof value === "number" ? value : undefined);
+
+/** The page source source.json describes, back in core form; undefined for other kinds. */
+const pageSourceOf = (saved: Record<string, unknown>): ResolvedSource | undefined => {
+  const kind = text(saved.kind);
+  const url = text(saved.normalized_url);
+  const raw = isRecord(saved.metadata) ? saved.metadata : undefined;
+  if (kind === undefined || !SITE_KINDS.has(kind) || url === undefined || !raw) return undefined;
+  const chapters = Array.isArray(raw.chapters)
+    ? raw.chapters.filter(isRecord).map(
+        (chapter): Chapter => ({
+          title: text(chapter.title) ?? "",
+          startMs: num(chapter.start_ms) ?? 0,
+          endMs: num(chapter.end_ms) ?? 0,
+        }),
+      )
+    : undefined;
+  const links = Array.isArray(raw.description_links)
+    ? raw.description_links.filter((link) => typeof link === "string")
+    : undefined;
+  const fields: Omit<MediaMetadata, "platform"> = {
+    mediaId: text(raw.media_id),
+    canonicalUrl: text(raw.canonical_url),
+    title: text(raw.title),
+    publishedAt: text(raw.published_at),
+    description: text(raw.description),
+    descriptionLinks: links,
+    durationSeconds: num(raw.duration_seconds),
+    liveStatus: text(raw.live_status) as LiveStatus | undefined,
+    chapters,
+  };
+  const metadata = Object.fromEntries(Object.entries(fields).filter(([, value]) => value !== undefined));
+  return {
+    kind: kind as SiteKind,
+    originalInput: url,
+    normalizedUrl: url,
+    metadata: { platform: text(raw.platform) ?? "unknown", ...metadata },
+  };
+};
+
 /** Library on files: `<libraryDir>/<source dir>/{source.json, <TranscriptId>.json, <TranscriptId>.md}`. */
 export const createFileLibraryStore = (deps: {
   readonly libraryDir: string;
@@ -146,6 +219,49 @@ export const createFileLibraryStore = (deps: {
     } finally {
       await rm(temp, { force: true }).catch(() => undefined);
     }
+  };
+
+  const listDir = (dir: string): Promise<string[]> => readdir(dir).catch(() => [] as string[]);
+
+  const filesOf = async (
+    dir: string,
+  ): Promise<Array<{ readonly path: string; readonly bytes: number; readonly mtimeMs: number }>> => {
+    const names = await listDir(dir);
+    const stats = await Promise.all(
+      names.map(async (name) => {
+        const file = path.join(dir, name);
+        const info = await stat(file).catch(() => undefined);
+        return info?.isFile() ? { path: file, bytes: info.size, mtimeMs: info.mtimeMs } : undefined;
+      }),
+    );
+    return stats.filter((entry) => entry !== undefined);
+  };
+
+  const audioFiles = async (): Promise<AudioFile[]> => {
+    const dirs = await listDir(deps.libraryDir);
+    const perDir = await Promise.all(
+      dirs.map(async (name) => {
+        const dir = path.join(deps.libraryDir, name);
+        const files = await filesOf(dir);
+        return files
+          .filter((file) => path.basename(file.path).startsWith(AUDIO_PREFIX))
+          .map((file) => ({ dir, ...file }));
+      }),
+    );
+    return perDir.flat();
+  };
+
+  /** The oldest audio to drop so the rest fits in `maxBytes`; `keep` is never chosen. */
+  const overflow = (audio: readonly AudioFile[], maxBytes: number, keep?: string): AudioFile[] => {
+    let total = audio.reduce((sum, file) => sum + file.bytes, 0);
+    const dropped: AudioFile[] = [];
+    for (const file of [...audio].sort((left, right) => left.mtimeMs - right.mtimeMs)) {
+      if (total <= maxBytes) break;
+      if (file.path === keep) continue;
+      dropped.push(file);
+      total -= file.bytes;
+    }
+    return dropped;
   };
 
   const stamp = (artifact: OutputArtifact, transcriptId: string, sourceKey: SourceKey): OutputArtifact => ({
@@ -241,6 +357,91 @@ export const createFileLibraryStore = (deps: {
         if (!found.success || found.data) return found;
       }
       return ok(undefined);
+    },
+
+    storedSource: async (sourceKey) => {
+      const dir = dirOf(sourceKey);
+      let saved: unknown;
+      try {
+        saved = JSON.parse(await readFile(path.join(dir, SOURCE_FILE), "utf8"));
+      } catch {
+        return ok(undefined);
+      }
+      const source = isRecord(saved) ? pageSourceOf(saved) : undefined;
+      if (!source) return ok(undefined);
+      const audio = (await listDir(dir)).find((name) => name.startsWith(AUDIO_PREFIX));
+      const stored: StoredSource = audio === undefined ? { source } : { source, audioPath: path.join(dir, audio) };
+      return ok(stored);
+    },
+
+    keepAudio: async (sourceKey, filePath, maxAudioBytes) => {
+      const dir = dirOf(sourceKey);
+      const target = path.join(dir, `audio${path.extname(filePath) || ".m4a"}`);
+      try {
+        await mkdir(dir, { recursive: true, mode: 0o700 });
+        for (const name of await listDir(dir)) {
+          if (name.startsWith(AUDIO_PREFIX) && path.join(dir, name) !== target)
+            await rm(path.join(dir, name), { force: true });
+        }
+        try {
+          await rename(filePath, target);
+        } catch (error) {
+          if (errnoOf(error) !== "EXDEV") throw error;
+          await copyFile(filePath, target);
+          await unlink(filePath);
+        }
+        await chmod(target, 0o600).catch(() => undefined);
+        // yt-dlp sets the upload date as mtime; the library ages audio from when it was kept.
+        const keptAt = now();
+        await utimes(target, keptAt, keptAt);
+      } catch (error) {
+        return err(ioError("write", target, error));
+      }
+      if (maxAudioBytes !== undefined) {
+        for (const file of overflow(await audioFiles(), maxAudioBytes, target)) await rm(file.path, { force: true });
+      }
+      return ok(target);
+    },
+
+    prune: async ({ olderThanDays, includeTranscripts, dryRun, maxAudioBytes }) => {
+      const cutoff = olderThanDays === undefined ? undefined : now().getTime() - olderThanDays * DAY_MS;
+      const removedDirs: Array<{ readonly dir: string; readonly bytes: number }> = [];
+      if (includeTranscripts && cutoff !== undefined) {
+        for (const name of await listDir(deps.libraryDir)) {
+          const dir = path.join(deps.libraryDir, name);
+          const files = await filesOf(dir);
+          if (files.length > 0 && files.every((file) => file.mtimeMs < cutoff)) {
+            removedDirs.push({ dir, bytes: files.reduce((sum, file) => sum + file.bytes, 0) });
+          }
+        }
+      }
+      const removed = new Set(removedDirs.map((entry) => entry.dir));
+      const audio = (await audioFiles()).filter((file) => !removed.has(file.dir));
+      const byAge =
+        cutoff !== undefined ? audio.filter((file) => file.mtimeMs < cutoff) : maxAudioBytes === undefined ? audio : [];
+      const aged = new Set(byAge.map((file) => file.path));
+      const bySize =
+        maxAudioBytes === undefined
+          ? []
+          : overflow(
+              audio.filter((file) => !aged.has(file.path)),
+              maxAudioBytes,
+            );
+      const dropped = [...byAge, ...bySize];
+      if (!dryRun) {
+        try {
+          for (const entry of removedDirs) await rm(entry.dir, { recursive: true, force: true });
+          for (const file of dropped) await rm(file.path, { force: true });
+        } catch (error) {
+          return err(ioError("write", deps.libraryDir, error));
+        }
+      }
+      return ok({
+        audioFiles: dropped.length,
+        sourceDirs: removedDirs.length,
+        bytes: [...dropped, ...removedDirs].reduce((sum, entry) => sum + entry.bytes, 0),
+        dryRun,
+      });
     },
 
     entries: async () => {

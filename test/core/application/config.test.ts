@@ -101,7 +101,7 @@ describe("getConfigValue", () => {
 });
 
 describe("listConfigValues", () => {
-  test("lists exactly the eight keys", async () => {
+  test("lists exactly the ten keys", async () => {
     const { listValues } = setup();
 
     const result = await listValues({});
@@ -112,6 +112,8 @@ describe("listConfigValues", () => {
       "network.allow_private_hosts",
       "cookies.file",
       "local_files.max_bytes",
+      "library.keep_audio",
+      "library.max_audio_bytes",
       "providers.deepgram.api_key_env",
       "providers.groq.api_key_env",
       "providers.elevenlabs.api_key_env",

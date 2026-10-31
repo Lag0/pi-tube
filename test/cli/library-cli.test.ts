@@ -173,6 +173,39 @@ describe("library search", () => {
   });
 });
 
+describe("library prune", () => {
+  test("without --yes it only reports, and says how to delete", async () => {
+    await seed([page("aaaaaaaaaaa", "Aula de Ação Penal")]);
+
+    const result = await library(["prune"]);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toBe(
+      "[LIBRARY_PRUNE] dry_run=true audio_files=0 source_dirs=0 bytes=0\nRun again with --yes to delete.\n",
+    );
+  });
+
+  test("--json reports the counts", async () => {
+    const payload = JSON.parse((await library(["prune", "--yes", "--json"])).stdout);
+
+    expect(payload).toEqual({ dry_run: false, audio_files: 0, source_dirs: 0, bytes: 0 });
+  });
+
+  test("--include-transcripts without --older-than is INPUT_INVALID", async () => {
+    const result = await library(["prune", "--include-transcripts", "--yes"]);
+
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toContain("[INPUT_INVALID]");
+    expect(result.stderr).toContain("--older-than");
+  });
+
+  test.each(["0", "1.5", "x"])("--older-than %s is INPUT_INVALID", async (days) => {
+    const result = await library(["prune", "--older-than", days]);
+
+    expect(result.exitCode).toBe(2);
+  });
+});
+
 describe("library command", () => {
   test("without an action it is INPUT_INVALID with the library usage", async () => {
     const result = await library([]);
@@ -184,7 +217,7 @@ describe("library command", () => {
   test("help library shows the commands", async () => {
     const result = await runCliInProcess(["help", "library", "--no-color"]);
 
-    for (const usage of ["library list", "library show <transcript_id>", "library search <query>"]) {
+    for (const usage of ["library list", "library show <transcript_id>", "library search <query>", "library prune"]) {
       expect(result.stdout).toContain(usage);
     }
   });

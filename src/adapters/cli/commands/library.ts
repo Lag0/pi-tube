@@ -15,6 +15,9 @@ export interface LibraryCommand {
   readonly args: readonly string[];
   readonly limit?: string;
   readonly offset?: string;
+  readonly olderThan?: string;
+  readonly includeTranscripts: boolean;
+  readonly yes: boolean;
   readonly json: boolean;
 }
 
@@ -96,7 +99,7 @@ const writeTranscript = (deps: CliDeps, stored: StoredTranscript, json: boolean)
   );
 };
 
-/** `pi-tube library <list|show|search>`: the local transcript library. */
+/** `pi-tube library <list|show|search|prune>`: the local transcript library. */
 export const runLibrary = async (deps: CliDeps, command: LibraryCommand): Promise<number> => {
   const page = { limit: wholeNumber(command.limit, DEFAULT_LIMIT), offset: wholeNumber(command.offset, 0) };
   switch (command.action) {
@@ -112,6 +115,34 @@ export const runLibrary = async (deps: CliDeps, command: LibraryCommand): Promis
       const found = unwrapOrFail(await deps.app.searchTranscripts({ query, ...page }));
       if (command.json) deps.io.writeOut(JSON.stringify({ query, ...pageJson(found) }, null, 2));
       else writePage(deps, `[LIBRARY_SEARCH] query=${toSafeLine(query)}`, found);
+      return 0;
+    }
+    case "prune": {
+      if (command.args.length > 0) throw usageError("`library prune` takes no arguments.");
+      const report = unwrapOrFail(
+        await deps.app.pruneLibrary({
+          ...(command.olderThan === undefined ? {} : { olderThanDays: wholeNumber(command.olderThan, 0) }),
+          includeTranscripts: command.includeTranscripts,
+          dryRun: !command.yes,
+        }),
+      );
+      if (command.json) {
+        deps.io.writeOut(
+          JSON.stringify(
+            {
+              dry_run: report.dryRun,
+              audio_files: report.audioFiles,
+              source_dirs: report.sourceDirs,
+              bytes: report.bytes,
+            },
+            null,
+            2,
+          ),
+        );
+        return 0;
+      }
+      const summary = `[LIBRARY_PRUNE] dry_run=${report.dryRun} audio_files=${report.audioFiles} source_dirs=${report.sourceDirs} bytes=${report.bytes}`;
+      deps.io.writeOut(report.dryRun ? `${summary}\nRun again with --yes to delete.` : summary);
       return 0;
     }
     case "show": {

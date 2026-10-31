@@ -160,25 +160,35 @@ const INFO_HELP_DOCUMENT: HelpDocument = {
 
 const LIBRARY_HELP_DOCUMENT: HelpDocument = {
   title: `${COMMAND_IDENTITY} library`,
-  summary: "The local library: every transcript pi-tube saved, by source, provider, model and language.",
+  summary:
+    "The local library: every transcript pi-tube saved, by source, provider, model and language, and the audio kept for reuse.",
   usage: [
     `${COMMAND_IDENTITY} library list [--limit <n>] [--offset <n>] [--json]`,
     `${COMMAND_IDENTITY} library show <transcript_id> [--json]`,
     `${COMMAND_IDENTITY} library search <query> [--limit <n>] [--offset <n>] [--json]`,
+    `${COMMAND_IDENTITY} library prune [--older-than <days>] [--include-transcripts] [--yes] [--json]`,
   ],
   options: [
     { term: "--limit <n>", description: "How many entries to print (default 20, at most 500)." },
     { term: "--offset <n>", description: "How many entries to skip (default 0)." },
+    { term: "--older-than <days>", description: "prune: only audio, or sources, older than this many days." },
+    {
+      term: "--include-transcripts",
+      description: "prune: delete whole sources, transcripts included (needs --older-than).",
+    },
+    { term: "--yes", description: "prune: delete; without it, prune only reports what it would delete." },
     { term: "--json", description: "Print the result as JSON on stdout." },
   ],
   examples: [
     `${COMMAND_IDENTITY} library list`,
+    `${COMMAND_IDENTITY} library prune --older-than 30 --yes`,
     `${COMMAND_IDENTITY} library search "aula penal"`,
     `${COMMAND_IDENTITY} library show 0123456789abcdef0123 --json`,
   ],
   notes: [
     "Search matches names (title, file name or URL, platform), not the transcript text; it ignores case and accents.",
     "The library lives in ~/.pi-tube/library, or PI_TUBE_LIBRARY_DIR.",
+    "Audio is kept for reuse (library.keep_audio) and capped by library.max_audio_bytes; transcripts are never deleted automatically.",
   ],
 };
 

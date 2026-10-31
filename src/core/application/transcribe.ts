@@ -1,6 +1,6 @@
 import type { EnvironmentVariables } from "../domain/config.ts";
 import { createError, type PiTubeError } from "../domain/errors.ts";
-import { sourceKeyFromInput, type TranscriptKey } from "../domain/library.ts";
+import { resolveLibrarySettings, sourceKeyFromInput, type TranscriptKey } from "../domain/library.ts";
 import { type ProviderDescriptor, resolveCredential, selectProvider } from "../domain/providers.ts";
 import { err, ok } from "../domain/result.ts";
 import { isSiteSource, type ResolvedSource } from "../domain/source.ts";
@@ -11,7 +11,7 @@ import { buildOutputArtifact } from "../domain/transcript/build-artifact.ts";
 import type { OutputArtifact } from "../domain/transcript/contract.ts";
 import type { ConfigStore } from "../ports/config-store.ts";
 import type { LibraryStore, StoredTranscript } from "../ports/library-store.ts";
-import type { MediaFetcher } from "../ports/media-fetcher.ts";
+import type { FetchedAudio, MediaFetcher } from "../ports/media-fetcher.ts";
 import type { SttProvider } from "../ports/stt-provider.ts";
 import { ensureNotAborted, type UseCase } from "./operation.ts";
 
@@ -140,20 +140,40 @@ export const createTranscribe =
       };
     };
 
-    // YouTube and Instagram keys come from the URL, so a cache hit runs no yt-dlp at all.
-    const inputKey = input.force ? undefined : sourceKeyFromInput(input.input);
-    if (inputKey !== undefined) {
+    /** Moves a page's downloaded audio into the library; if that fails, the transcription goes on without keeping it. */
+    const keepFetchedAudio = async (
+      fetched: FetchedAudio,
+      fetchedSource: ResolvedSource,
+      sourceKey: string,
+    ): Promise<FetchedAudio> => {
+      const { keepAudio, maxAudioBytes } = resolveLibrarySettings(config.data);
+      if (!keepAudio || !isSiteSource(fetchedSource) || fetched.audio.kind !== "file") return fetched;
+      const kept = await deps.library.keepAudio(sourceKey, fetched.audio.path, maxAudioBytes);
+      return kept.success ? { ...fetched, audio: { kind: "file", path: kept.data } } : fetched;
+    };
+    // YouTube and Instagram keys come from the URL, so a cache hit, or a reuse of kept audio, runs no yt-dlp.
+    const inputKey = sourceKeyFromInput(input.input);
+    if (inputKey !== undefined && !input.force) {
       const early = await deps.library.find(keyFor(inputKey));
       if (!early.success) return early;
       if (early.data) return ok(hit(early.data));
     }
+    const storedEarly = inputKey === undefined ? undefined : await deps.library.storedSource(inputKey);
+    if (storedEarly && !storedEarly.success) return storedEarly;
+    const reusedEarly = storedEarly?.data?.audioPath === undefined ? undefined : storedEarly.data;
 
-    options?.onProgress?.({ label: "Resolving source..." });
-    const source = await deps.media.resolve(input.input, settings.data, options);
-    if (!source.success) return source;
-    const finished = ensureFinishedMedia(source.data);
+    let source: ResolvedSource;
+    if (reusedEarly) {
+      source = reusedEarly.source;
+    } else {
+      options?.onProgress?.({ label: "Resolving source..." });
+      const resolved = await deps.media.resolve(input.input, settings.data, options);
+      if (!resolved.success) return resolved;
+      source = resolved.data;
+    }
+    const finished = ensureFinishedMedia(source);
     if (!finished.success) return finished;
-    const sourceKey = await deps.library.sourceKeyOf(source.data);
+    const sourceKey = await deps.library.sourceKeyOf(source);
     if (!sourceKey.success) return sourceKey;
     const key = keyFor(sourceKey.data);
     if (!input.force) {
@@ -161,24 +181,36 @@ export const createTranscribe =
       if (!cached.success) return cached;
       if (cached.data) return ok(hit(cached.data));
     }
-    options?.onProgress?.({ label: "Transcribing audio...", detail: `(${sourceDetail(source.data)})` });
-    const audio = await deps.media.fetchAudio(source.data, settings.data, options);
-    if (!audio.success) return audio;
+    // A best-effort page has no key before the resolve, but its kept audio is reused after it.
+    const storedLate =
+      reusedEarly || !isSiteSource(source) ? undefined : await deps.library.storedSource(sourceKey.data);
+    if (storedLate && !storedLate.success) return storedLate;
+    const keptAudio = reusedEarly?.audioPath ?? storedLate?.data?.audioPath;
+
+    options?.onProgress?.({ label: "Transcribing audio...", detail: `(${sourceDetail(source)})` });
+    let audio: FetchedAudio;
+    if (keptAudio !== undefined) {
+      audio = { audio: { kind: "file", path: keptAudio }, release: async () => {} };
+    } else {
+      const fetched = await deps.media.fetchAudio(source, settings.data, options);
+      if (!fetched.success) return fetched;
+      audio = await keepFetchedAudio(fetched.data, source, sourceKey.data);
+    }
 
     let transcript: Awaited<ReturnType<SttProvider["transcribe"]>>;
     try {
       transcript = await provider.transcribe(
-        { audio: audio.data.audio, apiKey: selected.data.apiKey, ...(language ? { language } : {}) },
+        { audio: audio.audio, apiKey: selected.data.apiKey, ...(language ? { language } : {}) },
         options,
       );
     } finally {
-      await audio.data.release();
+      await audio.release();
     }
     if (!transcript.success) return err(withAlternatives(transcript.error, providerId, deps, config.data));
 
     const artifact = buildOutputArtifact(
       {
-        source: source.data,
+        source,
         provider: providerId,
         model: provider.model,
         transcript: transcript.data.text,
@@ -190,7 +222,7 @@ export const createTranscribe =
       { generatedAt: deps.now().toISOString(), includeTimestamps: true },
     );
     options?.onProgress?.({ label: "Saving output..." });
-    const saved = await deps.library.save({ key, source: source.data, artifact, fresh: input.force === true });
+    const saved = await deps.library.save({ key, source, artifact, fresh: input.force === true });
     if (!saved.success) return saved;
     return ok({
       transcriptId: saved.data.transcriptId,

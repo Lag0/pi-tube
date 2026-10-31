@@ -30,10 +30,12 @@ export { createGetMediaInfo, type GetMediaInfoDeps } from "./application/get-med
 export {
   createGetTranscript,
   createListTranscripts,
+  createPruneLibrary,
   createSearchTranscripts,
   type LibraryDeps,
   type LibraryPage,
   MAX_PAGE_LIMIT,
+  type PruneInput,
 } from "./application/library.ts";
 export { ensureNotAborted, type OperationOptions, type ProgressEvent, type UseCase } from "./application/operation.ts";
 export {
@@ -69,8 +71,10 @@ export {
   toPiTubeError,
 } from "./domain/errors.ts";
 export {
+  type LibrarySettings,
   matchesName,
   type NamedEntry,
+  resolveLibrarySettings,
   type SourceKey,
   siteSourceKey,
   sourceKeyFromInput,
@@ -114,7 +118,14 @@ export type { OutputArtifact } from "./domain/transcript/contract.ts";
 export { type JsonOutputArtifact, toJsonOutputArtifact } from "./domain/transcript/render-json.ts";
 export { sourceReferenceOf } from "./domain/transcript/render-markdown.ts";
 export type { ConfigStore } from "./ports/config-store.ts";
-export type { LibraryEntry, LibraryStore, StoredTranscript } from "./ports/library-store.ts";
+export type {
+  LibraryEntry,
+  LibraryStore,
+  PruneReport,
+  PruneRequest,
+  StoredSource,
+  StoredTranscript,
+} from "./ports/library-store.ts";
 export type {
   DownloadedMedia,
   DownloadRequest,

@@ -57,6 +57,9 @@ interface DownloadOptions extends JsonCommandOptions {
 interface LibraryOptions extends JsonCommandOptions {
   limit?: string;
   offset?: string;
+  olderThan?: string;
+  includeTranscripts?: boolean;
+  yes?: boolean;
 }
 
 interface AuthOptions extends JsonCommandOptions {
@@ -198,11 +201,14 @@ function createProgram(setAction: (action: CliAction) => void): Command {
 
   program
     .command("library")
-    .description("List, show and search the transcripts in the local library.")
-    .argument("[action]", "list, show or search")
+    .description("List, show, search and prune the transcripts in the local library.")
+    .argument("[action]", "list, show, search or prune")
     .argument("[args...]", "a transcript id, or search terms")
     .option("--limit <n>", "How many entries to print (default 20, at most 500).")
     .option("--offset <n>", "How many entries to skip (default 0).")
+    .option("--older-than <days>", "prune: only audio, or sources, older than this many days.")
+    .option("--include-transcripts", "prune: delete whole sources, transcripts included (needs --older-than).")
+    .option("--yes", "prune: delete; without it, prune only reports.")
     .option("--json", "Print the result as JSON on stdout.")
     .action((action: string | undefined, args: string[], options: LibraryOptions) => {
       setAction({ kind: "library", action, args, options });
@@ -354,6 +360,9 @@ export const runCli = async (argv: readonly string[], deps: CliDeps): Promise<nu
           args: action.args,
           limit: action.options.limit,
           offset: action.options.offset,
+          olderThan: action.options.olderThan,
+          includeTranscripts: Boolean(action.options.includeTranscripts),
+          yes: Boolean(action.options.yes),
           json: Boolean(action.options.json),
         });
       case "providers":

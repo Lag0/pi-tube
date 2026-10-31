@@ -1,7 +1,8 @@
 import { createError } from "../domain/errors.ts";
-import { matchesName } from "../domain/library.ts";
+import { matchesName, resolveLibrarySettings } from "../domain/library.ts";
 import { err, ok, type Result } from "../domain/result.ts";
-import type { LibraryEntry, LibraryStore, StoredTranscript } from "../ports/library-store.ts";
+import type { ConfigStore } from "../ports/config-store.ts";
+import type { LibraryEntry, LibraryStore, PruneReport, StoredTranscript } from "../ports/library-store.ts";
 import { ensureNotAborted, type UseCase } from "./operation.ts";
 
 /** Most entries one page may hold. */
@@ -86,4 +87,36 @@ export const createGetTranscript =
       return err(createError("TRANSCRIPT_NOT_FOUND", `No transcript \`${input.transcriptId.trim()}\` in the library.`));
     }
     return ok(stored.data);
+  };
+
+/** What `library prune` asks for; without `dryRun: false` nothing is deleted. */
+export interface PruneInput {
+  readonly olderThanDays?: number;
+  readonly includeTranscripts: boolean;
+  readonly dryRun: boolean;
+}
+
+/**
+ * Removes kept audio (all of it, or older than `olderThanDays`, plus what `library.max_audio_bytes` does not fit)
+ * or, with `includeTranscripts`, whole sources older than `olderThanDays`, which is then required.
+ */
+export const createPruneLibrary =
+  (deps: LibraryDeps & { readonly configStore: ConfigStore }): UseCase<PruneInput, PruneReport> =>
+  async (input, options) => {
+    const ready = ensureNotAborted(options?.signal);
+    if (!ready.success) return ready;
+    if (input.olderThanDays !== undefined && (!Number.isInteger(input.olderThanDays) || input.olderThanDays < 1)) {
+      return err(createError("INPUT_INVALID", "`--older-than` must be a whole number of days of 1 or more."));
+    }
+    if (input.includeTranscripts && input.olderThanDays === undefined) {
+      return err(
+        createError("INPUT_INVALID", "`--include-transcripts` needs `--older-than <days>`.", {
+          hint: "Transcripts are only deleted by age, so one command never deletes the whole library.",
+        }),
+      );
+    }
+    const config = await deps.configStore.read();
+    if (!config.success) return config;
+    const { maxAudioBytes } = resolveLibrarySettings(config.data);
+    return deps.library.prune({ ...input, ...(maxAudioBytes === undefined ? {} : { maxAudioBytes }) });
   };
