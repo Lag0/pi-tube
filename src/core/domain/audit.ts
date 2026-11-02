@@ -103,14 +103,27 @@ const PRICES: Readonly<Record<string, Price>> = {
 
 const roundUsd = (value: number): number => Math.round(value * 1e6) / 1e6;
 
+// Parameter names that may carry a credential; the audit drops them on top of the signature parameters `keyUrlOf`
+// drops. Not part of `keyUrlOf`, which would change the library's `url:` keys.
+const CREDENTIAL_PARAM = /key|token|auth|secret|sig|pass|pwd|session|cred|expire/i;
+
 /**
- * The input as the audit log keeps it: a URL without credentials, fragment or signature parameters, and a local
- * path as its file name only. The source key already identifies the content.
+ * The input as the audit log keeps it: an http(s) URL without credentials, fragment, signature or credential
+ * parameters; anything else (a path, a URL without a scheme) as its last path segment, without query, fragment or
+ * user info. The source key already identifies the content.
  */
 export const redactAuditInput = (input: string): string => {
   const trimmed = input.trim();
-  if (isHttpUrl(trimmed)) return toSafeLine(keyUrlOf(trimmed));
-  return toSafeLine(trimmed.split(/[\\/]/).pop() ?? "");
+  if (isHttpUrl(trimmed)) {
+    const url = new URL(keyUrlOf(trimmed));
+    url.search = new URLSearchParams(
+      [...url.searchParams.entries()].filter(([name]) => !CREDENTIAL_PARAM.test(name)),
+    ).toString();
+    return toSafeLine(url.toString());
+  }
+  const lastSegment = trimmed.split(/[\\/]/).filter(Boolean).pop() ?? "";
+  const withoutQuery = lastSegment.split(/[?#]/)[0] ?? "";
+  return toSafeLine(withoutQuery.slice(withoutQuery.lastIndexOf("@") + 1));
 };
 
 /** The estimated cost of transcribing `audioSeconds` of audio; absent for a model outside the price table. */

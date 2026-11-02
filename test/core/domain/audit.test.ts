@@ -76,6 +76,26 @@ describe("redactAuditInput", () => {
     expect(redactAuditInput("C:\\Users\\bruno\\a.wav")).toBe("a.wav");
   });
 
+  test.each([
+    ["a URL without a scheme", "cdn.example.com/ep.mp3?X-Amz-Signature=SIG&token=TOK", "ep.mp3"],
+    ["a mistyped scheme with user info", "htps://user:pw@cdn.example.com", "cdn.example.com"],
+    ["an ftp URL with user info", "ftp://user:pw@host/", "host"],
+    ["a fragment", "/tmp/a.mp3#secret", "a.mp3"],
+  ])(
+    "an input that is not an http(s) URL keeps neither query, fragment nor user info: %s",
+    (_name, input, expected) => {
+      expect(redactAuditInput(input)).toBe(expected);
+    },
+  );
+
+  test("credential parameters are dropped, other parameters kept", () => {
+    const redacted = redactAuditInput(
+      "https://api.example.com/m/42.mp3?api_key=AK1&access_token=AT2&apikey=AK3&key=K4&auth=A5&lsig=L6&expire=7&episode=12",
+    );
+
+    expect(redacted).toBe("https://api.example.com/m/42.mp3?episode=12");
+  });
+
   test("a YouTube URL keeps the video id", () => {
     expect(redactAuditInput("https://www.youtube.com/watch?v=jNQXAC9IVRw&si=x")).toContain("v=jNQXAC9IVRw");
   });
