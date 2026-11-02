@@ -84,6 +84,8 @@ describe("source sections", () => {
     [{ local_files: { max_bytes: 2147483648 } }, "`local_files.max_bytes` must be an integer from 1 to 2147483647."],
     [{ local_files: { max_bytes: 12.5 } }, "`local_files.max_bytes` must be an integer from 1 to 2147483647."],
     [{ network: [] }, "`network` must be an object."],
+    [{ audit: { retention_months: "x" } }, "`audit.retention_months` must be a whole number of 1 or more."],
+    [{ audit: { retention_months: 0 } }, "`audit.retention_months` must be a whole number of 1 or more."],
   ])("rejects %j", (raw, detail) => {
     const result = parseConfig(raw, LOCATION);
 
@@ -104,6 +106,7 @@ describe("config keys", () => {
       "local_files.max_bytes",
       "library.keep_audio",
       "library.max_audio_bytes",
+      "audit.retention_months",
       "providers.deepgram.api_key_env",
       "providers.groq.api_key_env",
       "providers.elevenlabs.api_key_env",
@@ -179,6 +182,22 @@ describe("config keys", () => {
 
     expect(keep.success ? keep.data.library : undefined).toEqual({ keep_audio: false });
     expect(max.success ? max.data.library : undefined).toEqual({ max_audio_bytes: 5_000_000_000 });
+  });
+
+  test("audit.retention_months stores a number", () => {
+    const result = applyConfigValue(DEFAULT_CONFIG, "audit.retention_months", "6", PROVIDER_DESCRIPTORS);
+
+    expect(result.success ? result.data.audit : result).toEqual({ retention_months: 6 });
+    expect(result.success ? getConfigValue(result.data, "audit.retention_months") : undefined).toBe(6);
+  });
+
+  test.each(["0", "abc", "1.5"])("audit.retention_months refuses %s", (value) => {
+    const result = applyConfigValue(DEFAULT_CONFIG, "audit.retention_months", value, PROVIDER_DESCRIPTORS);
+
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.error.code).toBe("INPUT_INVALID");
+    expect(result.error.message).toBe("`audit.retention_months` must be a whole number of 1 or more.");
   });
 
   test("local_files.max_bytes stores a number", () => {

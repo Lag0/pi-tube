@@ -106,6 +106,16 @@ describe("file config store", () => {
     expect(JSON.parse(readFileSync(configFile, "utf8")).network).toEqual({ future: 1, allow_private_hosts: true });
   });
 
+  test("writes the audit section and reads it back", async () => {
+    const store = createFileConfigStore(configFile);
+
+    await store.write({ ...SAMPLE, audit: { retention_months: 6 } });
+
+    expect(JSON.parse(readFileSync(configFile, "utf8")).audit).toEqual({ retention_months: 6 });
+    const read = await store.read();
+    expect(read.success ? read.data.audit : read).toEqual({ retention_months: 6 });
+  });
+
   test("does not add empty source sections to a file that lacks them", async () => {
     writeRaw(JSON.stringify(SAMPLE));
 

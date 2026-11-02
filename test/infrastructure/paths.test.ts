@@ -15,6 +15,7 @@ describe("resolvePiTubePaths", () => {
       libraryDir: path.join(FAKE_HOME, ".pi-tube", "library"),
       tmpDir: path.join(FAKE_HOME, ".pi-tube", "tmp"),
       downloadsDir: path.join(FAKE_HOME, ".pi-tube", "downloads"),
+      auditDir: path.join(FAKE_HOME, ".pi-tube", "audit"),
     });
   });
 
