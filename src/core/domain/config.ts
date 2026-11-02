@@ -30,6 +30,7 @@ export interface PiTubeConfig {
   readonly cookies?: { readonly file?: string };
   readonly local_files?: { readonly max_bytes?: number };
   readonly library?: { readonly keep_audio?: boolean; readonly max_audio_bytes?: number };
+  readonly audit?: { readonly retention_months?: number };
 }
 
 /** Config used when the file does not exist yet. */

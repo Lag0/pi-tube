@@ -53,6 +53,19 @@ export {
   type TranscribeOutput,
 } from "./application/transcribe.ts";
 export {
+  AUDIT_OPERATIONS,
+  type AuditAdapter,
+  type AuditCost,
+  type AuditGroup,
+  type AuditOperation,
+  type AuditQuery,
+  type AuditRecord,
+  type AuditStats,
+  type AuditVersions,
+  DEFAULT_AUDIT_RETENTION_MONTHS,
+  PRICE_TABLE_DATE,
+} from "./domain/audit.ts";
+export {
   CONFIG_VERSION,
   type ConfigScalar,
   configKeysFor,
