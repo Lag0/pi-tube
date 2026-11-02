@@ -1,11 +1,13 @@
 import type { EnvironmentVariables } from "../domain/config.ts";
 import { createError } from "../domain/errors.ts";
+import { siteSourceKey } from "../domain/library.ts";
 import { err, ok } from "../domain/result.ts";
 import { isSiteSource, type SiteKind } from "../domain/source.ts";
 import { classifyInput, ensureFinishedMedia } from "../domain/source-policy.ts";
 import { resolveSourceSettings } from "../domain/source-settings.ts";
 import type { ConfigStore } from "../ports/config-store.ts";
 import type { MediaFetcher } from "../ports/media-fetcher.ts";
+import { type AuditTrail, type AuditTrailDeps, beginAudit } from "./audit-trail.ts";
 import { ensureNotAborted, type UseCase } from "./operation.ts";
 
 /** Input of `downloadMedia`. A missing `outputDir` means the default downloads directory, never the cwd. */
@@ -29,14 +31,14 @@ export interface DownloadMediaDeps {
   readonly env: EnvironmentVariables;
   readonly media: MediaFetcher;
   readonly defaultOutputDir: string;
+  readonly audit: AuditTrailDeps;
 }
 
 const NOT_A_PAGE =
   "`download` takes a page URL that yt-dlp supports; direct media URLs and local files are already files.";
 
-/** Downloads the video of a page yt-dlp supports, or its audio as mp3, after resolving the page. */
-export const createDownloadMedia =
-  (deps: DownloadMediaDeps): UseCase<DownloadMediaInput, DownloadMediaOutput> =>
+const runDownload =
+  (deps: DownloadMediaDeps, trail: AuditTrail): UseCase<DownloadMediaInput, DownloadMediaOutput> =>
   async (input, options) => {
     const ready = ensureNotAborted(options?.signal);
     if (!ready.success) return ready;
@@ -51,6 +53,8 @@ export const createDownloadMedia =
     const source = await deps.media.resolve(input.input, settings.data, options);
     if (!source.success) return source;
     if (!isSiteSource(source.data)) return err(createError("DOWNLOAD_FAILED", NOT_A_PAGE));
+    const { platform, mediaId } = source.data.metadata;
+    if (mediaId !== undefined) trail.note({ sourceKey: siteSourceKey(platform, mediaId) });
     const finished = ensureFinishedMedia(source.data);
     if (!finished.success) return finished;
 
@@ -68,4 +72,12 @@ export const createDownloadMedia =
       sourceKind: source.data.kind,
       media: input.media,
     });
+  };
+
+/** Downloads the video of a page yt-dlp supports, or its audio as mp3, after resolving the page; audited. */
+export const createDownloadMedia =
+  (deps: DownloadMediaDeps): UseCase<DownloadMediaInput, DownloadMediaOutput> =>
+  async (input, options) => {
+    const trail = beginAudit(deps.audit, "download", input.input);
+    return trail.finish(await runDownload(deps, trail)(input, options), options);
   };

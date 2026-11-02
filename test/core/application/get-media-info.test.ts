@@ -7,6 +7,7 @@ import { DEFAULT_CONFIG } from "../../../src/core/domain/config.ts";
 import type { ResolvedSource } from "../../../src/core/domain/source.ts";
 import { createMediaFetcher } from "../../../src/infrastructure/media/media-fetcher.ts";
 import { createFakeMediaFetcher } from "../../helpers/fake-media.ts";
+import { auditDepsFor, createInMemoryAuditLog } from "../../helpers/in-memory-audit-log.ts";
 import { createInMemoryConfigStore } from "../../helpers/in-memory-config-store.ts";
 
 let root: string;
@@ -19,14 +20,38 @@ afterEach(() => {
   rmSync(root, { recursive: true, force: true });
 });
 
-const infoWith = (source: ResolvedSource) =>
+const infoWith = (source: ResolvedSource, audit = createInMemoryAuditLog()) =>
   createGetMediaInfo({
     configStore: createInMemoryConfigStore(DEFAULT_CONFIG),
     env: {},
     media: createFakeMediaFetcher({ source }).fetcher,
+    audit: auditDepsFor(audit),
   });
 
 describe("getMediaInfo", () => {
+  test("records one audit entry with the page's source key and a redacted input", async () => {
+    const audit = createInMemoryAuditLog();
+    const getInfo = infoWith(
+      {
+        kind: "site",
+        originalInput: "https://u:p@vimeo.com/1",
+        normalizedUrl: "https://u:p@vimeo.com/1",
+        metadata: { platform: "Vimeo", mediaId: "1" },
+      },
+      audit,
+    );
+
+    await getInfo({ input: "https://u:p@vimeo.com/1" });
+
+    expect(audit.records).toHaveLength(1);
+    expect(audit.records[0]).toMatchObject({
+      operation: "info",
+      input: "https://vimeo.com/1",
+      sourceKey: "vimeo:1",
+      result: "ok",
+    });
+  });
+
   test("a page source loses URL credentials in url and canonicalUrl", async () => {
     const getInfo = infoWith({
       kind: "site",
@@ -65,6 +90,7 @@ describe("getMediaInfo", () => {
       configStore: createInMemoryConfigStore(DEFAULT_CONFIG),
       env: {},
       media: createMediaFetcher({ env: {}, cwd: root, tmpDir: path.join(root, "tmp") }),
+      audit: auditDepsFor(createInMemoryAuditLog()),
     });
 
     const result = await getInfo({ input: "a.mp3" });

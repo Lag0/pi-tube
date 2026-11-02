@@ -24,7 +24,7 @@ export const main = async (argv: readonly string[] = process.argv.slice(2)): Pro
 
   try {
     return await runCli(argv, {
-      app: createApp({ env: process.env, cwd: process.cwd(), homedir: os.homedir }),
+      app: createApp({ env: process.env, cwd: process.cwd(), homedir: os.homedir, adapter: "cli" }),
       io: createProcessIo(),
       system: { platform: process.platform, runInteractive: runInteractiveCommand },
       listenForCancel,

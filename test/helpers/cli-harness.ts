@@ -61,7 +61,10 @@ export const runCliInProcess = async (argv: string[], options: CliRunOptions = {
   try {
     const exitCode = await runCli(argv, {
       // No test resolves real DNS: hosts resolve to a public address unless a test passes its own lookup.
-      app: createApp({ env, cwd: process.cwd(), homedir: () => home }, { lookup: PUBLIC_LOOKUP, ...options.fakes }),
+      app: createApp(
+        { env, cwd: process.cwd(), homedir: () => home, adapter: "cli" },
+        { lookup: PUBLIC_LOOKUP, ...options.fakes },
+      ),
       io,
       system,
       ...(signal ? { listenForCancel: () => signal } : {}),

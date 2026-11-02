@@ -1,4 +1,8 @@
+import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import {
+  type AuditAdapter,
+  type AuditTrailDeps,
   type ConfigValue,
   type ConfigValueSet,
   type ConfigValues,
@@ -35,6 +39,7 @@ import {
   type TranscribeOutput,
   type UseCase,
 } from "./core/index.ts";
+import { createFileAuditLog } from "./infrastructure/audit/file-audit-log.ts";
 import { createFileConfigStore } from "./infrastructure/config/file-config-store.ts";
 import { createFileLibraryStore } from "./infrastructure/library/file-library-store.ts";
 import type { LookupHost } from "./infrastructure/media/host-guard.ts";
@@ -48,6 +53,8 @@ export interface AppEnvironment {
   readonly env: EnvironmentVariables;
   readonly cwd: string;
   readonly homedir: () => string;
+  /** The adapter the app serves; every audit record names it. */
+  readonly adapter: AuditAdapter;
 }
 
 /** Test seams: fake providers, a fake media fetcher, or a fake process runner and DNS under the real fetcher. */
@@ -79,6 +86,12 @@ export interface App {
   readonly pruneLibrary: UseCase<PruneInput, PruneReport>;
 }
 
+const PACKAGE_JSON = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {
+  version?: string;
+};
+const PI_TUBE_VERSION = typeof PACKAGE_JSON.version === "string" ? PACKAGE_JSON.version : "0.0.0";
+const RUNTIME_VERSION = process.versions.bun ? `bun ${process.versions.bun}` : `node ${process.versions.node}`;
+
 /** Wires the core and the infrastructure for one environment. */
 export const createApp = (environment: AppEnvironment, overrides: AppOverrides = {}): App => {
   const { env, cwd } = environment;
@@ -94,6 +107,13 @@ export const createApp = (environment: AppEnvironment, overrides: AppOverrides =
       ...(overrides.lookup ? { lookup: overrides.lookup } : {}),
     });
   const library = createFileLibraryStore({ libraryDir: paths.libraryDir });
+  const audit: AuditTrailDeps = {
+    audit: createFileAuditLog({ auditDir: paths.auditDir, configStore }),
+    now: () => new Date(),
+    newId: randomUUID,
+    adapter: environment.adapter,
+    versions: { piTube: PI_TUBE_VERSION, runtime: RUNTIME_VERSION },
+  };
   const accountDeps = { configStore, env, providers: PROVIDER_DESCRIPTORS };
   const configDeps = { configStore, providers: PROVIDER_DESCRIPTORS };
 
@@ -113,12 +133,13 @@ export const createApp = (environment: AppEnvironment, overrides: AppOverrides =
       media,
       library,
       now: () => new Date(),
+      audit,
     }),
-    downloadMedia: createDownloadMedia({ configStore, env, media, defaultOutputDir: paths.downloadsDir }),
-    getMediaInfo: createGetMediaInfo({ configStore, env, media }),
+    downloadMedia: createDownloadMedia({ configStore, env, media, defaultOutputDir: paths.downloadsDir, audit }),
+    getMediaInfo: createGetMediaInfo({ configStore, env, media, audit }),
     listTranscripts: createListTranscripts({ library }),
     searchTranscripts: createSearchTranscripts({ library }),
     getTranscript: createGetTranscript({ library }),
-    pruneLibrary: createPruneLibrary({ library, configStore }),
+    pruneLibrary: createPruneLibrary({ library, configStore, audit }),
   };
 };
