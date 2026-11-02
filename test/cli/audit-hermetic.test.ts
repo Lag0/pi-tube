@@ -56,6 +56,26 @@ describe("audit log", () => {
     }
   });
 
+  test("a spawned CLI never reads the developer's PI_TUBE_OUTPUT_DIR", () => {
+    const outputDir = path.join(home, "v2-transcripts");
+    mkdirSync(outputDir, { recursive: true });
+    writeFileSync(
+      path.join(outputDir, "2026-03-02-demo.json"),
+      readFileSync(path.join("test", "fixtures", "v2", "json-golden.json")),
+    );
+    const previous = process.env.PI_TUBE_OUTPUT_DIR;
+    process.env.PI_TUBE_OUTPUT_DIR = outputDir;
+    try {
+      const result = spawnCli(["library", "list"]);
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stderr).not.toContain("[LIBRARY_IMPORT]");
+    } finally {
+      if (previous === undefined) delete process.env.PI_TUBE_OUTPUT_DIR;
+      else process.env.PI_TUBE_OUTPUT_DIR = previous;
+    }
+  });
+
   test("a spawned CLI writes its audit under the temp HOME", () => {
     const media = path.join(home, "clip.mp3");
     mkdirSync(home, { recursive: true });

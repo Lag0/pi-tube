@@ -18,6 +18,8 @@ const HERMETIC_ENV = {
   PI_TUBE_TRANSCRIPTION_LANGUAGE: "",
   PI_TUBE_CONFIG_PATH: path.join(SPAWN_ROOT, "missing.json"),
   PI_TUBE_LIBRARY_DIR: path.join(SPAWN_ROOT, "library"),
+  // Read by the v2 import; a developer's own value must never reach a spawned CLI.
+  PI_TUBE_OUTPUT_DIR: "",
 };
 
 export interface SpawnCliResult {
