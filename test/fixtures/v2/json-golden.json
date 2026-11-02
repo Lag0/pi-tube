@@ -1,0 +1,46 @@
+{
+  "schema_version": "1.1.0",
+  "generated_at": "2026-03-02T23:50:00.000Z",
+  "source": {
+    "kind": "direct_url",
+    "original_input": "https://cdn.example.com/audio/demo.wav",
+    "normalized_url": "https://cdn.example.com/audio/demo.wav",
+    "media_url": "https://cdn.example.com/audio/demo.wav",
+    "absolute_path": null,
+    "extension": "wav",
+    "title": null,
+    "published_at": null,
+    "description": null,
+    "description_links": []
+  },
+  "transcription": {
+    "provider": "deepgram",
+    "requested_language": "en",
+    "detected_language": "en"
+  },
+  "summary": {
+    "paragraph": "hello world",
+    "key_points": [
+      "Source kind: direct_url",
+      "Provider: deepgram",
+      "Requested language: en",
+      "Detected language: en",
+      "Timestamp mode: on (2 blocks)"
+    ]
+  },
+  "transcript": {
+    "full_text": "hello world",
+    "segments": [
+      {
+        "start_ms": 1000,
+        "end_ms": 1500,
+        "text": "hello"
+      },
+      {
+        "start_ms": 1600,
+        "end_ms": 2400,
+        "text": "world"
+      }
+    ]
+  }
+}

@@ -139,6 +139,16 @@ export {
 } from "./domain/source-settings.ts";
 export { toSafeLine } from "./domain/text.ts";
 export type { OutputArtifact } from "./domain/transcript/contract.ts";
+export {
+  type ImportSummary,
+  parseV2Transcript,
+  V2_FILE_NAME,
+  V2_MODELS,
+  type V2Source,
+  type V2SourceKind,
+  type V2Transcript,
+  v2SourceOf,
+} from "./domain/transcript/parse-v2.ts";
 export { type JsonOutputArtifact, toJsonOutputArtifact } from "./domain/transcript/render-json.ts";
 export { sourceReferenceOf } from "./domain/transcript/render-markdown.ts";
 export type { AuditLog, AuditReadout } from "./ports/audit-log.ts";

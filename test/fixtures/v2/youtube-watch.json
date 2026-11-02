@@ -1,0 +1,35 @@
+{
+  "schema_version": "1.1.0",
+  "generated_at": "2026-03-06T10:00:00.000Z",
+  "source": {
+    "kind": "youtube",
+    "original_input": "https://www.youtube.com/watch?v=jNQXAC9IVRw",
+    "normalized_url": "https://www.youtube.com/watch?v=jNQXAC9IVRw",
+    "media_url": "https://rr3---sn-abc.googlevideo.com/videoplayback?expire=1&signature=SIG&itag=140",
+    "absolute_path": null,
+    "extension": null,
+    "title": "Me at the zoo",
+    "published_at": "2005-04-24",
+    "description": "The first video on YouTube.",
+    "description_links": ["https://www.youtube.com/@jawed"]
+  },
+  "transcription": {
+    "provider": "elevenlabs",
+    "requested_language": null,
+    "detected_language": "eng"
+  },
+  "summary": {
+    "paragraph": "All right, so here we are in front of the elephants.",
+    "key_points": [
+      "Source kind: youtube",
+      "Provider: elevenlabs",
+      "Requested language: auto",
+      "Detected language: eng",
+      "Timestamp mode: off"
+    ]
+  },
+  "transcript": {
+    "full_text": "All right, so here we are in front of the elephants.",
+    "segments": []
+  }
+}
