@@ -27,7 +27,8 @@ interface PageRequest {
   readonly offset: number;
 }
 
-const checkPage = ({ limit, offset }: PageRequest): Result<void> => {
+/** Checks `--limit` (1 to `MAX_PAGE_LIMIT`) and `--offset` (0 or more). */
+export const checkPage = ({ limit, offset }: PageRequest): Result<void> => {
   if (!Number.isInteger(limit) || limit < 1 || limit > MAX_PAGE_LIMIT) {
     return err(createError("INPUT_INVALID", `\`--limit\` must be a whole number from 1 to ${MAX_PAGE_LIMIT}.`));
   }

@@ -2,6 +2,7 @@ import { Command, CommanderError } from "commander";
 import { createError, toPiTubeError } from "../../core/index.ts";
 import { APP_VERSION, COMMAND_IDENTITY, getHelpDocument, HELP_TOPICS, type HelpTopic } from "./command-contract.ts";
 import { runAuth, runProviders } from "./commands/account.ts";
+import { runAudit } from "./commands/audit.ts";
 import { runConfig, runDefaults } from "./commands/config.ts";
 import { runDownload } from "./commands/download.ts";
 import { runInfo } from "./commands/info.ts";
@@ -27,6 +28,7 @@ type CliAction =
   | { kind: "download"; input?: string; extraPositionals: string[]; options: DownloadOptions; rootOptions: RootOptions }
   | { kind: "info"; input?: string; extraPositionals: string[]; options: JsonCommandOptions; rootOptions: RootOptions }
   | { kind: "library"; action?: string; args: string[]; options: LibraryOptions }
+  | { kind: "audit"; action?: string; args: string[]; options: AuditOptions }
   | { kind: "providers"; options: JsonCommandOptions }
   | { kind: "auth"; action?: string; provider?: string; options: AuthOptions; rootOptions: RootOptions }
   | { kind: "defaults"; action?: string; value?: string; rootOptions: RootOptions }
@@ -60,6 +62,16 @@ interface LibraryOptions extends JsonCommandOptions {
   olderThan?: string;
   includeTranscripts?: boolean;
   yes?: boolean;
+}
+
+interface AuditOptions extends JsonCommandOptions {
+  since?: string;
+  until?: string;
+  operation?: string;
+  provider?: string;
+  errors?: boolean;
+  limit?: string;
+  offset?: string;
 }
 
 interface AuthOptions extends JsonCommandOptions {
@@ -215,6 +227,23 @@ function createProgram(setAction: (action: CliAction) => void): Command {
     });
 
   program
+    .command("audit")
+    .description("List the local audit log, or sum it up with `audit stats`.")
+    .argument("[action]", "list (default) or stats")
+    .argument("[args...]", "none")
+    .option("--since <date>", "Only operations on or after this UTC day (YYYY-MM-DD).")
+    .option("--until <date>", "Only operations on or before this UTC day (YYYY-MM-DD).")
+    .option("--operation <name>", "list: transcribe, download, info or library_prune.")
+    .option("--provider <id>", "list: only this provider.")
+    .option("--errors", "list: only failed operations.")
+    .option("--limit <n>", "list: how many records to print (default 20, at most 500).")
+    .option("--offset <n>", "list: how many records to skip (default 0).")
+    .option("--json", "Print the result as JSON on stdout.")
+    .action((action: string | undefined, args: string[], options: AuditOptions) => {
+      setAction({ kind: "audit", action, args, options });
+    });
+
+  program
     .command("providers")
     .description("Show which providers have an API key and where it comes from.")
     .option("--json", "Output deterministic JSON format.")
@@ -363,6 +392,19 @@ export const runCli = async (argv: readonly string[], deps: CliDeps): Promise<nu
           olderThan: action.options.olderThan,
           includeTranscripts: Boolean(action.options.includeTranscripts),
           yes: Boolean(action.options.yes),
+          json: Boolean(action.options.json),
+        });
+      case "audit":
+        return await runAudit(deps, {
+          action: action.action,
+          args: action.args,
+          since: action.options.since,
+          until: action.options.until,
+          operation: action.options.operation,
+          provider: action.options.provider,
+          errors: Boolean(action.options.errors),
+          limit: action.options.limit,
+          offset: action.options.offset,
           json: Boolean(action.options.json),
         });
       case "providers":

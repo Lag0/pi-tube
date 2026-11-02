@@ -2,10 +2,15 @@ import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import {
   type AuditAdapter,
+  type AuditListInput,
+  type AuditPage,
+  type AuditStatsInput,
+  type AuditStatsOutput,
   type AuditTrailDeps,
   type ConfigValue,
   type ConfigValueSet,
   type ConfigValues,
+  createAuditStats,
   createDownloadMedia,
   createGetConfigValue,
   createGetMediaInfo,
@@ -16,6 +21,7 @@ import {
   createLoginProvider,
   createLogoutProvider,
   createPruneLibrary,
+  createQueryAudit,
   createSearchTranscripts,
   createSetConfigValue,
   createTranscribe,
@@ -84,6 +90,8 @@ export interface App {
   >;
   readonly getTranscript: UseCase<{ readonly transcriptId: string }, StoredTranscript>;
   readonly pruneLibrary: UseCase<PruneInput, PruneReport>;
+  readonly queryAudit: UseCase<AuditListInput, AuditPage>;
+  readonly auditStats: UseCase<AuditStatsInput, AuditStatsOutput>;
 }
 
 const PACKAGE_JSON = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {
@@ -107,8 +115,9 @@ export const createApp = (environment: AppEnvironment, overrides: AppOverrides =
       ...(overrides.lookup ? { lookup: overrides.lookup } : {}),
     });
   const library = createFileLibraryStore({ libraryDir: paths.libraryDir });
+  const auditLog = createFileAuditLog({ auditDir: paths.auditDir, configStore });
   const audit: AuditTrailDeps = {
-    audit: createFileAuditLog({ auditDir: paths.auditDir, configStore }),
+    audit: auditLog,
     now: () => new Date(),
     newId: randomUUID,
     adapter: environment.adapter,
@@ -141,5 +150,7 @@ export const createApp = (environment: AppEnvironment, overrides: AppOverrides =
     searchTranscripts: createSearchTranscripts({ library }),
     getTranscript: createGetTranscript({ library }),
     pruneLibrary: createPruneLibrary({ library, configStore, audit }),
+    queryAudit: createQueryAudit({ audit: auditLog }),
+    auditStats: createAuditStats({ audit: auditLog }),
   };
 };

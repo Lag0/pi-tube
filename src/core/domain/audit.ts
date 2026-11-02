@@ -262,7 +262,7 @@ const groupOf = (records: readonly AuditRecord[], provider?: string): AuditGroup
     errorRate: operations === 0 ? 0 : errors / operations,
     cacheHits: records.filter((entry) => entry.cacheHit === true).length,
     costEstimate: roundUsd(records.reduce((sum, entry) => sum + (entry.cost?.estimate ?? 0), 0)),
-    audioSeconds: records.reduce((sum, entry) => sum + (entry.audioSeconds ?? 0), 0),
+    audioSeconds: Math.round(records.reduce((sum, entry) => sum + (entry.audioSeconds ?? 0), 0) * 1000) / 1000,
     averageDurationMs: operations === 0 ? 0 : Math.round(totalDurationMs / operations),
   };
 };

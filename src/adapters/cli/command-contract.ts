@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { PRICE_TABLE_DATE } from "../../core/index.ts";
 import type { HelpDocument } from "./help-renderer.ts";
 
 export const COMMAND_IDENTITY = "pi-tube";
@@ -12,6 +13,7 @@ export type HelpTopic =
   | "transcribe"
   | "info"
   | "library"
+  | "audit"
   | "download"
   | "providers"
   | "auth"
@@ -24,6 +26,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
   "transcribe",
   "info",
   "library",
+  "audit",
   "download",
   "providers",
   "auth",
@@ -39,6 +42,7 @@ const ROOT_HELP_DOCUMENT: HelpDocument = {
     `${COMMAND_IDENTITY} transcribe <input> [--provider <deepgram|groq|elevenlabs>] [--language <code>] [--force] [--json]`,
     `${COMMAND_IDENTITY} info <input> [--json]`,
     `${COMMAND_IDENTITY} library <list|show|search> [args] [--json]`,
+    `${COMMAND_IDENTITY} audit [list|stats] [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--json]`,
     `${COMMAND_IDENTITY} download <url> [--audio] [--output <dir>]`,
     `${COMMAND_IDENTITY} providers [--json]`,
     `${COMMAND_IDENTITY} auth <login|status|logout> [provider]`,
@@ -54,6 +58,10 @@ const ROOT_HELP_DOCUMENT: HelpDocument = {
         {
           term: `${COMMAND_IDENTITY} library list`,
           description: "List the transcripts saved in the local library.",
+        },
+        {
+          term: `${COMMAND_IDENTITY} audit`,
+          description: "List the local audit log; `audit stats` sums operations, errors and estimated cost.",
         },
         {
           term: `${COMMAND_IDENTITY} info <input>`,
@@ -192,6 +200,36 @@ const LIBRARY_HELP_DOCUMENT: HelpDocument = {
   ],
 };
 
+const AUDIT_HELP_DOCUMENT: HelpDocument = {
+  title: `${COMMAND_IDENTITY} audit`,
+  summary:
+    "The local audit log: one record per transcribe, download, info and library prune, with its estimated cost. It never leaves your machine.",
+  usage: [
+    `${COMMAND_IDENTITY} audit [list] [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--operation <name>] [--provider <id>] [--errors] [--limit <n>] [--offset <n>] [--json]`,
+    `${COMMAND_IDENTITY} audit stats [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--json]`,
+  ],
+  options: [
+    { term: "--since <YYYY-MM-DD>", description: "Only operations on or after this day (UTC)." },
+    { term: "--until <YYYY-MM-DD>", description: "Only operations on or before this day (UTC)." },
+    { term: "--operation <name>", description: "list: transcribe, download, info or library_prune." },
+    { term: "--provider <id>", description: "list: only this provider." },
+    { term: "--errors", description: "list: only failed operations." },
+    { term: "--limit <n>", description: "list: how many records to print (default 20, at most 500)." },
+    { term: "--offset <n>", description: "list: how many records to skip (default 0)." },
+    { term: "--json", description: "Print the result as JSON on stdout." },
+  ],
+  examples: [
+    `${COMMAND_IDENTITY} audit`,
+    `${COMMAND_IDENTITY} audit --errors --since 2026-10-01`,
+    `${COMMAND_IDENTITY} audit stats --since 2026-10-01 --until 2026-10-31`,
+  ],
+  notes: [
+    `Costs are estimates from the price table of ${PRICE_TABLE_DATE}; your provider bills on its own terms. A cache hit costs 0.`,
+    "The log lives in ~/.pi-tube/audit, one file per month; audit.retention_months (default 12) sets how many months are kept.",
+    "It never holds API keys, cookies, transcript text or signed URLs; a local file is recorded by its name only.",
+  ],
+};
+
 const DOWNLOAD_HELP_DOCUMENT: HelpDocument = {
   title: `${COMMAND_IDENTITY} download`,
   summary: "Download the video or audio of a page yt-dlp supports.",
@@ -320,6 +358,7 @@ export function getHelpDocument(topic: HelpTopic): HelpDocument {
   if (topic === "transcribe") return TRANSCRIBE_HELP_DOCUMENT;
   if (topic === "info") return INFO_HELP_DOCUMENT;
   if (topic === "library") return LIBRARY_HELP_DOCUMENT;
+  if (topic === "audit") return AUDIT_HELP_DOCUMENT;
   if (topic === "download") return DOWNLOAD_HELP_DOCUMENT;
   if (topic === "providers") return PROVIDERS_HELP_DOCUMENT;
   if (topic === "auth") return AUTH_HELP_DOCUMENT;

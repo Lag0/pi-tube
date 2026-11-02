@@ -3,6 +3,14 @@
  * definition for its documentation.
  */
 
+export {
+  type AuditListInput,
+  type AuditPage,
+  type AuditStatsInput,
+  type AuditStatsOutput,
+  createAuditStats,
+  createQueryAudit,
+} from "./application/audit.ts";
 export { type AuditNote, type AuditTrail, type AuditTrailDeps, beginAudit } from "./application/audit-trail.ts";
 export {
   createLoginProvider,
@@ -63,6 +71,7 @@ export {
   type AuditRecord,
   type AuditStats,
   type AuditVersions,
+  auditRecordToLine,
   DEFAULT_AUDIT_RETENTION_MONTHS,
   PRICE_TABLE_DATE,
 } from "./domain/audit.ts";
