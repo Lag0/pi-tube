@@ -73,7 +73,12 @@ export interface ParsedTranscript {
   readonly transcript: string;
   readonly detectedLanguage?: string;
   readonly segments?: TranscriptionSegment[];
+  readonly durationSeconds?: number;
 }
+
+/** A duration field from a provider response: a positive finite number of seconds, or absent. */
+export const positiveSeconds = (value: unknown): number | undefined =>
+  typeof value === "number" && Number.isFinite(value) && value > 0 ? value : undefined;
 
 /** Audio ready for an SDK: a URL, or the bytes of a local file with its name. */
 export type LoadedAudio =
@@ -133,5 +138,6 @@ export const runProviderCall = async <T>(input: {
     text: parsed.data.transcript,
     ...(parsed.data.detectedLanguage ? { detectedLanguage: parsed.data.detectedLanguage } : {}),
     segments: parsed.data.segments ?? [],
+    ...(parsed.data.durationSeconds === undefined ? {} : { durationSeconds: parsed.data.durationSeconds }),
   });
 };

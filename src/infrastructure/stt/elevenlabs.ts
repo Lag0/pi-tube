@@ -6,6 +6,7 @@ import {
   CLOUD_STT_CAPABILITIES,
   type ParsedTranscript,
   PROVIDER_REQUEST_TIMEOUT_MS,
+  positiveSeconds,
   runProviderCall,
 } from "./deadline.ts";
 import { invalidResponseError } from "./http-errors.ts";
@@ -101,8 +102,9 @@ function parseElevenLabsResponse(payload: unknown): ParsedTranscript | undefined
     ? ((payload as { words?: unknown[] }).words ?? [])
     : [];
   const segments = normalizeElevenLabsSegments(words);
+  const durationSeconds = positiveSeconds((payload as { audio_duration_secs?: unknown }).audio_duration_secs);
 
-  return { transcript: text, detectedLanguage, segments };
+  return { transcript: text, detectedLanguage, segments, durationSeconds };
 }
 
 const defaultClient = (apiKey: string): ElevenLabsSpeechToTextClient =>

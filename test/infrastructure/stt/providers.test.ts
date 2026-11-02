@@ -34,6 +34,10 @@ interface Harness {
   readonly id: string;
   readonly success: unknown;
   readonly receivesSignal: boolean;
+  /** The success payload with the provider's duration field set to `value`. */
+  readonly withDuration: (value: unknown) => unknown;
+  /** The duration `withDuration` is tested with, in seconds. */
+  readonly duration: number;
   readonly build: (behavior: Behavior, recorded: Recorded, timeoutMs?: number) => SttProvider;
 }
 
@@ -51,6 +55,13 @@ const HARNESSES: readonly Harness[] = [
       },
     },
     receivesSignal: true,
+    withDuration: (value) => ({
+      metadata: { duration: value },
+      results: {
+        channels: [{ detected_language: "en", alternatives: [{ transcript: "hello world", words: [] }] }],
+      },
+    }),
+    duration: 25.933313,
     build: (behavior, recorded, timeoutMs) =>
       createDeepgramProvider({
         timeoutMs,
@@ -73,6 +84,8 @@ const HARNESSES: readonly Harness[] = [
     id: "groq",
     success: { text: "hello world", language: "en", segments: [{ start: 0, end: 0.5, text: "hello world" }] },
     receivesSignal: true,
+    withDuration: (value) => ({ text: "hello world", language: "en", segments: [], duration: value }),
+    duration: 19.5,
     build: (behavior, recorded, timeoutMs) =>
       createGroqProvider({
         timeoutMs,
@@ -91,6 +104,8 @@ const HARNESSES: readonly Harness[] = [
     id: "elevenlabs",
     success: { text: "hello world", language_code: "en", words: [{ start: 0, end: 0.5, text: "hello", type: "word" }] },
     receivesSignal: true,
+    withDuration: (value) => ({ text: "hello world", language_code: "en", words: [], audio_duration_secs: value }),
+    duration: 19.2,
     build: (behavior, recorded, timeoutMs) =>
       createElevenLabsProvider({
         timeoutMs,
@@ -125,6 +140,26 @@ describe.each(HARNESSES)("$id provider", (harness) => {
     expect(result.data.segments.length).toBeGreaterThan(0);
     expect(recorded.keys).toEqual([API_KEY]);
   });
+
+  test("reports the audio duration", async () => {
+    const provider = harness.build({ kind: "resolve", payload: harness.withDuration(harness.duration) }, recorder());
+
+    const result = await provider.transcribe(urlRequest);
+
+    expect(result.success ? result.data.durationSeconds : result).toBe(harness.duration);
+  });
+
+  test.each([undefined, null, 0, -3, "19", Number.NaN])(
+    "a missing, zero or non-numeric duration (%s) is absent",
+    async (value) => {
+      const provider = harness.build({ kind: "resolve", payload: harness.withDuration(value) }, recorder());
+
+      const result = await provider.transcribe(urlRequest);
+
+      expect(result.success).toBe(true);
+      expect(result.success && "durationSeconds" in result.data).toBe(false);
+    },
+  );
 
   test("sends a local file as file content, never as a URL", async () => {
     const recorded = recorder();

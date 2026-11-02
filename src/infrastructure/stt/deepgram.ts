@@ -6,6 +6,7 @@ import {
   CLOUD_STT_CAPABILITIES,
   type ParsedTranscript,
   PROVIDER_REQUEST_TIMEOUT_MS,
+  positiveSeconds,
   runProviderCall,
 } from "./deadline.ts";
 import { invalidResponseError } from "./http-errors.ts";
@@ -116,8 +117,9 @@ function parseDeepgramResponse(payload: unknown): ParsedTranscript | undefined {
     ? ((alternative as { words?: unknown[] }).words ?? [])
     : [];
   const segments = normalizeDeepgramSegments(words);
+  const durationSeconds = positiveSeconds((payload as { metadata?: { duration?: unknown } }).metadata?.duration);
 
-  return { transcript, detectedLanguage, segments };
+  return { transcript, detectedLanguage, segments, durationSeconds };
 }
 
 const defaultClient = (apiKey: string): DeepgramListenClient => new DeepgramClient({ apiKey }).listen.v1.media;

@@ -25,6 +25,8 @@ export interface SttTranscript {
   readonly text: string;
   readonly detectedLanguage?: string;
   readonly segments: readonly TranscriptionSegment[];
+  /** The length of the audio in seconds, as the provider reports it; what it bills by. */
+  readonly durationSeconds?: number;
 }
 
 /** A speech-to-text provider. Adding one is a new implementation plus a registry entry. */
