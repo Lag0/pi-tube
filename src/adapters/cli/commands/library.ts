@@ -1,5 +1,6 @@
 import {
   createError,
+  type ImportSummary,
   type LibraryEntry,
   type LibraryPage,
   type StoredTranscript,
@@ -99,7 +100,20 @@ const writeTranscript = (deps: CliDeps, stored: StoredTranscript, json: boolean)
   );
 };
 
-/** `pi-tube library <list|show|search|prune>`: the local transcript library. */
+const importLine = (summary: ImportSummary): string =>
+  `[LIBRARY_IMPORT] found=${summary.found} imported=${summary.imported} already=${summary.already} skipped=${summary.skipped.length} (pi-tube v2 transcripts; originals kept)`;
+
+/**
+ * The one-time import of pi-tube v2 transcripts, run before `transcribe` and `library`. It reports on stderr, so
+ * `--json` output stays clean, and a failure only warns: the command goes on.
+ */
+export const importV2Once = async (deps: CliDeps): Promise<void> => {
+  const summary = await deps.app.importV2Transcripts({});
+  if (!summary.success) deps.io.writeErr(`warning: v2 import failed: ${summary.error.message}`);
+  else if (!summary.data.ranBefore && summary.data.found > 0) deps.io.writeErr(importLine(summary.data));
+};
+
+/** `pi-tube library <list|show|search|prune|import>`: the local transcript library. */
 export const runLibrary = async (deps: CliDeps, command: LibraryCommand): Promise<number> => {
   const page = { limit: wholeNumber(command.limit, DEFAULT_LIMIT), offset: wholeNumber(command.offset, 0) };
   switch (command.action) {
@@ -143,6 +157,18 @@ export const runLibrary = async (deps: CliDeps, command: LibraryCommand): Promis
       }
       const summary = `[LIBRARY_PRUNE] dry_run=${report.dryRun} audio_files=${report.audioFiles} source_dirs=${report.sourceDirs} bytes=${report.bytes}`;
       deps.io.writeOut(report.dryRun ? `${summary}\nRun again with --yes to delete.` : summary);
+      return 0;
+    }
+    case "import": {
+      if (command.args.length > 0) throw usageError("`library import` takes no arguments.");
+      const summary = unwrapOrFail(await deps.app.importV2Transcripts({ force: true }));
+      if (command.json) {
+        const { found, imported, already, skipped } = summary;
+        deps.io.writeOut(JSON.stringify({ found, imported, already, skipped }, null, 2));
+        return 0;
+      }
+      const skipped = summary.skipped.map(({ file, reason }) => `skipped: ${toSafeLine(file)}: ${toSafeLine(reason)}`);
+      deps.io.writeOut([importLine(summary), ...skipped].join("\n"));
       return 0;
     }
     case "show": {

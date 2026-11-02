@@ -16,6 +16,7 @@ describe("resolvePiTubePaths", () => {
       tmpDir: path.join(FAKE_HOME, ".pi-tube", "tmp"),
       downloadsDir: path.join(FAKE_HOME, ".pi-tube", "downloads"),
       auditDir: path.join(FAKE_HOME, ".pi-tube", "audit"),
+      legacyDirs: [path.join(FAKE_HOME, ".pi-tube")],
     });
   });
 
@@ -41,15 +42,26 @@ describe("resolvePiTubePaths", () => {
     expect(paths.configFile).toBe(path.join(CWD, "conf", "pi.json"));
   });
 
-  test("keeps an absolute PI_TUBE_LIBRARY_DIR as is and ignores the removed PI_TUBE_OUTPUT_DIR", () => {
+  test("keeps an absolute PI_TUBE_LIBRARY_DIR as is; PI_TUBE_OUTPUT_DIR is only read for the v2 import", () => {
     const libraryDir = path.resolve("/data/library");
+    const oldDir = path.resolve("/data/old");
     const paths = resolvePiTubePaths({
-      env: { PI_TUBE_LIBRARY_DIR: libraryDir, PI_TUBE_OUTPUT_DIR: "/data/old" },
+      env: { PI_TUBE_LIBRARY_DIR: libraryDir, PI_TUBE_OUTPUT_DIR: oldDir },
       cwd: CWD,
       homedir: () => FAKE_HOME,
     });
 
     expect(paths.libraryDir).toBe(libraryDir);
-    expect(Object.values(paths)).not.toContain("/data/old");
+    const { legacyDirs, ...writtenPaths } = paths;
+    expect(Object.values(writtenPaths)).not.toContain(oldDir);
+    expect(legacyDirs).toEqual([path.join(FAKE_HOME, ".pi-tube"), oldDir]);
+  });
+
+  test("the v2 import reads only ~/.pi-tube without PI_TUBE_OUTPUT_DIR, and a relative one against the cwd", () => {
+    const plain = resolvePiTubePaths({ env: {}, cwd: CWD, homedir: () => FAKE_HOME });
+    const relative = resolvePiTubePaths({ env: { PI_TUBE_OUTPUT_DIR: "old" }, cwd: CWD, homedir: () => FAKE_HOME });
+
+    expect(plain.legacyDirs).toEqual([path.join(FAKE_HOME, ".pi-tube")]);
+    expect(relative.legacyDirs).toEqual([path.join(FAKE_HOME, ".pi-tube"), path.join(CWD, "old")]);
   });
 });

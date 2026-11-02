@@ -14,7 +14,7 @@
     "description_links": ["https://www.youtube.com/@jawed"]
   },
   "transcription": {
-    "provider": "elevenlabs",
+    "provider": "deepgram",
     "requested_language": null,
     "detected_language": "eng"
   },
@@ -22,7 +22,7 @@
     "paragraph": "All right, so here we are in front of the elephants.",
     "key_points": [
       "Source kind: youtube",
-      "Provider: elevenlabs",
+      "Provider: deepgram",
       "Requested language: auto",
       "Detected language: eng",
       "Timestamp mode: off"

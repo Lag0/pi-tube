@@ -15,6 +15,7 @@ import {
   createGetConfigValue,
   createGetMediaInfo,
   createGetTranscript,
+  createImportV2Transcripts,
   createListConfigValues,
   createListProviders,
   createListTranscripts,
@@ -28,6 +29,8 @@ import {
   type DownloadMediaInput,
   type DownloadMediaOutput,
   type EnvironmentVariables,
+  type ImportSummary,
+  type ImportV2Input,
   type LibraryPage,
   type LoginInput,
   type LoginOutput,
@@ -48,6 +51,7 @@ import {
 import { createFileAuditLog } from "./infrastructure/audit/file-audit-log.ts";
 import { createFileConfigStore } from "./infrastructure/config/file-config-store.ts";
 import { createFileLibraryStore } from "./infrastructure/library/file-library-store.ts";
+import { createV2Transcripts } from "./infrastructure/library/v2-transcripts.ts";
 import type { LookupHost } from "./infrastructure/media/host-guard.ts";
 import { createMediaFetcher } from "./infrastructure/media/media-fetcher.ts";
 import { resolvePiTubePaths } from "./infrastructure/paths.ts";
@@ -92,6 +96,7 @@ export interface App {
   readonly pruneLibrary: UseCase<PruneInput, PruneReport>;
   readonly queryAudit: UseCase<AuditListInput, AuditPage>;
   readonly auditStats: UseCase<AuditStatsInput, AuditStatsOutput>;
+  readonly importV2Transcripts: UseCase<ImportV2Input, ImportSummary>;
 }
 
 const PACKAGE_JSON = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {
@@ -152,5 +157,9 @@ export const createApp = (environment: AppEnvironment, overrides: AppOverrides =
     pruneLibrary: createPruneLibrary({ library, configStore, audit }),
     queryAudit: createQueryAudit({ audit: auditLog }),
     auditStats: createAuditStats({ audit: auditLog }),
+    importV2Transcripts: createImportV2Transcripts({
+      legacy: createV2Transcripts({ dirs: paths.legacyDirs, libraryDir: paths.libraryDir }),
+      library,
+    }),
   };
 };

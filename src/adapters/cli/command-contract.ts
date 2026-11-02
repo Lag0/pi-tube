@@ -175,6 +175,7 @@ const LIBRARY_HELP_DOCUMENT: HelpDocument = {
     `${COMMAND_IDENTITY} library show <transcript_id> [--json]`,
     `${COMMAND_IDENTITY} library search <query> [--limit <n>] [--offset <n>] [--json]`,
     `${COMMAND_IDENTITY} library prune [--older-than <days>] [--include-transcripts] [--yes] [--json]`,
+    `${COMMAND_IDENTITY} library import [--json]`,
   ],
   options: [
     { term: "--limit <n>", description: "How many entries to print (default 20, at most 500)." },
@@ -197,6 +198,7 @@ const LIBRARY_HELP_DOCUMENT: HelpDocument = {
     "Search matches names (title, file name or URL, platform), not the transcript text; it ignores case and accents.",
     "The library lives in ~/.pi-tube/library, or PI_TUBE_LIBRARY_DIR.",
     "Audio is kept for reuse (library.keep_audio) and capped by library.max_audio_bytes; transcripts are never deleted automatically.",
+    "Transcripts pi-tube v2 saved in ~/.pi-tube (and PI_TUBE_OUTPUT_DIR) are imported once, before the first `transcribe` or `library` command; the originals are never changed. `library import` runs it again.",
   ],
 };
 

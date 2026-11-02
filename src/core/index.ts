@@ -36,6 +36,7 @@ export {
   type DownloadMediaOutput,
 } from "./application/download-media.ts";
 export { createGetMediaInfo, type GetMediaInfoDeps } from "./application/get-media-info.ts";
+export { createImportV2Transcripts, type ImportV2Deps, type ImportV2Input } from "./application/import-v2.ts";
 export {
   createGetTranscript,
   createListTranscripts,
@@ -153,6 +154,7 @@ export { type JsonOutputArtifact, toJsonOutputArtifact } from "./domain/transcri
 export { sourceReferenceOf } from "./domain/transcript/render-markdown.ts";
 export type { AuditLog, AuditReadout } from "./ports/audit-log.ts";
 export type { ConfigStore } from "./ports/config-store.ts";
+export type { LegacyTranscriptFile, LegacyTranscripts } from "./ports/legacy-transcripts.ts";
 export type {
   LibraryEntry,
   LibraryStore,

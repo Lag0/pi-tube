@@ -6,7 +6,7 @@ import { runAudit } from "./commands/audit.ts";
 import { runConfig, runDefaults } from "./commands/config.ts";
 import { runDownload } from "./commands/download.ts";
 import { runInfo } from "./commands/info.ts";
-import { runLibrary } from "./commands/library.ts";
+import { importV2Once, runLibrary } from "./commands/library.ts";
 import { runTranscribe } from "./commands/transcribe.ts";
 import { CliFailure, exitCodeFor, formatErrorForCli } from "./error-output.ts";
 import { type HelpDocument, renderHelpDocument } from "./help-renderer.ts";
@@ -213,8 +213,8 @@ function createProgram(setAction: (action: CliAction) => void): Command {
 
   program
     .command("library")
-    .description("List, show, search and prune the transcripts in the local library.")
-    .argument("[action]", "list, show, search or prune")
+    .description("List, show, search, prune and import the transcripts in the local library.")
+    .argument("[action]", "list, show, search, prune or import")
     .argument("[args...]", "a transcript id, or search terms")
     .option("--limit <n>", "How many entries to print (default 20, at most 500).")
     .option("--offset <n>", "How many entries to skip (default 0).")
@@ -358,6 +358,7 @@ export const runCli = async (argv: readonly string[], deps: CliDeps): Promise<nu
         deps.io.writeOut(`${COMMAND_IDENTITY} ${APP_VERSION}`);
         return 0;
       case "transcribe":
+        await importV2Once(deps);
         return await runTranscribe(deps, {
           input: action.input,
           extraPositionals: action.extraPositionals,
@@ -384,6 +385,7 @@ export const runCli = async (argv: readonly string[], deps: CliDeps): Promise<nu
           color: action.rootOptions.color !== false,
         });
       case "library":
+        if (action.action !== "import") await importV2Once(deps);
         return await runLibrary(deps, {
           action: action.action,
           args: action.args,
