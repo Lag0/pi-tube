@@ -29,6 +29,26 @@ const infoWith = (source: ResolvedSource, audit = createInMemoryAuditLog()) =>
   });
 
 describe("getMediaInfo", () => {
+  test("a page yt-dlp's Generic extractor reads gets no source key in the audit, so its URL query never lands there", async () => {
+    const audit = createInMemoryAuditLog();
+    const page = "https://portal.example.com/watch?token=SECRET";
+    const getInfo = infoWith(
+      {
+        kind: "site",
+        originalInput: page,
+        normalizedUrl: page,
+        metadata: { platform: "Generic", mediaId: "watch?token=SECRET" },
+      },
+      audit,
+    );
+
+    await getInfo({ input: page });
+
+    expect(audit.records).toHaveLength(1);
+    expect(audit.records[0]?.sourceKey).toBeUndefined();
+    expect(JSON.stringify(audit.records)).not.toContain("SECRET");
+  });
+
   test("records one audit entry with the page's source key and a redacted input", async () => {
     const audit = createInMemoryAuditLog();
     const getInfo = infoWith(

@@ -702,6 +702,31 @@ describe("audit", () => {
     expect(audit.records[0]?.sourceKey).toBe("youtube:jNQXAC9IVRw");
   });
 
+  test("a download of a page yt-dlp's Generic extractor reads records no source key", async () => {
+    const audit = createInMemoryAuditLog();
+    const page = "https://portal.example.com/watch?token=SECRET";
+    const media = createFakeMediaFetcher({
+      source: {
+        kind: "site",
+        originalInput: page,
+        normalizedUrl: page,
+        metadata: { platform: "Generic", mediaId: "watch?token=SECRET" },
+      },
+    });
+    const download = createDownloadMedia({
+      configStore: createInMemoryConfigStore(config()),
+      env: {},
+      media: media.fetcher,
+      defaultOutputDir: outputDir,
+      audit: auditDepsFor(audit),
+    });
+
+    await download({ input: page, media: "video" });
+
+    expect(audit.records[0]?.sourceKey).toBeUndefined();
+    expect(JSON.stringify(audit.records)).not.toContain("SECRET");
+  });
+
   test("a download records one entry with the page's source key", async () => {
     const audit = createInMemoryAuditLog();
     const media = createFakeMediaFetcher({

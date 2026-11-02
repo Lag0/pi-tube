@@ -1,5 +1,5 @@
 import type { EnvironmentVariables } from "../domain/config.ts";
-import { siteSourceKey } from "../domain/library.ts";
+import { metadataSourceKey } from "../domain/library.ts";
 import { describeSource, type MediaInfo } from "../domain/media-info.ts";
 import { ok } from "../domain/result.ts";
 import { isSiteSource } from "../domain/source.ts";
@@ -30,9 +30,8 @@ const runGetMediaInfo =
     options?.onProgress?.({ label: "Resolving source..." });
     const source = await deps.media.resolve(input.input, settings.data, options);
     if (!source.success) return source;
-    if (isSiteSource(source.data) && source.data.metadata.mediaId !== undefined) {
-      trail.note({ sourceKey: siteSourceKey(source.data.metadata.platform, source.data.metadata.mediaId) });
-    }
+    const sourceKey = isSiteSource(source.data) ? metadataSourceKey(source.data.metadata) : undefined;
+    if (sourceKey !== undefined) trail.note({ sourceKey });
     return ok(describeSource(source.data));
   };
 

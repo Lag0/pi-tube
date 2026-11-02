@@ -1,6 +1,6 @@
 import type { EnvironmentVariables } from "../domain/config.ts";
 import { createError } from "../domain/errors.ts";
-import { siteSourceKey } from "../domain/library.ts";
+import { metadataSourceKey } from "../domain/library.ts";
 import { err, ok } from "../domain/result.ts";
 import { isSiteSource, type SiteKind } from "../domain/source.ts";
 import { classifyInput, ensureFinishedMedia } from "../domain/source-policy.ts";
@@ -53,8 +53,8 @@ const runDownload =
     const source = await deps.media.resolve(input.input, settings.data, options);
     if (!source.success) return source;
     if (!isSiteSource(source.data)) return err(createError("DOWNLOAD_FAILED", NOT_A_PAGE));
-    const { platform, mediaId } = source.data.metadata;
-    if (mediaId !== undefined) trail.note({ sourceKey: siteSourceKey(platform, mediaId) });
+    const sourceKey = metadataSourceKey(source.data.metadata);
+    if (sourceKey !== undefined) trail.note({ sourceKey });
     const finished = ensureFinishedMedia(source.data);
     if (!finished.success) return finished;
 
