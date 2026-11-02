@@ -10,6 +10,12 @@ import { errnoOf } from "../errno.ts";
 const MARKER = ".v2-import.json";
 const MARKER_SCHEMA_VERSION = 1;
 
+/** A scan being filled, folder by folder. */
+interface Scan {
+  readonly files: LegacyTranscriptFile[];
+  readonly unreadable: Array<{ readonly path: string; readonly reason: string }>;
+}
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
@@ -25,24 +31,27 @@ export const createV2Transcripts = (deps: {
   const now = deps.now ?? (() => new Date());
   const marker = path.join(deps.libraryDir, MARKER);
 
-  const filesIn = async (dir: string): Promise<LegacyTranscriptFile[]> => {
+  /** Reads the v2 files of one folder; a file that cannot be read is reported, not fatal. */
+  const scan = async (dir: string, into: Scan) => {
     const entries = await readdir(dir, { withFileTypes: true });
     const names = entries
       .filter((entry) => entry.isFile() && V2_FILE_NAME.test(entry.name))
       .map((entry) => entry.name)
       .sort();
-    const files: LegacyTranscriptFile[] = [];
     for (const name of names) {
       const filePath = path.join(dir, name);
-      const bytes = await readFile(filePath);
-      files.push({
-        path: filePath,
-        name,
-        text: bytes.toString("utf8"),
-        sha256: createHash("sha256").update(bytes).digest("hex"),
-      });
+      try {
+        const bytes = await readFile(filePath);
+        into.files.push({
+          path: filePath,
+          name,
+          text: bytes.toString("utf8"),
+          sha256: createHash("sha256").update(bytes).digest("hex"),
+        });
+      } catch (error) {
+        into.unreadable.push({ path: filePath, reason: `Cannot read the file (${errnoOf(error)}).` });
+      }
     }
-    return files;
   };
 
   return {
@@ -56,10 +65,10 @@ export const createV2Transcripts = (deps: {
     },
 
     files: async () => {
-      const files: LegacyTranscriptFile[] = [];
+      const found: Scan = { files: [], unreadable: [] };
       for (const dir of [...new Set(deps.dirs)]) {
         try {
-          files.push(...(await filesIn(dir)));
+          await scan(dir, found);
         } catch (error) {
           if (errnoOf(error) === "ENOENT") continue;
           return err(
@@ -69,7 +78,7 @@ export const createV2Transcripts = (deps: {
           );
         }
       }
-      return ok(files);
+      return ok(found);
     },
 
     markImported: async (summary: ImportSummary) => {

@@ -48,14 +48,17 @@ const ALL_FIXTURES = (): LegacyTranscriptFile[] => [
   fixture("youtube-watch.json", "2026-03-06-me-at-the-zoo.json"),
 ];
 
-const fakeLegacy = (files: readonly LegacyTranscriptFile[], options: { readonly imported?: boolean } = {}) => {
+const fakeLegacy = (
+  files: readonly LegacyTranscriptFile[],
+  options: { readonly imported?: boolean; readonly unreadable?: readonly { path: string; reason: string }[] } = {},
+) => {
   let marked: ImportSummary | undefined;
   let filesCalls = 0;
   const legacy: LegacyTranscripts = {
     isImported: async () => options.imported === true || marked !== undefined,
     files: async () => {
       filesCalls += 1;
-      return ok(files);
+      return ok({ files, unreadable: options.unreadable ?? [] });
     },
     markImported: async (summary) => {
       marked = summary;
@@ -65,7 +68,10 @@ const fakeLegacy = (files: readonly LegacyTranscriptFile[], options: { readonly 
   return { legacy, marked: () => marked, filesCalls: () => filesCalls };
 };
 
-const setup = (files: readonly LegacyTranscriptFile[] = ALL_FIXTURES(), options: { imported?: boolean } = {}) => {
+const setup = (
+  files: readonly LegacyTranscriptFile[] = ALL_FIXTURES(),
+  options: Parameters<typeof fakeLegacy>[1] = {},
+) => {
   const library = createFileLibraryStore({ libraryDir });
   const fake = fakeLegacy(files, options);
   return { library, ...fake, importV2: createImportV2Transcripts({ legacy: fake.legacy, library }) };
@@ -177,6 +183,23 @@ describe("importV2Transcripts", () => {
 
     const keys = (await entriesOf(library)).map((entry) => entry.sourceKey).sort();
     expect(keys).toEqual([`file:${sha256("audio-bytes")}`, `v2:${gone.sha256}`].sort());
+  });
+
+  test("a file that cannot be read is skipped with its reason and counted, and the others import", async () => {
+    const unreadable = [{ path: "/home/me/.pi-tube/2026-03-02-b.md", reason: "Cannot read the file (EACCES)." }];
+    const { importV2 } = setup([fixture("json-golden.json", "2026-03-02-a.json")], { unreadable });
+
+    const result = await importV2({});
+
+    expect(result).toEqual(
+      ok({
+        ranBefore: false,
+        found: 2,
+        imported: 1,
+        already: 0,
+        skipped: [{ file: unreadable[0]?.path, reason: unreadable[0]?.reason }],
+      }),
+    );
   });
 
   test("without force, a finished import does not run again", async () => {

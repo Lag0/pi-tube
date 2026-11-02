@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
@@ -8,6 +8,7 @@ import { createFileLibraryStore } from "../../../src/infrastructure/library/file
 import { createV2Transcripts } from "../../../src/infrastructure/library/v2-transcripts.ts";
 
 const isWindows = process.platform === "win32";
+const isRoot = typeof process.getuid === "function" && process.getuid() === 0;
 const FIXTURES = path.join("test", "fixtures", "v2");
 
 let root: string;
@@ -54,12 +55,13 @@ describe("v2 transcripts reader", () => {
 
     const files = await createV2Transcripts({ dirs: [home, outputDir, home], libraryDir }).files();
 
-    expect(files.success ? files.data.map((file) => file.path) : files).toEqual([
+    expect(files.success ? files.data.unreadable : files).toEqual([]);
+    expect(files.success ? files.data.files.map((file) => file.path) : files).toEqual([
       path.join(home, "2026-03-02-demo.json"),
       path.join(outputDir, "2026-04-10-aula-1.md"),
     ]);
     const golden = readFileSync(path.join(FIXTURES, "json-golden.json"));
-    expect(files.success ? files.data[0] : undefined).toMatchObject({
+    expect(files.success ? files.data.files[0] : undefined).toMatchObject({
       name: "2026-03-02-demo.json",
       text: golden.toString("utf8"),
       sha256: createHash("sha256").update(golden).digest("hex"),
@@ -69,7 +71,20 @@ describe("v2 transcripts reader", () => {
   test("a missing dir lists nothing", async () => {
     const files = await createV2Transcripts({ dirs: [path.join(root, "absent")], libraryDir }).files();
 
-    expect(files).toEqual({ success: true, data: [] });
+    expect(files).toEqual({ success: true, data: { files: [], unreadable: [] } });
+  });
+
+  test.skipIf(isWindows || isRoot)("a v2 file that cannot be read is reported, and the others are read", async () => {
+    put(home, "2026-03-02-a.json", "json-golden.json");
+    put(home, "2026-03-02-b.md", "markdown-golden.md");
+    chmodSync(path.join(home, "2026-03-02-b.md"), 0o000);
+
+    const files = await createV2Transcripts({ dirs: [home], libraryDir }).files();
+
+    expect(files.success ? files.data.files.map((file) => file.name) : files).toEqual(["2026-03-02-a.json"]);
+    expect(files.success ? files.data.unreadable : files).toEqual([
+      { path: path.join(home, "2026-03-02-b.md"), reason: "Cannot read the file (EACCES)." },
+    ]);
   });
 
   test("an import leaves the v2 dirs exactly as they were", async () => {
