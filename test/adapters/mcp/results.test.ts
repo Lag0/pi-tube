@@ -211,7 +211,9 @@ describe("runTool", () => {
     await new Promise((resolve) => setTimeout(resolve, 20));
 
     expect(finished).toBe(true);
-    expect(item.sent.filter((entry) => entry === "notifications/progress" || entry.startsWith("response:"))).toEqual([]);
+    expect(item.sent.filter((entry) => entry === "notifications/progress" || entry.startsWith("response:"))).toEqual(
+      [],
+    );
   });
 
   test("shutdown aborts a call in flight", async () => {

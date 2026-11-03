@@ -16,7 +16,7 @@ export interface McpDeps {
   readonly version: string;
   /** Aborts every call in flight when the server stops. */
   readonly shutdown: AbortSignal;
-  /** Runs the v2 import once per process; later calls await the same run. Never rejects. */
+  /** Runs the v2 import once per process (again after a failure); concurrent calls share a run. Never rejects. */
   readonly ensureImported: () => Promise<void>;
   /** Registers a tool call, so shutdown can wait for its cleanup (temp files, the audit record). */
   readonly track: <T>(call: Promise<T>) => Promise<T>;
@@ -33,23 +33,31 @@ export const createMcpDeps = (input: {
 }): McpDeps => {
   let imported: Promise<void> | undefined;
   const inFlight = new Set<Promise<unknown>>();
-  const runImport = async (): Promise<void> => {
+  /** True when the import ran; a failure is logged and retried by the next call. */
+  const runImport = async (): Promise<boolean> => {
     try {
       const summary = await input.app.importV2Transcripts({});
       if (!summary.success) {
         input.log.warn("v2 import failed", { code: summary.error.code, message: summary.error.message });
-      } else if (summary.data.found > 0 && !summary.data.ranBefore) {
+        return false;
+      }
+      if (summary.data.found > 0 && !summary.data.ranBefore) {
         const { found, imported: added, already, skipped } = summary.data;
         input.log.info(`v2 import: found=${found} imported=${added} already=${already} skipped=${skipped.length}`);
       }
+      return true;
     } catch (caught) {
       input.log.warn("v2 import failed", { message: caught instanceof Error ? caught.message : String(caught) });
+      return false;
     }
   };
   return {
     ...input,
     ensureImported: () => {
-      imported ??= runImport();
+      // Concurrent calls share the run in flight; only a success is kept.
+      imported ??= runImport().then((done) => {
+        if (!done) imported = undefined;
+      });
       return imported;
     },
     track: (call) => {

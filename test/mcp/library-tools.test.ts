@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 import type { App } from "../../src/bootstrap.ts";
-import { createError, ok, renderMarkdown, type SiteSource } from "../../src/core/index.ts";
+import { createError, err, ok, renderMarkdown, type SiteSource } from "../../src/core/index.ts";
 import { createFakeMediaFetcher } from "../helpers/fake-media.ts";
 import { connectMcp, type McpHarness, type McpHarnessOptions } from "../helpers/mcp-harness.ts";
 import { fakeProviders, PROVIDER_KEYS, transcript } from "../helpers/transcribe-fakes.ts";
@@ -341,5 +341,28 @@ describe("v2 import", () => {
     expect((first.json as ListJson).total).toBe(1);
     expect((second.json as ListJson).total).toBe(1);
     expect(harness.logs.join("")).toContain("v2 import: found=1 imported=1 already=0 skipped=0");
+  });
+
+  test("a failed import is retried on the next call, and the call goes on", async () => {
+    let imports = 0;
+    harness = await connectMcp({
+      wrapApp: (app: App): App => ({
+        ...app,
+        importV2Transcripts: async (input, options) => {
+          imports += 1;
+          if (imports === 1) return err(createError("STORAGE_IO_FAILED", "Cannot read ~/.pi-tube (EACCES)."));
+          return app.importV2Transcripts(input, options);
+        },
+      }),
+    });
+    seedV2(harness.home);
+
+    const first = await harness.call("list_transcripts");
+    const second = await harness.call("list_transcripts");
+
+    expect(first).toMatchObject({ isError: false, json: { total: 0 } });
+    expect(second).toMatchObject({ isError: false, json: { total: 1 } });
+    expect(imports).toBe(2);
+    expect(harness.logs.join("")).toContain("v2 import failed");
   });
 });
