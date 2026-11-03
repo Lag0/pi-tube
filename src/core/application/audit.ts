@@ -55,7 +55,8 @@ const isCalendarDate = (value: string): boolean => {
   return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
 };
 
-const checkDates = ({ since, until }: AuditStatsInput): Result<void> => {
+/** Checks `--since` and `--until`: calendar dates as YYYY-MM-DD, `since` not after `until`. */
+export const checkDayRange = ({ since, until }: { readonly since?: string; readonly until?: string }): Result<void> => {
   for (const [flag, value] of [
     ["since", since],
     ["until", until],
@@ -87,7 +88,7 @@ export const createQueryAudit =
   async (input, options) => {
     const ready = ensureNotAborted(options?.signal);
     if (!ready.success) return ready;
-    const dates = checkDates(input);
+    const dates = checkDayRange(input);
     if (!dates.success) return dates;
     const operation = checkOperation(input.operation);
     if (!operation.success) return operation;
@@ -116,7 +117,7 @@ export const createAuditStats =
   async (input, options) => {
     const ready = ensureNotAborted(options?.signal);
     if (!ready.success) return ready;
-    const dates = checkDates(input);
+    const dates = checkDayRange(input);
     if (!dates.success) return dates;
     const read = await deps.audit.read(input);
     if (!read.success) return read;

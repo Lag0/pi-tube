@@ -32,6 +32,7 @@ import {
   type ImportSummary,
   type ImportV2Input,
   type LibraryPage,
+  type ListTranscriptsInput,
   type LoginInput,
   type LoginOutput,
   type LogoutInput,
@@ -42,6 +43,7 @@ import {
   type ProviderListing,
   type PruneInput,
   type PruneReport,
+  type SearchTranscriptsInput,
   type StoredTranscript,
   type SttProvider,
   type TranscribeInput,
@@ -87,11 +89,8 @@ export interface App {
   readonly transcribe: UseCase<TranscribeInput, TranscribeOutput>;
   readonly downloadMedia: UseCase<DownloadMediaInput, DownloadMediaOutput>;
   readonly getMediaInfo: UseCase<{ readonly input: string }, MediaInfo>;
-  readonly listTranscripts: UseCase<{ readonly limit: number; readonly offset: number }, LibraryPage>;
-  readonly searchTranscripts: UseCase<
-    { readonly query: string; readonly limit: number; readonly offset: number },
-    LibraryPage
-  >;
+  readonly listTranscripts: UseCase<ListTranscriptsInput, LibraryPage>;
+  readonly searchTranscripts: UseCase<SearchTranscriptsInput, LibraryPage>;
   readonly getTranscript: UseCase<{ readonly transcriptId: string }, StoredTranscript>;
   readonly pruneLibrary: UseCase<PruneInput, PruneReport>;
   readonly queryAudit: UseCase<AuditListInput, AuditPage>;

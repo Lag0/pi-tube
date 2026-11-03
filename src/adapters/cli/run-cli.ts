@@ -59,6 +59,10 @@ interface DownloadOptions extends JsonCommandOptions {
 interface LibraryOptions extends JsonCommandOptions {
   limit?: string;
   offset?: string;
+  provider?: string;
+  source?: string;
+  since?: string;
+  until?: string;
   olderThan?: string;
   includeTranscripts?: boolean;
   yes?: boolean;
@@ -218,6 +222,10 @@ function createProgram(setAction: (action: CliAction) => void): Command {
     .argument("[args...]", "a transcript id, or search terms")
     .option("--limit <n>", "How many entries to print (default 20, at most 500).")
     .option("--offset <n>", "How many entries to skip (default 0).")
+    .option("--provider <id>", "list, search: only transcripts made with this provider.")
+    .option("--source <kind>", "list, search: youtube, instagram, site, direct_url or local_file.")
+    .option("--since <YYYY-MM-DD>", "list, search: only transcripts made on or after this UTC day.")
+    .option("--until <YYYY-MM-DD>", "list, search: only transcripts made on or before this UTC day.")
     .option("--older-than <days>", "prune: only audio, or sources, older than this many days.")
     .option("--include-transcripts", "prune: delete whole sources, transcripts included (needs --older-than).")
     .option("--yes", "prune: delete; without it, prune only reports.")
@@ -391,6 +399,10 @@ export const runCli = async (argv: readonly string[], deps: CliDeps): Promise<nu
           args: action.args,
           limit: action.options.limit,
           offset: action.options.offset,
+          provider: action.options.provider,
+          source: action.options.source,
+          since: action.options.since,
+          until: action.options.until,
           olderThan: action.options.olderThan,
           includeTranscripts: Boolean(action.options.includeTranscripts),
           yes: Boolean(action.options.yes),

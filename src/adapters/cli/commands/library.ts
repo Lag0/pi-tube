@@ -16,6 +16,10 @@ export interface LibraryCommand {
   readonly args: readonly string[];
   readonly limit?: string;
   readonly offset?: string;
+  readonly provider?: string;
+  readonly source?: string;
+  readonly since?: string;
+  readonly until?: string;
   readonly olderThan?: string;
   readonly includeTranscripts: boolean;
   readonly yes: boolean;
@@ -115,7 +119,22 @@ export const importV2Once = async (deps: CliDeps): Promise<void> => {
 
 /** `pi-tube library <list|show|search|prune|import>`: the local transcript library. */
 export const runLibrary = async (deps: CliDeps, command: LibraryCommand): Promise<number> => {
-  const page = { limit: wholeNumber(command.limit, DEFAULT_LIMIT), offset: wholeNumber(command.offset, 0) };
+  const filter = {
+    ...(command.provider === undefined ? {} : { provider: command.provider }),
+    ...(command.source === undefined ? {} : { kind: command.source }),
+    ...(command.since === undefined ? {} : { since: command.since }),
+    ...(command.until === undefined ? {} : { until: command.until }),
+  };
+  if (Object.keys(filter).length > 0 && command.action !== "list" && command.action !== "search") {
+    throw usageError(
+      "`--provider`, `--source`, `--since` and `--until` work only with `library list` and `library search`.",
+    );
+  }
+  const page = {
+    limit: wholeNumber(command.limit, DEFAULT_LIMIT),
+    offset: wholeNumber(command.offset, 0),
+    ...filter,
+  };
   switch (command.action) {
     case "list": {
       if (command.args.length > 0) throw usageError("`library list` takes no arguments.");

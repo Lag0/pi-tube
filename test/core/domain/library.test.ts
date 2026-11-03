@@ -1,5 +1,10 @@
 import { describe, expect, test } from "vitest";
-import { siteSourceKey, sourceKeyFromInput, transcriptKeyText } from "../../../src/core/domain/library.ts";
+import {
+  matchesLibraryFilter,
+  siteSourceKey,
+  sourceKeyFromInput,
+  transcriptKeyText,
+} from "../../../src/core/domain/library.ts";
 
 describe("sourceKeyFromInput", () => {
   test.each([
@@ -38,5 +43,33 @@ describe("transcriptKeyText", () => {
     expect(transcriptKeyText({ sourceKey: "youtube:x", provider: "groq", model: "m", language: "pt" })).toBe(
       "youtube:x\ngroq\nm\npt",
     );
+  });
+});
+
+describe("matchesLibraryFilter", () => {
+  const entry = { provider: "groq", kind: "youtube", generatedAt: "2026-10-31T23:59:59.000Z" } as const;
+
+  test("an empty filter keeps every entry", () => {
+    expect(matchesLibraryFilter(entry, {})).toBe(true);
+  });
+
+  test("the filters combine as AND", () => {
+    expect(matchesLibraryFilter(entry, { provider: "groq", kind: "youtube" })).toBe(true);
+    expect(matchesLibraryFilter(entry, { provider: "groq", kind: "local_file" })).toBe(false);
+    expect(matchesLibraryFilter(entry, { provider: "deepgram", kind: "youtube" })).toBe(false);
+  });
+
+  test("since and until compare the UTC day of generatedAt, both inclusive", () => {
+    expect(matchesLibraryFilter(entry, { until: "2026-10-31" })).toBe(true);
+    expect(matchesLibraryFilter(entry, { since: "2026-10-31" })).toBe(true);
+    expect(matchesLibraryFilter(entry, { since: "2026-11-01" })).toBe(false);
+    expect(matchesLibraryFilter(entry, { until: "2026-10-30" })).toBe(false);
+  });
+
+  test("a date with an offset (a v2 import) counts by its UTC day", () => {
+    const imported = { ...entry, generatedAt: "2026-11-01T01:00:00+03:00" };
+
+    expect(matchesLibraryFilter(imported, { until: "2026-10-31" })).toBe(true);
+    expect(matchesLibraryFilter(imported, { since: "2026-11-01" })).toBe(false);
   });
 });

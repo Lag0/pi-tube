@@ -1,5 +1,6 @@
 import type { PiTubeConfig } from "./config.ts";
 import type { ProviderId } from "./providers.ts";
+import type { SourceKind } from "./source.ts";
 import { tryParseHttpUrl } from "./source-policy.ts";
 
 /** A stable key per source: `<extractor>:<id>` for pages, `url:<sha256>` and `file:<sha256>` otherwise. */
@@ -99,6 +100,30 @@ export const matchesName = (entry: NamedEntry, query: string): boolean => {
   const haystack = foldForSearch([entry.title, entry.sourceName, entry.platform, entry.sourceKey].join(" "));
   const terms = foldForSearch(query).split(/\s+/).filter(Boolean);
   return terms.length > 0 && terms.every((term) => haystack.includes(term));
+};
+
+/** Which library entries a list or search keeps; dates are YYYY-MM-DD (UTC day of generated_at), both inclusive. */
+export interface LibraryFilter {
+  readonly provider?: string;
+  readonly kind?: SourceKind;
+  readonly since?: string;
+  readonly until?: string;
+}
+
+/** True when the entry passes every filter that is set. */
+export const matchesLibraryFilter = (
+  entry: { readonly provider: string; readonly kind: SourceKind; readonly generatedAt: string },
+  filter: LibraryFilter,
+): boolean => {
+  // A v2 import keeps the date it was written with, which may carry an offset.
+  const time = Date.parse(entry.generatedAt);
+  const day = (Number.isNaN(time) ? entry.generatedAt : new Date(time).toISOString()).slice(0, 10);
+  return (
+    (filter.provider === undefined || entry.provider === filter.provider) &&
+    (filter.kind === undefined || entry.kind === filter.kind) &&
+    (filter.since === undefined || day >= filter.since) &&
+    (filter.until === undefined || day <= filter.until)
+  );
 };
 
 // Query parameters that sign or expire a URL (S3, GCS, CloudFront, Azure SAS, Akamai and common CDNs): they change

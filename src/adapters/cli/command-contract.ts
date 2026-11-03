@@ -171,15 +171,22 @@ const LIBRARY_HELP_DOCUMENT: HelpDocument = {
   summary:
     "The local library: every transcript pi-tube saved, by source, provider, model and language, and the audio kept for reuse.",
   usage: [
-    `${COMMAND_IDENTITY} library list [--limit <n>] [--offset <n>] [--json]`,
+    `${COMMAND_IDENTITY} library list [--limit <n>] [--offset <n>] [filters] [--json]`,
     `${COMMAND_IDENTITY} library show <transcript_id> [--json]`,
-    `${COMMAND_IDENTITY} library search <query> [--limit <n>] [--offset <n>] [--json]`,
+    `${COMMAND_IDENTITY} library search <query> [--limit <n>] [--offset <n>] [filters] [--json]`,
     `${COMMAND_IDENTITY} library prune [--older-than <days>] [--include-transcripts] [--yes] [--json]`,
     `${COMMAND_IDENTITY} library import [--json]`,
   ],
   options: [
     { term: "--limit <n>", description: "How many entries to print (default 20, at most 500)." },
     { term: "--offset <n>", description: "How many entries to skip (default 0)." },
+    { term: "--provider <id>", description: "list, search: only transcripts made with this provider." },
+    {
+      term: "--source <kind>",
+      description: "list, search: only this source kind (youtube, instagram, site, direct_url, local_file).",
+    },
+    { term: "--since <YYYY-MM-DD>", description: "list, search: only transcripts made on or after this UTC day." },
+    { term: "--until <YYYY-MM-DD>", description: "list, search: only transcripts made on or before this UTC day." },
     { term: "--older-than <days>", description: "prune: only audio, or sources, older than this many days." },
     {
       term: "--include-transcripts",
@@ -192,6 +199,7 @@ const LIBRARY_HELP_DOCUMENT: HelpDocument = {
     `${COMMAND_IDENTITY} library list`,
     `${COMMAND_IDENTITY} library prune --older-than 30 --yes`,
     `${COMMAND_IDENTITY} library search "aula penal"`,
+    `${COMMAND_IDENTITY} library list --provider groq --since 2026-10-01 --json`,
     `${COMMAND_IDENTITY} library show 0123456789abcdef0123 --json`,
   ],
   notes: [

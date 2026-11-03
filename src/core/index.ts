@@ -38,14 +38,17 @@ export {
 export { createGetMediaInfo, type GetMediaInfoDeps } from "./application/get-media-info.ts";
 export { createImportV2Transcripts, type ImportV2Deps, type ImportV2Input } from "./application/import-v2.ts";
 export {
+  checkLibraryFilter,
   createGetTranscript,
   createListTranscripts,
   createPruneLibrary,
   createSearchTranscripts,
   type LibraryDeps,
   type LibraryPage,
+  type ListTranscriptsInput,
   MAX_PAGE_LIMIT,
   type PruneInput,
+  type SearchTranscriptsInput,
 } from "./application/library.ts";
 export { ensureNotAborted, type OperationOptions, type ProgressEvent, type UseCase } from "./application/operation.ts";
 export {
@@ -96,7 +99,9 @@ export {
 } from "./domain/errors.ts";
 export { normalizeLanguageTag, sameLanguage } from "./domain/language.ts";
 export {
+  type LibraryFilter,
   type LibrarySettings,
+  matchesLibraryFilter,
   matchesName,
   type NamedEntry,
   resolveLibrarySettings,
@@ -127,6 +132,7 @@ export {
   type ResolvedSource,
   type SiteKind,
   type SiteSource,
+  SOURCE_KINDS,
   type SourceKind,
   type SourceTier,
 } from "./domain/source.ts";

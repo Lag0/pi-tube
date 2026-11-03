@@ -24,19 +24,20 @@ const page = (id: string, title: string): ResolvedSource => ({
   metadata: { platform: "Youtube", mediaId: id, title },
 });
 
-/** Saves one transcript per source, each a minute newer than the one before. */
-const seed = async (sources: readonly ResolvedSource[]) => {
+/** Saves one transcript per source, each a minute newer than the one before; `providers[i]` defaults to groq. */
+const seed = async (sources: readonly ResolvedSource[], providers: readonly ("groq" | "deepgram")[] = []) => {
   const store = createFileLibraryStore({ libraryDir });
   const ids: string[] = [];
   for (const [index, source] of sources.entries()) {
     const sourceKey = await store.sourceKeyOf(source);
     if (!sourceKey.success) throw new Error("no key");
+    const provider = providers[index] ?? "groq";
     const artifact = buildOutputArtifact(
-      { source, provider: "groq", model: "whisper-large-v3", transcript: `text ${index}`, detectedLanguage: "pt" },
+      { source, provider, model: "whisper-large-v3", transcript: `text ${index}`, detectedLanguage: "pt" },
       { generatedAt: new Date(Date.UTC(2026, 9, 31, 0, index)).toISOString(), includeTimestamps: true },
     );
     const saved = await store.save({
-      key: { sourceKey: sourceKey.data, provider: "groq", model: "whisper-large-v3" },
+      key: { sourceKey: sourceKey.data, provider, model: "whisper-large-v3" },
       source,
       artifact,
     });
@@ -206,6 +207,62 @@ describe("library prune", () => {
   });
 });
 
+describe("library filters", () => {
+  test("list --provider keeps only that provider's transcripts", async () => {
+    const [groq] = await seed([page("aaaaaaaaaaa", "Aula"), page("bbbbbbbbbbb", "Aula 2")], ["groq", "deepgram"]);
+
+    const listed = JSON.parse((await library(["list", "--provider", "groq", "--json"])).stdout);
+
+    expect(listed.total).toBe(1);
+    expect(listed.entries.map((entry: { transcript_id: string }) => entry.transcript_id)).toEqual([groq]);
+  });
+
+  test("search --source and --since/--until filter the matches", async () => {
+    await seed([page("aaaaaaaaaaa", "Aula")]);
+
+    const kept = JSON.parse(
+      (
+        await library([
+          "search",
+          "aula",
+          "--source",
+          "youtube",
+          "--since",
+          "2026-10-31",
+          "--until",
+          "2026-10-31",
+          "--json",
+        ])
+      ).stdout,
+    );
+    const dropped = JSON.parse((await library(["search", "aula", "--source", "local_file", "--json"])).stdout);
+
+    expect(kept.total).toBe(1);
+    expect(dropped.total).toBe(0);
+  });
+
+  test("an unknown --source exits 2 with the kinds as the hint", async () => {
+    const result = await library(["list", "--source", "tiktok"]);
+
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toContain("[INPUT_INVALID] Unknown source kind `tiktok`.");
+    expect(result.stderr).toContain("hint: Use one of: youtube, instagram, site, direct_url, local_file.");
+  });
+
+  test.each([
+    ["show", "0123456789abcdef0123", "--provider", "groq"],
+    ["prune", "--since", "2026-10-31"],
+    ["import", "--source", "youtube"],
+  ])("library %s refuses the list filters", async (...args) => {
+    const result = await library(args);
+
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toContain(
+      "[INPUT_INVALID] `--provider`, `--source`, `--since` and `--until` work only with `library list` and `library search`.",
+    );
+  });
+});
+
 describe("library command", () => {
   test("without an action it is INPUT_INVALID with the library usage", async () => {
     const result = await library([]);
@@ -219,6 +276,9 @@ describe("library command", () => {
 
     for (const usage of ["library list", "library show <transcript_id>", "library search <query>", "library prune"]) {
       expect(result.stdout).toContain(usage);
+    }
+    for (const flag of ["--provider <id>", "--source <kind>", "--since <YYYY-MM-DD>", "--until <YYYY-MM-DD>"]) {
+      expect(result.stdout).toContain(flag);
     }
   });
 });
