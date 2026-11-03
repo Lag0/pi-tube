@@ -41,18 +41,18 @@ const waitFor = async (check: () => boolean, timeoutMs: number): Promise<void> =
 describe("cancellation", () => {
   test("an abort during transcription exits 130, releases the audio and saves nothing", async () => {
     const media = createFakeMediaFetcher();
+    const deepgram = createFakeSttProvider("deepgram", undefined, { waitForAbort: true });
     const controller = new AbortController();
     const outputDir = path.join(workDir, "out");
 
     const pending = runCliInProcess(["transcribe", "https://cdn.example.com/a.mp3"], {
       env: { PI_TUBE_LIBRARY_DIR: outputDir, ...PROVIDER_KEYS },
-      fakes: {
-        stt: fakeProviders({ deepgram: createFakeSttProvider("deepgram", undefined, { waitForAbort: true }) }),
-        media: media.fetcher,
-      },
+      fakes: { stt: fakeProviders({ deepgram }), media: media.fetcher },
       signal: controller.signal,
     });
-    setTimeout(() => controller.abort(), 50);
+    // Aborts mid-transcription, with the audio fetched; a fixed delay could land before the fetch under load.
+    await waitFor(() => deepgram.requests.length === 1, 5000);
+    controller.abort();
     const result = await pending;
 
     expect(result.exitCode).toBe(130);
