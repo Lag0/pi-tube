@@ -1,9 +1,12 @@
 import type { EnvironmentVariables } from "../domain/config.ts";
+import { metadataSourceKey } from "../domain/library.ts";
 import { describeSource, type MediaInfo } from "../domain/media-info.ts";
 import { ok } from "../domain/result.ts";
+import { isSiteSource } from "../domain/source.ts";
 import { resolveSourceSettings } from "../domain/source-settings.ts";
 import type { ConfigStore } from "../ports/config-store.ts";
 import type { MediaFetcher } from "../ports/media-fetcher.ts";
+import { type AuditTrail, type AuditTrailDeps, beginAudit } from "./audit-trail.ts";
 import { ensureNotAborted, type UseCase } from "./operation.ts";
 
 /** Dependencies of `getMediaInfo`. */
@@ -11,11 +14,11 @@ export interface GetMediaInfoDeps {
   readonly configStore: ConfigStore;
   readonly env: EnvironmentVariables;
   readonly media: MediaFetcher;
+  readonly audit: AuditTrailDeps;
 }
 
-/** Resolves an input and describes it, without downloading or transcribing; a live stream is not refused. */
-export const createGetMediaInfo =
-  (deps: GetMediaInfoDeps): UseCase<{ readonly input: string }, MediaInfo> =>
+const runGetMediaInfo =
+  (deps: GetMediaInfoDeps, trail: AuditTrail): UseCase<{ readonly input: string }, MediaInfo> =>
   async (input, options) => {
     const ready = ensureNotAborted(options?.signal);
     if (!ready.success) return ready;
@@ -27,5 +30,15 @@ export const createGetMediaInfo =
     options?.onProgress?.({ label: "Resolving source..." });
     const source = await deps.media.resolve(input.input, settings.data, options);
     if (!source.success) return source;
+    const sourceKey = isSiteSource(source.data) ? metadataSourceKey(source.data.metadata) : undefined;
+    if (sourceKey !== undefined) trail.note({ sourceKey });
     return ok(describeSource(source.data));
+  };
+
+/** Resolves an input and describes it, without downloading or transcribing; a live stream is not refused. Audited. */
+export const createGetMediaInfo =
+  (deps: GetMediaInfoDeps): UseCase<{ readonly input: string }, MediaInfo> =>
+  async (input, options) => {
+    const trail = beginAudit(deps.audit, "info", input.input);
+    return trail.finish(await runGetMediaInfo(deps, trail)(input, options), options);
   };

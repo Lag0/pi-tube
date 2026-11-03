@@ -4,6 +4,15 @@
  */
 
 export {
+  type AuditListInput,
+  type AuditPage,
+  type AuditStatsInput,
+  type AuditStatsOutput,
+  createAuditStats,
+  createQueryAudit,
+} from "./application/audit.ts";
+export { type AuditNote, type AuditTrail, type AuditTrailDeps, beginAudit } from "./application/audit-trail.ts";
+export {
   createLoginProvider,
   createLogoutProvider,
   type LoginInput,
@@ -27,6 +36,7 @@ export {
   type DownloadMediaOutput,
 } from "./application/download-media.ts";
 export { createGetMediaInfo, type GetMediaInfoDeps } from "./application/get-media-info.ts";
+export { createImportV2Transcripts, type ImportV2Deps, type ImportV2Input } from "./application/import-v2.ts";
 export {
   createGetTranscript,
   createListTranscripts,
@@ -52,6 +62,20 @@ export {
   type TranscribeInput,
   type TranscribeOutput,
 } from "./application/transcribe.ts";
+export {
+  AUDIT_OPERATIONS,
+  type AuditAdapter,
+  type AuditCost,
+  type AuditGroup,
+  type AuditOperation,
+  type AuditQuery,
+  type AuditRecord,
+  type AuditStats,
+  type AuditVersions,
+  auditRecordToLine,
+  DEFAULT_AUDIT_RETENTION_MONTHS,
+  PRICE_TABLE_DATE,
+} from "./domain/audit.ts";
 export {
   CONFIG_VERSION,
   type ConfigScalar,
@@ -116,9 +140,21 @@ export {
 } from "./domain/source-settings.ts";
 export { toSafeLine } from "./domain/text.ts";
 export type { OutputArtifact } from "./domain/transcript/contract.ts";
+export {
+  type ImportSummary,
+  parseV2Transcript,
+  V2_FILE_NAME,
+  V2_MODELS,
+  type V2Source,
+  type V2SourceKind,
+  type V2Transcript,
+  v2SourceOf,
+} from "./domain/transcript/parse-v2.ts";
 export { type JsonOutputArtifact, toJsonOutputArtifact } from "./domain/transcript/render-json.ts";
 export { sourceReferenceOf } from "./domain/transcript/render-markdown.ts";
+export type { AuditLog, AuditReadout } from "./ports/audit-log.ts";
 export type { ConfigStore } from "./ports/config-store.ts";
+export type { LegacyTranscriptFile, LegacyTranscriptScan, LegacyTranscripts } from "./ports/legacy-transcripts.ts";
 export type {
   LibraryEntry,
   LibraryStore,

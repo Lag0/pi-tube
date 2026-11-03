@@ -75,6 +75,7 @@ const mergeConfig = (raw: RawConfig, config: PiTubeConfig): RawConfig => {
     ["cookies", { file: config.cookies?.file }],
     ["local_files", { max_bytes: config.local_files?.max_bytes }],
     ["library", { keep_audio: config.library?.keep_audio, max_audio_bytes: config.library?.max_audio_bytes }],
+    ["audit", { retention_months: config.audit?.retention_months }],
   ];
   const sections = Object.fromEntries(
     sourceSections

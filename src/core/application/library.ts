@@ -3,6 +3,7 @@ import { matchesName, resolveLibrarySettings } from "../domain/library.ts";
 import { err, ok, type Result } from "../domain/result.ts";
 import type { ConfigStore } from "../ports/config-store.ts";
 import type { LibraryEntry, LibraryStore, PruneReport, StoredTranscript } from "../ports/library-store.ts";
+import { type AuditTrailDeps, beginAudit } from "./audit-trail.ts";
 import { ensureNotAborted, type UseCase } from "./operation.ts";
 
 /** Most entries one page may hold. */
@@ -26,7 +27,8 @@ interface PageRequest {
   readonly offset: number;
 }
 
-const checkPage = ({ limit, offset }: PageRequest): Result<void> => {
+/** Checks `--limit` (1 to `MAX_PAGE_LIMIT`) and `--offset` (0 or more). */
+export const checkPage = ({ limit, offset }: PageRequest): Result<void> => {
   if (!Number.isInteger(limit) || limit < 1 || limit > MAX_PAGE_LIMIT) {
     return err(createError("INPUT_INVALID", `\`--limit\` must be a whole number from 1 to ${MAX_PAGE_LIMIT}.`));
   }
@@ -96,11 +98,7 @@ export interface PruneInput {
   readonly dryRun: boolean;
 }
 
-/**
- * Removes kept audio (all of it, or older than `olderThanDays`, plus what `library.max_audio_bytes` does not fit)
- * or, with `includeTranscripts`, whole sources older than `olderThanDays`, which is then required.
- */
-export const createPruneLibrary =
+const runPrune =
   (deps: LibraryDeps & { readonly configStore: ConfigStore }): UseCase<PruneInput, PruneReport> =>
   async (input, options) => {
     const ready = ensureNotAborted(options?.signal);
@@ -119,4 +117,23 @@ export const createPruneLibrary =
     if (!config.success) return config;
     const { maxAudioBytes } = resolveLibrarySettings(config.data);
     return deps.library.prune({ ...input, ...(maxAudioBytes === undefined ? {} : { maxAudioBytes }) });
+  };
+
+/**
+ * Removes kept audio (all of it, or older than `olderThanDays`, plus what `library.max_audio_bytes` does not fit)
+ * or, with `includeTranscripts`, whole sources older than `olderThanDays`, which is then required. Audited, dry runs
+ * included.
+ */
+export const createPruneLibrary =
+  (
+    deps: LibraryDeps & { readonly configStore: ConfigStore; readonly audit: AuditTrailDeps },
+  ): UseCase<PruneInput, PruneReport> =>
+  async (input, options) => {
+    const auditInput = [
+      `older_than_days=${input.olderThanDays ?? "none"}`,
+      `include_transcripts=${input.includeTranscripts}`,
+      `dry_run=${input.dryRun}`,
+    ].join(" ");
+    const trail = beginAudit(deps.audit, "library_prune", auditInput);
+    return trail.finish(await runPrune(deps)(input, options), options);
   };

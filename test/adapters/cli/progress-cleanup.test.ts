@@ -35,6 +35,7 @@ describe("progress spinner", () => {
             env: { HOME: home, PI_TUBE_CONFIG_PATH: path.join(home, "config.json"), ...PROVIDER_KEYS },
             cwd: home,
             homedir: () => home,
+            adapter: "cli",
           },
           { media: throwingMedia, stt: fakeProviders() },
         ),

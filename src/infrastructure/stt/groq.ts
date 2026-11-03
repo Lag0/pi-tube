@@ -7,6 +7,7 @@ import {
   CLOUD_STT_CAPABILITIES,
   type ParsedTranscript,
   PROVIDER_REQUEST_TIMEOUT_MS,
+  positiveSeconds,
   runProviderCall,
 } from "./deadline.ts";
 import { invalidResponseError } from "./http-errors.ts";
@@ -97,8 +98,9 @@ function parseGroqResponse(payload: unknown): ParsedTranscript | undefined {
     ? ((payload as { segments?: unknown[] }).segments ?? [])
     : [];
   const segments = normalizeGroqSegments(rawSegments);
+  const durationSeconds = positiveSeconds((payload as { duration?: unknown }).duration);
 
-  return { transcript: text, detectedLanguage, segments };
+  return { transcript: text, detectedLanguage, segments, durationSeconds };
 }
 
 const defaultClient = (apiKey: string): GroqAudioTranscriptionClient => new Groq({ apiKey }).audio.transcriptions;

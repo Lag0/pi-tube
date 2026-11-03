@@ -4,7 +4,9 @@ export function hintForCommand(command: string | undefined): string {
     case "transcribe":
       return "Use one of: `pi-tube transcribe <input>`, `pi-tube transcribe <input> --provider <deepgram|groq|elevenlabs>`, `pi-tube transcribe <input> --json`.";
     case "library":
-      return "Use one of: `pi-tube library list`, `pi-tube library show <transcript_id>`, `pi-tube library search <query>`, `pi-tube library prune`.";
+      return "Use one of: `pi-tube library list`, `pi-tube library show <transcript_id>`, `pi-tube library search <query>`, `pi-tube library prune`, `pi-tube library import`.";
+    case "audit":
+      return "Use one of: `pi-tube audit`, `pi-tube audit --errors`, `pi-tube audit stats --since <YYYY-MM-DD>`.";
     case "info":
       return "Use one of: `pi-tube info <input>`, `pi-tube info <input> --json`.";
     case "download":

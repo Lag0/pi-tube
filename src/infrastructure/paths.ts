@@ -7,6 +7,9 @@ export interface PiTubePaths {
   readonly libraryDir: string;
   readonly tmpDir: string;
   readonly downloadsDir: string;
+  readonly auditDir: string;
+  /** Where pi-tube v2 saved transcripts, read once by the v2 import: `home`, and `PI_TUBE_OUTPUT_DIR` if set. */
+  readonly legacyDirs: readonly string[];
 }
 
 export interface PiTubePathsInput {
@@ -30,5 +33,8 @@ export const resolvePiTubePaths = ({ env, cwd, homedir }: PiTubePathsInput): PiT
     libraryDir: resolveOverride(env.PI_TUBE_LIBRARY_DIR, cwd) ?? path.join(home, "library"),
     tmpDir: path.join(home, "tmp"),
     downloadsDir: path.join(home, "downloads"),
+    auditDir: path.join(home, "audit"),
+    // v3 never writes to PI_TUBE_OUTPUT_DIR; the import only reads what v2 left there.
+    legacyDirs: [...new Set([home, resolveOverride(env.PI_TUBE_OUTPUT_DIR, cwd) ?? home])],
   };
 };

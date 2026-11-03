@@ -5,11 +5,15 @@ import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
   createGetTranscript,
   createListTranscripts,
+  createPruneLibrary,
   createSearchTranscripts,
 } from "../../../src/core/application/library.ts";
+import { DEFAULT_CONFIG } from "../../../src/core/domain/config.ts";
 import { matchesName } from "../../../src/core/domain/library.ts";
 import type { LibraryEntry } from "../../../src/core/ports/library-store.ts";
 import { createFileLibraryStore } from "../../../src/infrastructure/library/file-library-store.ts";
+import { auditDepsFor, createInMemoryAuditLog } from "../../helpers/in-memory-audit-log.ts";
+import { createInMemoryConfigStore } from "../../helpers/in-memory-config-store.ts";
 
 let libraryDir: string;
 
@@ -76,5 +80,24 @@ describe("library use cases", () => {
     const result = await createSearchTranscripts({ library: library() })({ query, limit: 20, offset: 0 });
 
     expect(result.success ? undefined : result.error.code).toBe("INPUT_INVALID");
+  });
+});
+
+describe("pruneLibrary", () => {
+  test("records one audit entry whose input names the options", async () => {
+    const audit = createInMemoryAuditLog();
+    const prune = createPruneLibrary({
+      library: createFileLibraryStore({ libraryDir }),
+      configStore: createInMemoryConfigStore(DEFAULT_CONFIG),
+      audit: auditDepsFor(audit),
+    });
+
+    await prune({ includeTranscripts: false, dryRun: true });
+    await prune({ olderThanDays: 30, includeTranscripts: true, dryRun: false });
+
+    expect(audit.records.map((record) => [record.operation, record.input, record.result])).toEqual([
+      ["library_prune", "older_than_days=none include_transcripts=false dry_run=true", "ok"],
+      ["library_prune", "older_than_days=30 include_transcripts=true dry_run=false", "ok"],
+    ]);
   });
 });

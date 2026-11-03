@@ -3,11 +3,13 @@ import os from "node:os";
 import path from "node:path";
 
 const BIN = path.resolve("bin", "pi-tube.ts");
-const SPAWN_ROOT = mkdtempSync(path.join(os.tmpdir(), "pi-tube-spawn-"));
+/** The temp root every spawned CLI runs under: its HOME, config path and library. */
+export const SPAWN_ROOT = mkdtempSync(path.join(os.tmpdir(), "pi-tube-spawn-"));
 process.once("exit", () => rmSync(SPAWN_ROOT, { recursive: true, force: true }));
 
 /** Env that keeps a spawned CLI off the developer's real keys, config and `~/.pi-tube`. */
 const HERMETIC_ENV = {
+  HOME: SPAWN_ROOT,
   DEEPGRAM_API_KEY: "",
   GROQ_API_KEY: "",
   ELEVENLABS_API_KEY: "",
@@ -16,6 +18,8 @@ const HERMETIC_ENV = {
   PI_TUBE_TRANSCRIPTION_LANGUAGE: "",
   PI_TUBE_CONFIG_PATH: path.join(SPAWN_ROOT, "missing.json"),
   PI_TUBE_LIBRARY_DIR: path.join(SPAWN_ROOT, "library"),
+  // Read by the v2 import; a developer's own value must never reach a spawned CLI.
+  PI_TUBE_OUTPUT_DIR: "",
 };
 
 export interface SpawnCliResult {

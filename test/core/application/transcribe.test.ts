@@ -6,11 +6,13 @@ import { createDownloadMedia } from "../../../src/core/application/download-medi
 import { createTranscribe, type TranscribeDeps } from "../../../src/core/application/transcribe.ts";
 import type { PiTubeConfig } from "../../../src/core/domain/config.ts";
 import { createError } from "../../../src/core/domain/errors.ts";
+import { err } from "../../../src/core/domain/result.ts";
 import { renderMarkdown } from "../../../src/core/domain/transcript/render-markdown.ts";
 import { createFileLibraryStore } from "../../../src/infrastructure/library/file-library-store.ts";
 import { PROVIDER_DESCRIPTORS } from "../../../src/infrastructure/stt/registry.ts";
 import { createFakeMediaFetcher } from "../../helpers/fake-media.ts";
-import { createFakeSttProvider } from "../../helpers/fake-stt.ts";
+import { createFakeSttProvider, TRANSCRIPT_HELLO } from "../../helpers/fake-stt.ts";
+import { auditDepsFor, createInMemoryAuditLog } from "../../helpers/in-memory-audit-log.ts";
 import { createInMemoryConfigStore } from "../../helpers/in-memory-config-store.ts";
 
 const INPUT = "https://cdn.example.com/audio/demo.wav";
@@ -40,6 +42,7 @@ const setup = (options: { env?: Record<string, string>; config?: PiTubeConfig } 
     elevenlabs: createFakeSttProvider("elevenlabs"),
   };
   const media = createFakeMediaFetcher();
+  const audit = createInMemoryAuditLog();
   const deps: TranscribeDeps = {
     configStore: createInMemoryConfigStore(options.config ?? config()),
     env: options.env ?? {},
@@ -48,8 +51,9 @@ const setup = (options: { env?: Record<string, string>; config?: PiTubeConfig } 
     media: media.fetcher,
     library: createFileLibraryStore({ libraryDir: outputDir }),
     now: () => NOW,
+    audit: auditDepsFor(audit),
   };
-  return { stt, media, deps, transcribe: createTranscribe(deps) };
+  return { stt, media, audit, deps, transcribe: createTranscribe(deps) };
 };
 
 const run = (
@@ -502,6 +506,7 @@ describe("live streams", () => {
       env: {},
       media: media.fetcher,
       defaultOutputDir: outputDir,
+      audit: auditDepsFor(createInMemoryAuditLog()),
     });
 
     const result = await download({ input: "https://www.youtube.com/watch?v=live", media: "audio" });
@@ -548,6 +553,7 @@ describe("downloadMedia", () => {
       env: {},
       media: media.fetcher,
       defaultOutputDir: outputDir,
+      audit: auditDepsFor(createInMemoryAuditLog()),
     });
 
     const result = await download({ input: vimeo, media: "video" });
@@ -564,6 +570,7 @@ describe("downloadMedia", () => {
       env: {},
       media: media.fetcher,
       defaultOutputDir: outputDir,
+      audit: auditDepsFor(createInMemoryAuditLog()),
     });
 
     const result = await download({ input: INPUT, media: "audio" });
@@ -583,6 +590,7 @@ describe("downloadMedia", () => {
       env: {},
       media: media.fetcher,
       defaultOutputDir: outputDir,
+      audit: auditDepsFor(createInMemoryAuditLog()),
     });
 
     const result = await download({ input: "https://www.youtube.com/watch?v=abc", media: "video" });
@@ -598,6 +606,7 @@ describe("downloadMedia", () => {
       env: {},
       media: media.fetcher,
       defaultOutputDir: outputDir,
+      audit: auditDepsFor(createInMemoryAuditLog()),
     });
 
     const result = await download({ input: "https://www.youtube.com/watch?v=abc", media: "audio" });
@@ -605,5 +614,140 @@ describe("downloadMedia", () => {
     expect(result.success).toBe(true);
     const expected = { allowPrivateHosts: true, maxLocalFileBytes: 1073741824 };
     expect(media.calls.settings).toEqual([expected, expected]);
+  });
+});
+
+describe("audit", () => {
+  const YOUTUBE = "https://www.youtube.com/watch?v=jNQXAC9IVRw";
+  const paidDeepgram = (
+    outcome: Parameters<typeof createFakeSttProvider>[1] = { ...TRANSCRIPT_HELLO, durationSeconds: 19 },
+  ) => ({
+    ...createFakeSttProvider("deepgram", outcome),
+    model: "nova-3",
+  });
+  const auditSetup = (deepgram = paidDeepgram()) => {
+    const { audit, stt, deps } = setup({ env: { DEEPGRAM_API_KEY: "dg" } });
+    return { audit, deepgram, deps: { ...deps, stt: { ...stt, deepgram } } };
+  };
+
+  test("a paid transcription records provider, model, source key, audio seconds and cost", async () => {
+    const { audit, deps } = auditSetup();
+
+    await run(createTranscribe(deps));
+
+    expect(audit.records).toHaveLength(1);
+    expect(audit.records[0]).toMatchObject({
+      operation: "transcribe",
+      input: INPUT,
+      provider: "deepgram",
+      model: "nova-3",
+      audioSeconds: 19,
+      cacheHit: false,
+      cost: { estimate: 0.001362, currency: "USD", priceTable: "2026-10-31" },
+      result: "ok",
+    });
+    expect(audit.records[0]?.sourceKey).toMatch(/^url:[0-9a-f]{64}$/);
+  });
+
+  test("a cache hit records cache_hit true and cost 0, and calls no provider", async () => {
+    const { audit, deepgram, deps } = auditSetup();
+    const transcribe = createTranscribe(deps);
+
+    await run(transcribe);
+    await run(transcribe);
+
+    expect(deepgram.requests).toHaveLength(1);
+    expect(audit.records[1]).toMatchObject({ cacheHit: true, cost: { estimate: 0 }, result: "ok" });
+    expect(audit.records[1]?.sourceKey).toBe(audit.records[0]?.sourceKey);
+  });
+
+  test("a provider failure records its code and the provider, without a cost", async () => {
+    const { audit, deps } = auditSetup(paidDeepgram(createError("PROVIDER_RATE_LIMIT", "Too many requests.")));
+
+    await run(createTranscribe(deps));
+
+    expect(audit.records[0]).toMatchObject({ result: "error", errorCode: "PROVIDER_RATE_LIMIT", provider: "deepgram" });
+    expect(audit.records[0]?.cost).toBeUndefined();
+  });
+
+  test("a paid transcription whose save fails still records the cost", async () => {
+    const { audit, deps } = auditSetup();
+    const library = { ...deps.library, save: async () => err(createError("STORAGE_IO_FAILED", "Disk full.")) };
+
+    await run(createTranscribe({ ...deps, library }));
+
+    expect(audit.records[0]).toMatchObject({
+      result: "error",
+      errorCode: "STORAGE_IO_FAILED",
+      cost: { estimate: 0.001362 },
+    });
+  });
+
+  test("without a provider duration, the yt-dlp duration, then the last segment end, is the audio length", async () => {
+    const page = createFakeMediaFetcher({
+      source: {
+        kind: "youtube",
+        originalInput: YOUTUBE,
+        normalizedUrl: YOUTUBE,
+        metadata: { platform: "Youtube", mediaId: "jNQXAC9IVRw", durationSeconds: 42 },
+      },
+    });
+    const segmentsOnly = paidDeepgram({ text: "hi", segments: [{ startMs: 0, endMs: 1200, text: "hi" }] });
+    const { audit, deps } = auditSetup(segmentsOnly);
+
+    await createTranscribe({ ...deps, media: page.fetcher })({ input: YOUTUBE, format: "markdown" });
+    await run(createTranscribe(deps));
+
+    expect(audit.records.map((record) => record.audioSeconds)).toEqual([42, 1.2]);
+    expect(audit.records[0]?.sourceKey).toBe("youtube:jNQXAC9IVRw");
+  });
+
+  test("a download of a page yt-dlp's Generic extractor reads records no source key", async () => {
+    const audit = createInMemoryAuditLog();
+    const page = "https://portal.example.com/watch?token=SECRET";
+    const media = createFakeMediaFetcher({
+      source: {
+        kind: "site",
+        originalInput: page,
+        normalizedUrl: page,
+        metadata: { platform: "Generic", mediaId: "watch?token=SECRET" },
+      },
+    });
+    const download = createDownloadMedia({
+      configStore: createInMemoryConfigStore(config()),
+      env: {},
+      media: media.fetcher,
+      defaultOutputDir: outputDir,
+      audit: auditDepsFor(audit),
+    });
+
+    await download({ input: page, media: "video" });
+
+    expect(audit.records[0]?.sourceKey).toBeUndefined();
+    expect(JSON.stringify(audit.records)).not.toContain("SECRET");
+  });
+
+  test("a download records one entry with the page's source key", async () => {
+    const audit = createInMemoryAuditLog();
+    const media = createFakeMediaFetcher({
+      source: {
+        kind: "youtube",
+        originalInput: YOUTUBE,
+        normalizedUrl: YOUTUBE,
+        metadata: { platform: "Youtube", mediaId: "jNQXAC9IVRw" },
+      },
+    });
+    const download = createDownloadMedia({
+      configStore: createInMemoryConfigStore(config()),
+      env: {},
+      media: media.fetcher,
+      defaultOutputDir: outputDir,
+      audit: auditDepsFor(audit),
+    });
+
+    await download({ input: YOUTUBE, media: "audio" });
+
+    expect(audit.records).toHaveLength(1);
+    expect(audit.records[0]).toMatchObject({ operation: "download", sourceKey: "youtube:jNQXAC9IVRw", result: "ok" });
   });
 });

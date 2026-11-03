@@ -13,7 +13,8 @@ import type { OutputArtifact } from "../domain/transcript/contract.ts";
 import type { ConfigStore } from "../ports/config-store.ts";
 import type { LibraryStore, StoredTranscript } from "../ports/library-store.ts";
 import type { FetchedAudio, MediaFetcher } from "../ports/media-fetcher.ts";
-import type { SttProvider } from "../ports/stt-provider.ts";
+import type { SttProvider, SttTranscript } from "../ports/stt-provider.ts";
+import { type AuditTrail, type AuditTrailDeps, beginAudit } from "./audit-trail.ts";
 import { ensureNotAborted, type UseCase } from "./operation.ts";
 
 /** Env var naming the default provider; wins over the config default. */
@@ -56,6 +57,7 @@ export interface TranscribeDeps {
   readonly media: MediaFetcher;
   readonly library: LibraryStore;
   readonly now: () => Date;
+  readonly audit: AuditTrailDeps;
 }
 
 const firstNonEmpty = (...values: ReadonlyArray<string | undefined>): string | undefined =>
@@ -86,14 +88,18 @@ const withAlternatives = (
   });
 };
 
-/**
- * Transcribes a URL or local file with one provider, never falling back to another, and saves it in the
- * library. The same source, provider, model and language is a cache hit: the saved transcript comes back
- * without downloading or paying again, unless `force`. Fetched audio is always released, also on failure and
- * cancellation.
- */
-export const createTranscribe =
-  (deps: TranscribeDeps): UseCase<TranscribeInput, TranscribeOutput> =>
+/** The audio length a cost is estimated from: the provider's, else yt-dlp's, else where the last segment ends. */
+const audioSecondsOf = (transcript: SttTranscript, source: ResolvedSource): number | undefined => {
+  const lastSegment = transcript.segments.at(-1);
+  return (
+    transcript.durationSeconds ??
+    (isSiteSource(source) ? source.metadata.durationSeconds : undefined) ??
+    (lastSegment === undefined ? undefined : lastSegment.endMs / 1000)
+  );
+};
+
+const runTranscribe =
+  (deps: TranscribeDeps, trail: AuditTrail): UseCase<TranscribeInput, TranscribeOutput> =>
   async (input, options) => {
     const ready = ensureNotAborted(options?.signal);
     if (!ready.success) return ready;
@@ -114,6 +120,7 @@ export const createTranscribe =
     const providerId = selected.data.descriptor.id;
     const provider = deps.stt[providerId];
     if (!provider) throw new Error(`No SttProvider registered for \`${providerId}\``);
+    trail.note({ provider: providerId, model: provider.model });
     const language = firstNonEmpty(
       input.language,
       deps.env[TRANSCRIPTION_LANGUAGE_ENV],
@@ -131,6 +138,7 @@ export const createTranscribe =
       ...(language ? { language } : {}),
     });
     const hit = (stored: StoredTranscript): TranscribeOutput => {
+      trail.note({ cacheHit: true });
       options?.onProgress?.({ label: "Found in library" });
       return {
         transcriptId: stored.transcriptId,
@@ -154,6 +162,7 @@ export const createTranscribe =
     };
     // YouTube and Instagram keys come from the URL, so a cache hit, or a reuse of kept audio, runs no yt-dlp.
     const inputKey = sourceKeyFromInput(input.input);
+    if (inputKey !== undefined) trail.note({ sourceKey: inputKey });
     if (inputKey !== undefined && !input.force) {
       const early = await deps.library.find(keyFor(inputKey));
       if (!early.success) return early;
@@ -176,6 +185,7 @@ export const createTranscribe =
     if (!finished.success) return finished;
     const sourceKey = await deps.library.sourceKeyOf(source);
     if (!sourceKey.success) return sourceKey;
+    trail.note({ sourceKey: sourceKey.data });
     const key = keyFor(sourceKey.data);
     if (!input.force) {
       const cached = await deps.library.find(key);
@@ -208,6 +218,9 @@ export const createTranscribe =
       await audio.release();
     }
     if (!transcript.success) return err(withAlternatives(transcript.error, providerId, deps, config.data));
+    // Noted before the save: the provider has billed this audio even if the save fails.
+    const audioSeconds = audioSecondsOf(transcript.data, source);
+    trail.note({ cacheHit: false, ...(audioSeconds === undefined ? {} : { audioSeconds }) });
 
     const artifact = buildOutputArtifact(
       {
@@ -233,4 +246,17 @@ export const createTranscribe =
       format: input.format,
       artifact: saved.data.artifact,
     });
+  };
+
+/**
+ * Transcribes a URL or local file with one provider, never falling back to another, and saves it in the
+ * library. The same source, provider, model and language is a cache hit: the saved transcript comes back
+ * without downloading or paying again, unless `force`. Fetched audio is always released, also on failure and
+ * cancellation. Every call is recorded in the audit log, with its estimated cost.
+ */
+export const createTranscribe =
+  (deps: TranscribeDeps): UseCase<TranscribeInput, TranscribeOutput> =>
+  async (input, options) => {
+    const trail = beginAudit(deps.audit, "transcribe", input.input);
+    return trail.finish(await runTranscribe(deps, trail)(input, options), options);
   };

@@ -17,6 +17,18 @@ export interface TranscriptKey {
 /** The key of a page yt-dlp identified: its `extractor_key` in lowercase and its id. */
 export const siteSourceKey = (platform: string, mediaId: string): SourceKey => `${platform.toLowerCase()}:${mediaId}`;
 
+/**
+ * The key of a page from yt-dlp's metadata alone; absent without an id, and for the Generic extractor, whose id is
+ * the URL's last segment (query included), so `video.php?id=1` and `?id=2` would collide and a token would show.
+ */
+export const metadataSourceKey = (metadata: {
+  readonly platform: string;
+  readonly mediaId?: string;
+}): SourceKey | undefined =>
+  metadata.mediaId && metadata.platform.toLowerCase() !== "generic"
+    ? siteSourceKey(metadata.platform, metadata.mediaId)
+    : undefined;
+
 const YOUTUBE_HOSTS = new Set(["youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com"]);
 const INSTAGRAM_HOSTS = new Set(["instagram.com", "www.instagram.com", "m.instagram.com"]);
 const YOUTUBE_ID = /^[A-Za-z0-9_-]{11}$/;
