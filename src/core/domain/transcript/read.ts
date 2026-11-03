@@ -87,11 +87,23 @@ const filterSegments = (
   );
 };
 
+/**
+ * Where a text page may end without splitting a surrogate pair (a lone half is invalid on the wire): one unit
+ * earlier, or one later when ending earlier would leave the page empty, so paging always advances.
+ */
+const pairSafeEnd = (text: string, offset: number, end: number): number => {
+  if (end <= offset || end >= text.length) return end;
+  const last = text.charCodeAt(end - 1);
+  if (last < 0xd800 || last > 0xdbff) return end;
+  return end - 1 > offset ? end - 1 : end + 1;
+};
+
 const nextOf = (end: number, total: number): { readonly nextOffset?: number } =>
   end < total ? { nextOffset: end } : {};
 
 /**
- * One page of `artifact`: text sliced by UTF-16 unit, so pages concatenate to the original, or whole segments.
+ * One page of `artifact`: text sliced by UTF-16 unit (never inside a surrogate pair), so pages concatenate to the
+ * original, or whole segments.
  * A time range or chapter keeps the segments it covers; their text is joined by spaces. `full` returns the rest in
  * one page, cut at `maxFullChars` characters (`truncated`, with `nextOffset`); a segment page always holds at least
  * one segment, so paging advances.
@@ -141,8 +153,8 @@ export const pageTranscript = (
 
   const text = filtered ? kept.data.map((segment) => segment.text).join(" ") : artifact.transcript.full_text;
   const size = request.full ? maxFullChars : request.limit;
-  const page = text.slice(offset, offset + size);
-  const end = offset + page.length;
+  const end = pairSafeEnd(text, offset, Math.min(offset + size, text.length));
+  const page = text.slice(offset, end);
   return ok({
     format: "text",
     offset,

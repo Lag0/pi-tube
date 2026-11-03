@@ -174,6 +174,37 @@ describe("pageTranscript: full", () => {
   });
 });
 
+describe("pageTranscript: surrogate pairs", () => {
+  // "😀" is two UTF-16 units; a page boundary inside it would put a lone surrogate on the wire.
+  const emoji = artifact({ segments: undefined, fullText: "ab😀cd" });
+
+  test("a page never ends between the two halves of a character, and pages still concatenate", () => {
+    const pages: string[] = [];
+    let offset: number | undefined = 0;
+    while (offset !== undefined) {
+      const page = pageTranscript(emoji, request({ offset, limit: 3 }), 100_000);
+      if (!page.success) throw new Error(page.error.message);
+      pages.push(page.data.text ?? "");
+      offset = page.data.nextOffset;
+    }
+
+    expect(pages).toEqual(["ab", "😀c", "d"]);
+    expect(pages.join("")).toBe("ab😀cd");
+  });
+
+  test("a one-unit page on a surrogate pair takes the whole character, so paging advances", () => {
+    const page = pageTranscript(emoji, request({ offset: 2, limit: 1 }), 100_000);
+
+    expect(page.success && page.data).toMatchObject({ text: "😀", nextOffset: 4 });
+  });
+
+  test("full stops before a pair the cap would split", () => {
+    const page = pageTranscript(emoji, request({ full: true }), 3);
+
+    expect(page.success && page.data).toMatchObject({ text: "ab", truncated: true, nextOffset: 2 });
+  });
+});
+
 describe("pageTranscript: limits", () => {
   test.each([
     ["limit 0", request({ limit: 0 })],
