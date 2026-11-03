@@ -47,24 +47,29 @@ export const runTool = async <T>(
   format: (data: T) => object,
 ): Promise<CallToolResult> => {
   const token = ctx.mcpReq._meta?.progressToken;
+  // After a client cancel the token is dead (no response will follow), and the SDK does not check it.
+  const cancelled = ctx.mcpReq.signal;
   let sent = Promise.resolve();
   let count = 0;
   const onProgress =
     token === undefined
       ? undefined
       : (event: ProgressEvent): void => {
+          if (cancelled.aborted) return;
           count += 1;
           const progress = count;
           sent = sent
             .then(() =>
-              ctx.mcpReq.notify({
-                method: "notifications/progress",
-                params: { progressToken: token, progress, message: progressMessage(event) },
-              }),
+              cancelled.aborted
+                ? undefined
+                : ctx.mcpReq.notify({
+                    method: "notifications/progress",
+                    params: { progressToken: token, progress, message: progressMessage(event) },
+                  }),
             )
             .catch((error: unknown) => deps.log.debug("Progress not sent", { message: toPiTubeError(error).message }));
         };
-  const signal = AbortSignal.any([ctx.mcpReq.signal, deps.shutdown]);
+  const signal = AbortSignal.any([cancelled, deps.shutdown]);
 
   let response: CallToolResult;
   try {

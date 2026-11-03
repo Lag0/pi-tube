@@ -34,7 +34,7 @@ describe("toolResult and toolError", () => {
 interface Running {
   readonly client: Client;
   readonly logs: string[];
-  /** Notifications the server sent, by method. */
+  /** Notifications the server sent, by method, and its responses, as `response:<id>`. */
   readonly sent: string[];
   readonly seen: { signal?: AbortSignal };
   readonly shutdown: AbortController;
@@ -73,6 +73,7 @@ const serve = async (
   const send = serverTransport.send.bind(serverTransport);
   serverTransport.send = async (message, options) => {
     if ("method" in message && !("id" in message)) sent.push(message.method);
+    if ("id" in message && ("result" in message || "error" in message)) sent.push(`response:${message.id}`);
     return send(message, options);
   };
   await server.connect(serverTransport);
@@ -186,6 +187,31 @@ describe("runTool", () => {
     await expect(pending).rejects.toThrow();
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(aborted).toBe(true);
+  });
+
+  test("after a client cancel, no progress and no response go out for that call", async () => {
+    let finished = false;
+    const item = await serve(async (options) => {
+      await waitForAbort(options.signal);
+      // The audit's "Audit log not written", or a step that ignored the signal, reports after the cancel.
+      options.onProgress?.({ label: "Audit log not written", detail: "STORAGE_IO_FAILED" });
+      finished = true;
+      return err(createError("CANCELLED", "Operation cancelled."));
+    });
+    const controller = new AbortController();
+    item.sent.splice(0); // the initialize response
+
+    const pending = item.client.callTool(
+      { name: "run", arguments: {} },
+      { signal: controller.signal, onprogress: () => undefined },
+    );
+    setTimeout(() => controller.abort(), 20);
+    await expect(pending).rejects.toThrow();
+    for (let tries = 0; !finished && tries < 200; tries += 1) await new Promise((resolve) => setTimeout(resolve, 5));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(finished).toBe(true);
+    expect(item.sent.filter((entry) => entry === "notifications/progress" || entry.startsWith("response:"))).toEqual([]);
   });
 
   test("shutdown aborts a call in flight", async () => {
