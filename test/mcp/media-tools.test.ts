@@ -214,6 +214,21 @@ describe("transcribe", () => {
     expect(detailed.untrusted.chapters).toEqual([{ index: 0, title: "Intro", start_ms: 0, end_ms: 1000 }]);
   });
 
+  test("a live with a hostile title fails without the title in the error", async () => {
+    harness = await connect({
+      fakes: {
+        media: createFakeMediaFetcher({ source: page({ title: HOSTILE, liveStatus: "is_live" }) }).fetcher,
+        stt: fakeProviders(),
+      },
+    });
+
+    const { isError, json } = await harness.call("transcribe", { input: YOUTUBE });
+
+    expect(isError).toBe(true);
+    expect(json).toMatchObject({ error: { code: "SOURCE_LIVE_NOT_ENDED" } });
+    expect(JSON.stringify(json)).not.toContain("Ignore previous");
+  });
+
   test("without a key it is PROVIDER_NOT_CONFIGURED with how to add one", async () => {
     harness = await connectMcp({ fakes: { media: createFakeMediaFetcher().fetcher, stt: fakeProviders() } });
 
