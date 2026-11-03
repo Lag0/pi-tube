@@ -125,12 +125,16 @@ describe("info command", () => {
       seen.push(request.signal);
       const { signal } = request;
       if (!signal) return { outcome: "exited", exitCode: 0, stdout: JSON.stringify(METADATA), stderr: "" };
-      await new Promise((resolve) => signal.addEventListener("abort", resolve, { once: true }));
+      // As the real runner: a signal that is already aborted ends the run at once.
+      if (!signal.aborted) await new Promise((resolve) => signal.addEventListener("abort", resolve, { once: true }));
       return { outcome: "aborted", exitCode: null, stdout: "", stderr: "" };
     };
 
     const pending = runCliInProcess(["info", YOUTUBE], { signal: controller.signal, fakes: { runProcess: run } });
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    // Aborts while yt-dlp runs; a fixed delay could land before it starts under load.
+    for (let tries = 0; seen.length === 0 && tries < 1000; tries += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
     controller.abort();
     const result = await pending;
 
