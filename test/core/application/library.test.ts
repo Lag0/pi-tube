@@ -164,7 +164,7 @@ describe("library filters", () => {
 
     expect(result.success ? undefined : result.error).toMatchObject({
       code: "INPUT_INVALID",
-      message: `\`--${flag}\` must be a date as YYYY-MM-DD.`,
+      message: `\`${flag}\` must be a date as YYYY-MM-DD.`,
     });
   });
 

@@ -144,7 +144,9 @@ describe("get_usage", () => {
     const { isError, json } = await harness.call("get_usage", { since: "2026-11-02", until: "2026-11-01" });
 
     expect(isError).toBe(true);
-    expect(json).toMatchObject({ error: { code: "INPUT_INVALID" } });
+    expect(json).toMatchObject({
+      error: { code: "INPUT_INVALID", message: "`since` must not be after `until`." },
+    });
   });
 
   test("a limit over 100 is refused by the input schema", async () => {

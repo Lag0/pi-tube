@@ -172,7 +172,7 @@ describe("audit", () => {
     const result = await audit(["--since", "31/10/2026"]);
 
     expect(result.exitCode).toBe(2);
-    expect(result.stderr).toContain("`--since` must be a date as YYYY-MM-DD.");
+    expect(result.stderr).toContain("`since` must be a date as YYYY-MM-DD.");
   });
 
   test.each([
