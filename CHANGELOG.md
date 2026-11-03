@@ -38,6 +38,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Changed
 
 - Dependencies are pinned to exact versions.
+- `DEBUG=true` in the environment is dropped when pi-tube starts: with it, groq-sdk printed every request's headers, the API key included. In `pi-tube mcp`, anything a dependency logs to the console goes to stderr, so stdout carries only MCP messages.
 - `@deepgram/sdk` is updated from 4.11.3 to 5.17.0. Cancelling a Deepgram transcription (Ctrl-C, SIGTERM or the 10-minute timeout) now aborts the HTTP request itself, as with Groq and ElevenLabs, instead of letting it finish in the background. Deepgram requests retry twice, like the other providers.
 - yt-dlp child processes no longer inherit stdin.
 - Ctrl-C, SIGTERM or a closed terminal (SIGHUP) during `transcribe`, `download` or `info` cancels the operation: yt-dlp and its children are stopped, temporary audio is removed, nothing partial is saved, and pi-tube exits with 130 (`[CANCELLED]`). A second Ctrl-C kills pi-tube at once.

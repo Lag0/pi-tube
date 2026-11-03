@@ -98,6 +98,28 @@ describe("pi-tube mcp on stdio", () => {
     expect(result.stderr).toContain("v2 import: found=1 imported=1");
   });
 
+  test("a dependency's console.log goes to stderr, and DEBUG=true is dropped (groq-sdk would print the key)", async () => {
+    // A preload stands in for a dependency that logs once pi-tube is running.
+    writeFileSync(path.join(home, "bunfig.toml"), 'preload = ["./noisy.ts"]\n');
+    writeFileSync(
+      path.join(home, "noisy.ts"),
+      [
+        "const original = console.log;",
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: this is the preload's source code, written to a file
+        'const report = () => console.log(`NOISY debug=${process.env.DEBUG ?? "unset"}`);',
+        "const poll = setInterval(() => { if (console.log !== original) { clearInterval(poll); report(); } }, 5);",
+        "poll.unref();",
+        "",
+      ].join("\n"),
+    );
+
+    const result = await spawnMcp([initialize, initialized], { DEBUG: "true" }, { cwd: home, endAfterMs: 300 });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdoutLines.every((line) => (JSON.parse(line) as Message).jsonrpc === "2.0")).toBe(true);
+    expect(result.stderr).toContain("NOISY debug=unset");
+  });
+
   test.skipIf(process.platform === "win32")("SIGTERM after initialize exits 0 within 5 s", async () => {
     const result = await spawnMcp([initialize, initialized], {}, { signalAfterMs: 0 });
 

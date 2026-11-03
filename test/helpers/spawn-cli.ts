@@ -55,17 +55,25 @@ export interface SpawnMcpResult {
 
 /**
  * Runs `bin/pi-tube.ts mcp` in a child process and writes one JSON line per message. Once every message with an
- * `id` has an answer, it ends stdin, or sends SIGTERM `signalAfterMs` later. Killed after `timeoutMs` (20 s).
+ * `id` has an answer, it ends stdin (`endAfterMs` later), or sends SIGTERM `signalAfterMs` later. Killed after
+ * `timeoutMs` (20 s).
  */
 export const spawnMcp = (
   messages: readonly object[],
   env: Record<string, string> = {},
-  options: { readonly timeoutMs?: number; readonly signalAfterMs?: number } = {},
+  options: {
+    readonly timeoutMs?: number;
+    readonly signalAfterMs?: number;
+    /** How long stdin stays open after the last answer (default 0). */
+    readonly endAfterMs?: number;
+    readonly cwd?: string;
+  } = {},
 ): Promise<SpawnMcpResult> =>
   new Promise((resolve) => {
     const child = spawn("bun", ["run", "--bun", "--no-env-file", BIN, "mcp"], {
       env: { ...process.env, ...HERMETIC_ENV, ...env },
       stdio: ["pipe", "pipe", "pipe"],
+      ...(options.cwd ? { cwd: options.cwd } : {}),
     });
     const expected = messages.filter((message) => "id" in message).length;
     let stdout = "";
@@ -88,7 +96,7 @@ export const spawnMcp = (
       if (finishing) return;
       finishing = true;
       if (options.signalAfterMs === undefined) {
-        child.stdin.end();
+        setTimeout(() => child.stdin.end(), options.endAfterMs ?? 0);
         return;
       }
       setTimeout(() => {
