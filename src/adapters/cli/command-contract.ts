@@ -332,6 +332,7 @@ const CONFIG_HELP_DOCUMENT: HelpDocument = {
   notes: [
     "Keys: `defaults.provider`, `defaults.language` and `providers.<id>.api_key_env`.",
     "`audit.retention_months`: months of audit log kept, 12 by default; older months are deleted.",
+    "`mcp.max_full_chars`: most characters the MCP tool `get_transcript` returns with `full: true`, 100000 by default.",
     "API keys are not config values: store one with `pi-tube auth login <provider>`.",
   ],
 };

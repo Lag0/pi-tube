@@ -7,11 +7,13 @@ import {
   createGetTranscript,
   createListTranscripts,
   createPruneLibrary,
+  createReadTranscript,
   createSearchTranscripts,
 } from "../../../src/core/application/library.ts";
 import { DEFAULT_CONFIG } from "../../../src/core/domain/config.ts";
 import { matchesName } from "../../../src/core/domain/library.ts";
 import { ok } from "../../../src/core/domain/result.ts";
+import { buildOutputArtifact } from "../../../src/core/domain/transcript/build-artifact.ts";
 import type { LibraryEntry } from "../../../src/core/ports/library-store.ts";
 import { createFileLibraryStore } from "../../../src/infrastructure/library/file-library-store.ts";
 import { auditDepsFor, createInMemoryAuditLog } from "../../helpers/in-memory-audit-log.ts";
@@ -185,5 +187,72 @@ describe("library filters", () => {
       message: "Unknown source kind `tiktok`.",
       hint: "Use one of: youtube, instagram, site, direct_url, local_file.",
     });
+  });
+});
+
+describe("readTranscript", () => {
+  const seedText = async (text: string) => {
+    const library = createFileLibraryStore({ libraryDir });
+    const source = {
+      kind: "youtube",
+      originalInput: "https://www.youtube.com/watch?v=abc",
+      normalizedUrl: "https://www.youtube.com/watch?v=abc",
+      metadata: { platform: "Youtube", mediaId: "abc", title: "Aula" },
+    } as const;
+    const artifact = buildOutputArtifact(
+      { source, provider: "groq", model: "whisper-large-v3", transcript: text },
+      { generatedAt: "2026-11-02T00:00:00.000Z", includeTimestamps: true },
+    );
+    const saved = await library.save({
+      key: { sourceKey: "youtube:abc", provider: "groq", model: "whisper-large-v3" },
+      source,
+      artifact,
+    });
+    if (!saved.success) throw new Error("save failed");
+    return { library, transcriptId: saved.data.transcriptId };
+  };
+  const read = (library: ReturnType<typeof createFileLibraryStore>, config = DEFAULT_CONFIG) =>
+    createReadTranscript({ library, configStore: createInMemoryConfigStore(config) });
+
+  test("an unknown id is TRANSCRIPT_NOT_FOUND", async () => {
+    const result = await read(createFileLibraryStore({ libraryDir }))({
+      transcriptId: "ffffffffffffffffffff",
+      format: "text",
+      offset: 0,
+      limit: 100,
+    });
+
+    expect(result.success ? undefined : result.error.code).toBe("TRANSCRIPT_NOT_FOUND");
+  });
+
+  test("returns the page with the transcript id", async () => {
+    const { library, transcriptId } = await seedText("hello world");
+
+    const result = await read(library)({ transcriptId: ` ${transcriptId} `, format: "text", offset: 6, limit: 100 });
+
+    expect(result.success ? result.data : result).toMatchObject({ transcriptId, text: "world", total: 11 });
+  });
+
+  test("full stops at mcp.max_full_chars from the config", async () => {
+    const { library, transcriptId } = await seedText("abcdefghij");
+
+    const result = await read(library, { ...DEFAULT_CONFIG, mcp: { max_full_chars: 4 } })({
+      transcriptId,
+      format: "text",
+      offset: 0,
+      limit: 1,
+      full: true,
+    });
+
+    expect(result.success ? result.data : result).toMatchObject({ text: "abcd", truncated: true, nextOffset: 4 });
+  });
+
+  test("without mcp.max_full_chars, full stops at 100000 characters", async () => {
+    const { library, transcriptId } = await seedText("x".repeat(100_001));
+
+    const result = await read(library)({ transcriptId, format: "text", offset: 0, limit: 1, full: true });
+
+    expect(result.success && result.data.text?.length).toBe(100_000);
+    expect(result.success && result.data.truncated).toBe(true);
   });
 });

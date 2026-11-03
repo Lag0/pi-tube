@@ -23,6 +23,7 @@ import {
   createLogoutProvider,
   createPruneLibrary,
   createQueryAudit,
+  createReadTranscript,
   createSearchTranscripts,
   createSetConfigValue,
   createTranscribe,
@@ -43,11 +44,13 @@ import {
   type ProviderListing,
   type PruneInput,
   type PruneReport,
+  type ReadTranscriptInput,
   type SearchTranscriptsInput,
   type StoredTranscript,
   type SttProvider,
   type TranscribeInput,
   type TranscribeOutput,
+  type TranscriptPage,
   type UseCase,
 } from "./core/index.ts";
 import { createFileAuditLog } from "./infrastructure/audit/file-audit-log.ts";
@@ -92,6 +95,7 @@ export interface App {
   readonly listTranscripts: UseCase<ListTranscriptsInput, LibraryPage>;
   readonly searchTranscripts: UseCase<SearchTranscriptsInput, LibraryPage>;
   readonly getTranscript: UseCase<{ readonly transcriptId: string }, StoredTranscript>;
+  readonly readTranscript: UseCase<ReadTranscriptInput, TranscriptPage & { readonly transcriptId: string }>;
   readonly pruneLibrary: UseCase<PruneInput, PruneReport>;
   readonly queryAudit: UseCase<AuditListInput, AuditPage>;
   readonly auditStats: UseCase<AuditStatsInput, AuditStatsOutput>;
@@ -153,6 +157,7 @@ export const createApp = (environment: AppEnvironment, overrides: AppOverrides =
     listTranscripts: createListTranscripts({ library }),
     searchTranscripts: createSearchTranscripts({ library }),
     getTranscript: createGetTranscript({ library }),
+    readTranscript: createReadTranscript({ library, configStore }),
     pruneLibrary: createPruneLibrary({ library, configStore, audit }),
     queryAudit: createQueryAudit({ audit: auditLog }),
     auditStats: createAuditStats({ audit: auditLog }),

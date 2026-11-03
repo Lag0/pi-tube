@@ -31,7 +31,11 @@ export interface PiTubeConfig {
   readonly local_files?: { readonly max_bytes?: number };
   readonly library?: { readonly keep_audio?: boolean; readonly max_audio_bytes?: number };
   readonly audit?: { readonly retention_months?: number };
+  readonly mcp?: { readonly max_full_chars?: number };
 }
+
+/** Characters `get_transcript` with `full: true` returns when `mcp.max_full_chars` is not set. */
+export const DEFAULT_MCP_MAX_FULL_CHARS = 100_000;
 
 /** Config used when the file does not exist yet. */
 export const DEFAULT_CONFIG: PiTubeConfig = { version: CONFIG_VERSION, defaults: {}, providers: {} };
@@ -60,6 +64,9 @@ const isAudioBytes = (value: unknown): value is number =>
   typeof value === "number" && Number.isSafeInteger(value) && value >= 1;
 
 const isRetentionMonths = (value: unknown): value is number =>
+  typeof value === "number" && Number.isSafeInteger(value) && value >= 1;
+
+const isMaxFullChars = (value: unknown): value is number =>
   typeof value === "number" && Number.isSafeInteger(value) && value >= 1;
 
 const isMaxBytes = (value: unknown): value is number =>
@@ -122,12 +129,21 @@ const parseSourceSections = (
     return ok(retentionMonths === undefined ? {} : { retention_months: retentionMonths });
   });
   if (!audit.success) return audit;
+  const mcp = parseSection(raw.mcp, "mcp", fail, (section) => {
+    const maxFullChars = section.max_full_chars;
+    if (maxFullChars !== undefined && !isMaxFullChars(maxFullChars)) {
+      return fail("mcp.max_full_chars", "a whole number of 1 or more");
+    }
+    return ok(maxFullChars === undefined ? {} : { max_full_chars: maxFullChars });
+  });
+  if (!mcp.success) return mcp;
   return ok({
     ...(network.data ? { network: network.data } : {}),
     ...(cookies.data ? { cookies: cookies.data } : {}),
     ...(localFiles.data ? { local_files: localFiles.data } : {}),
     ...(library.data ? { library: library.data } : {}),
     ...(audit.data ? { audit: audit.data } : {}),
+    ...(mcp.data ? { mcp: mcp.data } : {}),
   });
 };
 
@@ -183,6 +199,7 @@ export const configKeysFor = (descriptors: readonly ProviderDescriptor[]): reado
   "library.keep_audio",
   "library.max_audio_bytes",
   "audit.retention_months",
+  "mcp.max_full_chars",
   ...descriptors.map((descriptor) => `providers.${descriptor.id}.api_key_env`),
 ];
 
@@ -214,6 +231,7 @@ export const getConfigValue = (config: PiTubeConfig, key: string): ConfigScalar 
   if (key === "library.keep_audio") return config.library?.keep_audio;
   if (key === "library.max_audio_bytes") return config.library?.max_audio_bytes;
   if (key === "audit.retention_months") return config.audit?.retention_months;
+  if (key === "mcp.max_full_chars") return config.mcp?.max_full_chars;
   const providerId = API_KEY_ENV_PATTERN.exec(key)?.[1];
   return providerId === undefined ? undefined : config.providers[providerId]?.api_key_env;
 };
@@ -286,6 +304,13 @@ export const applyConfigValue = (
     }
     return ok({ ...config, audit: { ...config.audit, retention_months: retentionMonths } });
   }
+  if (checkedKey.data === "mcp.max_full_chars") {
+    const maxFullChars = /^\d+$/.test(trimmedValue) ? Number(trimmedValue) : Number.NaN;
+    if (!isMaxFullChars(maxFullChars)) {
+      return err(createError("INPUT_INVALID", "`mcp.max_full_chars` must be a whole number of 1 or more."));
+    }
+    return ok({ ...config, mcp: { ...config.mcp, max_full_chars: maxFullChars } });
+  }
   if (checkedKey.data === "local_files.max_bytes") {
     const maxBytes = /^\d+$/.test(trimmedValue) ? Number(trimmedValue) : Number.NaN;
     if (!isMaxBytes(maxBytes)) {
@@ -313,3 +338,8 @@ export const applyConfigValue = (
     providers: { ...config.providers, [providerId]: { ...config.providers[providerId], api_key_env: trimmedValue } },
   });
 };
+
+/** The MCP server's settings, with their defaults. */
+export const resolveMcpSettings = (config: PiTubeConfig): { readonly maxFullChars: number } => ({
+  maxFullChars: config.mcp?.max_full_chars ?? DEFAULT_MCP_MAX_FULL_CHARS,
+});

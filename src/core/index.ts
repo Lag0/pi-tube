@@ -42,12 +42,14 @@ export {
   createGetTranscript,
   createListTranscripts,
   createPruneLibrary,
+  createReadTranscript,
   createSearchTranscripts,
   type LibraryDeps,
   type LibraryPage,
   type ListTranscriptsInput,
   MAX_PAGE_LIMIT,
   type PruneInput,
+  type ReadTranscriptInput,
   type SearchTranscriptsInput,
 } from "./application/library.ts";
 export { ensureNotAborted, type OperationOptions, type ProgressEvent, type UseCase } from "./application/operation.ts";
@@ -84,9 +86,11 @@ export {
   type ConfigScalar,
   configKeysFor,
   DEFAULT_CONFIG,
+  DEFAULT_MCP_MAX_FULL_CHARS,
   type EnvironmentVariables,
   type PiTubeConfig,
   type ProviderConfig,
+  resolveMcpSettings,
 } from "./domain/config.ts";
 export {
   createError,
@@ -156,6 +160,13 @@ export {
   type V2Transcript,
   v2SourceOf,
 } from "./domain/transcript/parse-v2.ts";
+export {
+  MAX_SEGMENT_PAGE,
+  MAX_TEXT_PAGE_CHARS,
+  pageTranscript,
+  type TranscriptPage,
+  type TranscriptReadRequest,
+} from "./domain/transcript/read.ts";
 export { type JsonOutputArtifact, toJsonOutputArtifact } from "./domain/transcript/render-json.ts";
 export { sourceReferenceOf } from "./domain/transcript/render-markdown.ts";
 export type { AuditLog, AuditReadout } from "./ports/audit-log.ts";

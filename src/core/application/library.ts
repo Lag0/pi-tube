@@ -1,7 +1,9 @@
+import { resolveMcpSettings } from "../domain/config.ts";
 import { createError } from "../domain/errors.ts";
 import { type LibraryFilter, matchesLibraryFilter, matchesName, resolveLibrarySettings } from "../domain/library.ts";
 import { err, ok, type Result } from "../domain/result.ts";
 import { SOURCE_KINDS } from "../domain/source.ts";
+import { pageTranscript, type TranscriptPage, type TranscriptReadRequest } from "../domain/transcript/read.ts";
 import type { ConfigStore } from "../ports/config-store.ts";
 import type { LibraryEntry, LibraryStore, PruneReport, StoredTranscript } from "../ports/library-store.ts";
 import { checkDayRange } from "./audit.ts";
@@ -136,6 +138,30 @@ export const createGetTranscript =
     }
     return ok(stored.data);
   };
+
+/** What `readTranscript` asks for: which transcript, and which page of it. */
+export interface ReadTranscriptInput extends TranscriptReadRequest {
+  readonly transcriptId: string;
+}
+
+/**
+ * Reads one page of a transcript (see `pageTranscript`); `full` stops at `mcp.max_full_chars`. An unknown id is
+ * `TRANSCRIPT_NOT_FOUND`.
+ */
+export const createReadTranscript = (
+  deps: LibraryDeps & { readonly configStore: ConfigStore },
+): UseCase<ReadTranscriptInput, TranscriptPage & { readonly transcriptId: string }> => {
+  const getTranscript = createGetTranscript(deps);
+  return async (input, options) => {
+    const config = await deps.configStore.read();
+    if (!config.success) return config;
+    const stored = await getTranscript(input, options);
+    if (!stored.success) return stored;
+    const page = pageTranscript(stored.data.artifact, input, resolveMcpSettings(config.data).maxFullChars);
+    if (!page.success) return page;
+    return ok({ transcriptId: stored.data.transcriptId, ...page.data });
+  };
+};
 
 /** What `library prune` asks for; without `dryRun: false` nothing is deleted. */
 export interface PruneInput {
