@@ -5,6 +5,7 @@ import {
   type LibraryEntry,
   type LibraryPage,
   MAX_TEXT_PAGE_CHARS,
+  type OutputArtifact,
   SOURCE_KINDS,
   type TranscriptPage,
 } from "../../../core/index.ts";
@@ -18,6 +19,15 @@ const DEFAULT_SEGMENT_LIMIT = 100;
 
 /** The URI of a transcript's Markdown resource. */
 export const transcriptUri = (transcriptId: string): string => `pi-tube://transcripts/${transcriptId}`;
+
+/** A saved transcript's chapters, numbered as `get_transcript`'s `chapter` takes them. */
+export const artifactChaptersJson = (chapters: NonNullable<OutputArtifact["source"]["chapters"]>) =>
+  chapters.map((chapter, index) => ({
+    index,
+    title: chapter.title,
+    start_ms: chapter.start_ms,
+    end_ms: chapter.end_ms,
+  }));
 
 const READ_REASON = "Check characters and estimated_tokens, then read with offset/limit pages or full: true.";
 
@@ -139,12 +149,7 @@ const transcriptPageJson = (page: TranscriptPage & { readonly transcriptId: stri
     // Everything here is what was said, and the page's chapter titles.
     untrusted: {
       ...(page.format === "text" ? { text: page.text ?? "" } : { segments: page.segments ?? [] }),
-      chapters: page.chapters.map((chapter, index) => ({
-        index,
-        title: chapter.title,
-        start_ms: chapter.start_ms,
-        end_ms: chapter.end_ms,
-      })),
+      chapters: artifactChaptersJson([...page.chapters]),
     },
     next_actions:
       page.nextOffset === undefined

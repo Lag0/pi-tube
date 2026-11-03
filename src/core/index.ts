@@ -148,7 +148,7 @@ export {
   type SourceKind,
   type SourceTier,
 } from "./domain/source.ts";
-export { tierOf } from "./domain/source-policy.ts";
+export { LIVE_NOT_ENDED_STATUSES, tierOf } from "./domain/source-policy.ts";
 export {
   COOKIES_FILE_ENV,
   DEFAULT_MAX_LOCAL_FILE_BYTES,

@@ -5,6 +5,7 @@ import type { McpLogger } from "./log.ts";
 import { registerTranscriptResource } from "./resources.ts";
 import { registerDoctorTool } from "./tools/doctor.ts";
 import { registerLibraryTools } from "./tools/library.ts";
+import { registerMediaTools } from "./tools/media.ts";
 import { registerListProvidersTool } from "./tools/providers.ts";
 import { registerGetUsageTool } from "./tools/usage.ts";
 
@@ -61,6 +62,7 @@ export const createMcpServerFactory =
     registerDoctorTool(server, deps);
     registerGetUsageTool(server, deps);
     registerLibraryTools(server, deps);
+    registerMediaTools(server, deps);
     registerTranscriptResource(server, deps);
     return server;
   };
