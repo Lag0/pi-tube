@@ -1,5 +1,5 @@
 import { pathToFileURL } from "node:url";
-import { createError, sourceReferenceOf, type TranscribeOutput } from "../../../core/index.ts";
+import { createError, estimateTokens, sourceReferenceOf, type TranscribeOutput } from "../../../core/index.ts";
 import { CliFailure, unwrapOrFail } from "../error-output.ts";
 import type { CliDeps } from "../io.ts";
 import { createProgressReporter } from "../progress.ts";
@@ -38,6 +38,12 @@ export const toTranscribeJson = (output: TranscribeOutput) => {
     detected_language: artifact.transcription.detected_language ?? null,
     summary: artifact.summary,
     characters: artifact.transcript.full_text.length,
+    audio_seconds: output.audioSeconds ?? null,
+    cost:
+      output.cost === undefined
+        ? null
+        : { estimate: output.cost.estimate, currency: output.cost.currency, price_table: output.cost.priceTable },
+    estimated_tokens: estimateTokens(artifact.transcript.full_text.length),
     segments: artifact.transcript.segments?.length ?? 0,
   };
 };

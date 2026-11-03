@@ -661,6 +661,55 @@ describe("audit", () => {
     expect(audit.records[1]?.sourceKey).toBe(audit.records[0]?.sourceKey);
   });
 
+  test("a fresh transcription reports the provider's audio duration and its estimated cost", async () => {
+    const { deps } = auditSetup();
+
+    const result = await run(createTranscribe(deps));
+
+    expect(result.success && result.data.audioSeconds).toBe(19);
+    expect(result.success && result.data.cost).toEqual({
+      estimate: 0.001362,
+      currency: "USD",
+      priceTable: "2026-10-31",
+    });
+  });
+
+  test("a cache hit costs 0 and reports the saved duration", async () => {
+    const youtube = createFakeMediaFetcher({
+      source: {
+        kind: "youtube",
+        originalInput: YOUTUBE,
+        normalizedUrl: YOUTUBE,
+        metadata: { platform: "Youtube", mediaId: "jNQXAC9IVRw", durationSeconds: 42 },
+      },
+    });
+    const { deps } = auditSetup();
+    const transcribe = createTranscribe({ ...deps, media: youtube.fetcher });
+    const direct = createTranscribe(deps);
+
+    await transcribe({ input: YOUTUBE, format: "markdown" });
+    const page = await transcribe({ input: YOUTUBE, format: "markdown" });
+    await run(direct);
+    const file = await run(direct);
+
+    expect(page.success && page.data.cacheHit).toBe(true);
+    expect(page.success && page.data.cost).toEqual({ estimate: 0, currency: "USD", priceTable: "2026-10-31" });
+    expect(page.success && page.data.audioSeconds).toBe(42);
+    // No saved duration: where the last segment ends.
+    expect(file.success && file.data.cacheHit).toBe(true);
+    expect(file.success && file.data.audioSeconds).toBe(0.5);
+    expect(file.success && file.data.cost?.estimate).toBe(0);
+  });
+
+  test("a model outside the price table reports no cost", async () => {
+    const { deps } = auditSetup({ ...paidDeepgram(), model: "nova-2" });
+
+    const result = await run(createTranscribe(deps));
+
+    expect(result.success && result.data.audioSeconds).toBe(19);
+    expect(result.success && "cost" in result.data).toBe(false);
+  });
+
   test("a provider failure records its code and the provider, without a cost", async () => {
     const { audit, deps } = auditSetup(paidDeepgram(createError("PROVIDER_RATE_LIMIT", "Too many requests.")));
 
