@@ -120,6 +120,44 @@ describe("pi-tube mcp on stdio", () => {
     expect(result.stderr).toContain("NOISY debug=unset");
   });
 
+  test("a thrown error is UNEXPECTED on stdout without its stack; the error and stack go to stderr", async () => {
+    // A preload makes serializing list_providers' result throw, a failure no use case returns as a Result.
+    writeFileSync(path.join(home, "bunfig.toml"), 'preload = ["./explode.ts"]\n');
+    writeFileSync(
+      path.join(home, "explode.ts"),
+      [
+        "const original = JSON.stringify;",
+        "JSON.stringify = function (value, ...rest) {",
+        '  if (value && typeof value === "object" && "config_path" in value) throw new TypeError("stringify exploded");',
+        "  return original.call(this, value, ...rest);",
+        "};",
+        "",
+      ].join("\n"),
+    );
+
+    const result = await spawnMcp(
+      [initialize, initialized, call(2, "list_providers")],
+      { PI_TUBE_LOG_LEVEL: "debug" },
+      {
+        cwd: home,
+      },
+    );
+    const messages = parseAll(result.stdoutLines);
+    const answer = messages.find((message) => message.id === 2) as
+      | { result?: { isError?: boolean; content?: Array<{ text: string }> } }
+      | undefined;
+
+    expect(result.exitCode).toBe(0);
+    expect(messages.every((message) => message.jsonrpc === "2.0")).toBe(true);
+    expect(answer?.result?.isError).toBe(true);
+    expect(JSON.parse(answer?.result?.content?.[0]?.text ?? "{}")).toMatchObject({
+      error: { code: "UNEXPECTED", message: "stringify exploded" },
+    });
+    expect(result.stdoutLines.join("\n")).not.toMatch(/\bat .*\.ts:\d+/);
+    expect(result.stderr).toContain("Tool failed unexpectedly");
+    expect(result.stderr).toMatch(/Stack stack=.*explode\.ts/);
+  });
+
   test.skipIf(process.platform === "win32")("SIGTERM after initialize exits 0 within 5 s", async () => {
     const result = await spawnMcp([initialize, initialized], {}, { signalAfterMs: 0 });
 
