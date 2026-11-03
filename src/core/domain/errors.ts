@@ -160,6 +160,9 @@ export const getErrorCategory = (code: ErrorCode): ErrorCategory => ERROR_CATALO
 export const isErrorCode = (value: unknown): value is ErrorCode =>
   typeof value === "string" && Object.hasOwn(ERROR_CATALOG, value);
 
+/** Every error code of the catalog. */
+export const ERROR_CODES: readonly ErrorCode[] = Object.keys(ERROR_CATALOG).filter(isErrorCode);
+
 /**
  * Normalizes anything thrown into a `PiTubeError`. An `Error` carrying a known `code` and a string
  * `hint` (such as the CLI adapter's `CliFailure`) keeps both; anything else becomes `UNEXPECTED`, without a stack.

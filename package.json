@@ -41,6 +41,7 @@
   "license": "Apache-2.0",
   "devDependencies": {
     "@biomejs/biome": "2.6.4",
+    "@modelcontextprotocol/client": "2.4.0",
     "@types/bun": "1.3.10",
     "typescript": "5.9.3",
     "vitest": "4.1.6"
@@ -48,7 +49,9 @@
   "dependencies": {
     "@deepgram/sdk": "5.17.0",
     "@elevenlabs/elevenlabs-js": "2.49.1",
+    "@modelcontextprotocol/server": "2.4.0",
     "commander": "14.0.3",
-    "groq-sdk": "0.37.0"
+    "groq-sdk": "0.37.0",
+    "zod": "4.6.7"
   }
 }

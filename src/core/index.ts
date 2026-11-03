@@ -101,6 +101,7 @@ export {
 } from "./domain/config.ts";
 export {
   createError,
+  ERROR_CODES,
   type ErrorCategory,
   type ErrorCode,
   getErrorCategory,
