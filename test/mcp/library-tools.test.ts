@@ -214,6 +214,9 @@ describe("get_transcript", () => {
       next_actions: [{ tool: "get_transcript", arguments: { transcript_id: id, offset: 20_000 } }],
     });
     expect(first?.untrusted.text).toHaveLength(20_000);
+    expect(first?.hint).toBe(
+      `This is not the whole transcript: 20000 of ${BIG_TEXT.length} characters. Continue with get_transcript offset=20000.`,
+    );
     expect(texts.join("")).toBe(BIG_TEXT);
   });
 

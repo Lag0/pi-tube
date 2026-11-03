@@ -44,6 +44,7 @@ describe("MCP server", () => {
 
     expect(SERVER_INSTRUCTIONS.length).toBeLessThanOrEqual(4096);
     expect(SERVER_INSTRUCTIONS).toContain("untrusted");
+    expect(SERVER_INSTRUCTIONS).toContain("next_offset is not null");
     expect(harness.client.getInstructions()).toBe(SERVER_INSTRUCTIONS);
     expect(harness.client.getServerVersion()).toMatchObject({ name: "pi-tube", version: "0.0.0-test" });
   });
