@@ -40,6 +40,30 @@ describe("MCP server", () => {
     },
   );
 
+  test("each tool's annotations have the plan's values, and get_transcript asks for 500000 characters inline", async () => {
+    harness = await connectMcp();
+    const local = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
+    const expected: Record<string, typeof local> = {
+      doctor: local,
+      get_transcript: local,
+      get_usage: local,
+      list_providers: local,
+      list_transcripts: local,
+      search_transcripts: local,
+      transcribe: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+      get_media_info: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+      download_media: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    };
+
+    const { tools } = await harness.client.listTools();
+
+    expect(Object.fromEntries(tools.map((tool) => [tool.name, tool.annotations]))).toEqual(expected);
+    expect(tools.find((tool) => tool.name === "get_transcript")?._meta).toEqual({
+      "anthropic/maxResultSizeChars": 500_000,
+    });
+    expect(tools.filter((tool) => tool._meta !== undefined).map((tool) => tool.name)).toEqual(["get_transcript"]);
+  });
+
   test("every tool has a strict output schema", () => {
     expect(Object.keys(OUTPUT_SCHEMAS).sort()).toEqual(TOOLS);
   });
