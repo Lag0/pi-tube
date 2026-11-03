@@ -33,7 +33,8 @@ export const createMcpLogger = (input: {
     if (!enabled.includes(lineLevel)) return;
     const time = now().toISOString();
     if (json) {
-      input.writeErr(`${JSON.stringify({ time, level: lineLevel, message, ...fields })}\n`);
+      // The line's own keys come last, so a field can never overwrite them.
+      input.writeErr(`${JSON.stringify({ ...fields, time, level: lineLevel, message })}\n`);
       return;
     }
     // JSON-quoted values and a single-line message: a value from a page or a file name cannot forge a log line.

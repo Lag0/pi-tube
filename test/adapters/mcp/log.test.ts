@@ -52,6 +52,19 @@ describe("createMcpLogger", () => {
     });
   });
 
+  test("a field cannot overwrite time, level or message in a JSON line", () => {
+    const { log, lines } = logger({ PI_TUBE_LOG_FORMAT: "json" });
+
+    log.warn("v2 import failed", { message: "EACCES", level: "debug", time: "x", code: "STORAGE_IO_FAILED" });
+
+    expect(JSON.parse(lines[0] ?? "")).toMatchObject({
+      time: NOW.toISOString(),
+      level: "warn",
+      message: "v2 import failed",
+      code: "STORAGE_IO_FAILED",
+    });
+  });
+
   test("an invalid PI_TUBE_LOG_LEVEL uses warn and says so once", () => {
     const { log, lines } = logger({ PI_TUBE_LOG_LEVEL: "loud" });
 

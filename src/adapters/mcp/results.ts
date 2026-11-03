@@ -81,7 +81,7 @@ export const runTool = async <T>(
                     params: { progressToken: token, progress, message: progressMessage(event) },
                   }),
             )
-            .catch((error: unknown) => deps.log.debug("Progress not sent", { message: toPiTubeError(error).message }));
+            .catch((error: unknown) => deps.log.debug("Progress not sent", { error: toPiTubeError(error).message }));
         };
   const signal = AbortSignal.any([cancelled, deps.shutdown]);
 
@@ -92,7 +92,7 @@ export const runTool = async <T>(
     response = result.success ? toolResult(format(result.data)) : toolError(result.error);
   } catch (caught) {
     const error = toPiTubeError(caught);
-    deps.log.error("Tool failed unexpectedly", { message: error.message });
+    deps.log.error("Tool failed unexpectedly", { error: error.message });
     if (caught instanceof Error && caught.stack) deps.log.debug("Stack", { stack: caught.stack });
     response = toolError(error);
   } finally {

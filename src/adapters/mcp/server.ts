@@ -60,7 +60,7 @@ export const createMcpDeps = (input: {
     try {
       const summary = await input.app.importV2Transcripts({});
       if (!summary.success) {
-        input.log.warn("v2 import failed", { code: summary.error.code, message: summary.error.message });
+        input.log.warn("v2 import failed", { code: summary.error.code, error: summary.error.message });
         return false;
       }
       if (summary.data.found > 0 && !summary.data.ranBefore) {
@@ -69,7 +69,7 @@ export const createMcpDeps = (input: {
       }
       return true;
     } catch (caught) {
-      input.log.warn("v2 import failed", { message: caught instanceof Error ? caught.message : String(caught) });
+      input.log.warn("v2 import failed", { error: caught instanceof Error ? caught.message : String(caught) });
       return false;
     }
   };

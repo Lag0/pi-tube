@@ -28,7 +28,7 @@ export const runMcpServer = async (deps: McpServeDeps): Promise<number> => {
   const shutdown = new AbortController();
   const mcp = createMcpDeps({ app: deps.app, log, version: deps.version, shutdown: shutdown.signal });
   const handle = serveStdio(createMcpServerFactory(mcp), {
-    onerror: (error) => log.error("MCP transport error", { message: error.message }),
+    onerror: (error) => log.error("MCP transport error", { error: error.message }),
     ...(deps.transport ? { transport: deps.transport } : {}),
   });
   log.info(`pi-tube ${deps.version} MCP server on stdio`);
