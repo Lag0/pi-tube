@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "vitest";
 import { SERVER_INSTRUCTIONS } from "../../../src/adapters/mcp/instructions.ts";
+import { OUTPUT_SCHEMAS } from "../../../src/adapters/mcp/server.ts";
 import { connectMcp, type McpHarness } from "../../helpers/mcp-harness.ts";
 
 const TOOLS = [
@@ -38,6 +39,10 @@ describe("MCP server", () => {
       }
     },
   );
+
+  test("every tool has a strict output schema", () => {
+    expect(Object.keys(OUTPUT_SCHEMAS).sort()).toEqual(TOOLS);
+  });
 
   test("the instructions fit Claude Code's 4096 characters and name the untrusted rule", async () => {
     harness = await connectMcp();

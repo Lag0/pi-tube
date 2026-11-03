@@ -9,7 +9,7 @@ import {
   SOURCE_KINDS,
   type TranscriptPage,
 } from "../../../core/index.ts";
-import { type NextAction, runTool } from "../results.ts";
+import { type NextAction, NextActionOutput, runTool } from "../results.ts";
 import type { McpDeps } from "../server.ts";
 import { LOCAL_READ_ONLY } from "./annotations.ts";
 
@@ -17,11 +17,74 @@ const DAY = /^\d{4}-\d{2}-\d{2}$/;
 const DEFAULT_TEXT_LIMIT = 20_000;
 const DEFAULT_SEGMENT_LIMIT = 100;
 
+/** Output schema of a chapter, numbered as `get_transcript`'s `chapter` takes it. */
+export const ChapterOutput = z.strictObject({
+  index: z.number(),
+  title: z.string(),
+  start_ms: z.number(),
+  end_ms: z.number(),
+});
+
+const EntryOutput = z.strictObject({
+  transcript_id: z.string(),
+  kind: z.enum(SOURCE_KINDS),
+  provider: z.string(),
+  language: z.string().nullable(),
+  generated_at: z.string(),
+  characters: z.number(),
+  estimated_tokens: z.number(),
+  // detailed only
+  source_key: z.string().optional(),
+  platform: z.string().nullable().optional(),
+  model: z.string().nullable().optional(),
+  requested_language: z.string().nullable().optional(),
+  detected_language: z.string().nullable().optional(),
+  source_name: z.string().nullable().optional(),
+  untrusted: z.strictObject({ title: z.string().nullable() }),
+});
+
+/** Output schema of `list_transcripts`. */
+export const ListTranscriptsOutput = z.strictObject({
+  total: z.number(),
+  offset: z.number(),
+  limit: z.number(),
+  next_offset: z.number().nullable(),
+  transcripts: z.array(EntryOutput),
+  next_actions: z.array(NextActionOutput),
+});
+
+/** Output schema of `search_transcripts`. */
+export const SearchTranscriptsOutput = z.strictObject({ query: z.string(), ...ListTranscriptsOutput.shape });
+
+/** Output schema of `get_transcript`. */
+export const GetTranscriptOutput = z.strictObject({
+  transcript_id: z.string(),
+  format: z.enum(["text", "segments"]),
+  offset: z.number(),
+  total: z.number(),
+  next_offset: z.number().nullable(),
+  truncated: z.boolean(),
+  resource_uri: z.string(),
+  untrusted: z.strictObject({
+    text: z.string().optional(),
+    segments: z
+      .array(
+        z.strictObject({ start_ms: z.number(), end_ms: z.number(), text: z.string(), chapter: z.number().optional() }),
+      )
+      .optional(),
+    chapters: z.array(ChapterOutput),
+  }),
+  next_actions: z.array(NextActionOutput),
+  hint: z.string().optional(),
+});
+
 /** The URI of a transcript's Markdown resource. */
 export const transcriptUri = (transcriptId: string): string => `pi-tube://transcripts/${transcriptId}`;
 
 /** A saved transcript's chapters, numbered as `get_transcript`'s `chapter` takes them. */
-export const artifactChaptersJson = (chapters: NonNullable<OutputArtifact["source"]["chapters"]>) =>
+export const artifactChaptersJson = (
+  chapters: NonNullable<OutputArtifact["source"]["chapters"]>,
+): z.infer<typeof ChapterOutput>[] =>
   chapters.map((chapter, index) => ({
     index,
     title: chapter.title,
@@ -43,7 +106,7 @@ const listInput = {
 const ListInput = z.object(listInput);
 type ListArgs = z.infer<typeof ListInput>;
 
-const entryJson = (entry: LibraryEntry, detailed: boolean) => ({
+const entryJson = (entry: LibraryEntry, detailed: boolean): z.infer<typeof EntryOutput> => ({
   transcript_id: entry.transcriptId,
   kind: entry.kind,
   provider: entry.provider,
@@ -75,7 +138,11 @@ const listArguments = (args: ListArgs): Record<string, unknown> => ({
   ...(args.response_format === "detailed" ? { response_format: "detailed" } : {}),
 });
 
-const pageJson = (page: LibraryPage, args: ListArgs, next: { readonly tool: string; readonly extra?: object }) => {
+const pageJson = (
+  page: LibraryPage,
+  args: ListArgs,
+  next: { readonly tool: string; readonly extra?: object },
+): z.infer<typeof ListTranscriptsOutput> => {
   const end = page.offset + page.entries.length;
   const nextOffset = end < page.total ? end : null;
   const first = page.entries[0];
@@ -135,7 +202,10 @@ const readArguments = (args: GetArgs): Record<string, unknown> => ({
   ...(args.full ? { full: true } : {}),
 });
 
-const transcriptPageJson = (page: TranscriptPage & { readonly transcriptId: string }, args: GetArgs) => {
+const transcriptPageJson = (
+  page: TranscriptPage & { readonly transcriptId: string },
+  args: GetArgs,
+): z.infer<typeof GetTranscriptOutput> => {
   const returned = page.format === "text" ? (page.text ?? "").length : (page.segments ?? []).length;
   const unit = page.format === "text" ? "characters" : "segments";
   return {
@@ -148,7 +218,7 @@ const transcriptPageJson = (page: TranscriptPage & { readonly transcriptId: stri
     resource_uri: transcriptUri(page.transcriptId),
     // Everything here is what was said, and the page's chapter titles.
     untrusted: {
-      ...(page.format === "text" ? { text: page.text ?? "" } : { segments: page.segments ?? [] }),
+      ...(page.format === "text" ? { text: page.text ?? "" } : { segments: [...(page.segments ?? [])] }),
       chapters: artifactChaptersJson([...page.chapters]),
     },
     next_actions:
@@ -210,7 +280,7 @@ export const registerLibraryTools = (server: McpServer, deps: McpDeps): void => 
           await deps.ensureImported();
           return deps.app.searchTranscripts({ query: args.query, ...filterOf(args) }, options);
         },
-        (page) => ({
+        (page): z.infer<typeof SearchTranscriptsOutput> => ({
           query: args.query,
           ...pageJson(page, args, { tool: "search_transcripts", extra: { query: args.query } }),
         }),

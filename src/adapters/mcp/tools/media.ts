@@ -4,12 +4,76 @@ import {
   estimateTokens,
   LIVE_NOT_ENDED_STATUSES,
   type MediaInfo,
+  SOURCE_KINDS,
   sourceReferenceOf,
-  type TranscribeOutput,
+  type TranscribeOutput as TranscribeUseCaseOutput,
 } from "../../../core/index.ts";
-import { type NextAction, runTool } from "../results.ts";
+import { type NextAction, NextActionOutput, runTool } from "../results.ts";
 import type { McpDeps } from "../server.ts";
-import { artifactChaptersJson, transcriptUri } from "./library.ts";
+import { artifactChaptersJson, ChapterOutput, transcriptUri } from "./library.ts";
+
+/** Output schema of `transcribe`. */
+export const TranscribeOutput = z.strictObject({
+  transcript_id: z.string(),
+  cache_hit: z.boolean(),
+  provider: z.string(),
+  model: z.string().nullable(),
+  requested_language: z.string().nullable(),
+  detected_language: z.string().nullable(),
+  source: z.strictObject({
+    kind: z.enum(SOURCE_KINDS),
+    tier: z.enum(["tested", "best_effort"]),
+    platform: z.string().nullable(),
+    reference: z.string(),
+    duration_seconds: z.number().nullable(),
+  }),
+  audio_seconds: z.number().nullable(),
+  cost: z.strictObject({ estimate: z.number(), currency: z.literal("USD"), price_table: z.string() }).nullable(),
+  characters: z.number(),
+  estimated_tokens: z.number(),
+  segments: z.number(),
+  resource_uri: z.string(),
+  untrusted: z.strictObject({
+    title: z.string().nullable(),
+    summary: z.string(),
+    chapters: z.array(ChapterOutput).optional(),
+  }),
+  next_actions: z.array(NextActionOutput),
+});
+
+/** Output schema of `get_media_info`. */
+export const GetMediaInfoOutput = z.strictObject({
+  source_kind: z.enum(SOURCE_KINDS),
+  tier: z.enum(["tested", "best_effort"]),
+  url: z.string().nullable(),
+  path: z.string().nullable(),
+  size_bytes: z.number().nullable(),
+  extension: z.string().nullable(),
+  platform: z.string().nullable(),
+  media_id: z.string().nullable(),
+  canonical_url: z.string().nullable(),
+  published_at: z.string().nullable(),
+  duration_seconds: z.number().nullable(),
+  live_status: z.string().nullable(),
+  chapter_count: z.number(),
+  untrusted: z.strictObject({
+    title: z.string().nullable(),
+    description: z.string().nullable(),
+    description_truncated: z.boolean(),
+    chapters: z.array(ChapterOutput).optional(),
+    description_links: z.array(z.string()).optional(),
+  }),
+  next_actions: z.array(NextActionOutput),
+  hint: z.string().optional(),
+});
+
+/** Output schema of `download_media`. */
+export const DownloadMediaOutput = z.strictObject({
+  output_path: z.string(),
+  output_uri: z.string(),
+  source_kind: z.enum(["youtube", "instagram", "site"]),
+  media: z.enum(["audio", "video"]),
+});
 
 const CONCISE_DESCRIPTION_CHARS = 500;
 const LIVE_HINT = "This live has not ended; transcribe it after it ends.";
@@ -37,7 +101,7 @@ const DOWNLOAD_ANNOTATIONS: ToolAnnotations = {
   openWorldHint: true,
 };
 
-const transcribeJson = (output: TranscribeOutput, detailed: boolean) => {
+const transcribeJson = (output: TranscribeUseCaseOutput, detailed: boolean): z.infer<typeof TranscribeOutput> => {
   const { artifact } = output;
   const characters = artifact.transcript.full_text.length;
   const estimatedTokens = estimateTokens(characters);
@@ -85,7 +149,7 @@ const cut = (text: string, max: number): string => {
   return text.slice(0, end);
 };
 
-const mediaInfoJson = (info: MediaInfo, input: string, detailed: boolean) => {
+const mediaInfoJson = (info: MediaInfo, input: string, detailed: boolean): z.infer<typeof GetMediaInfoOutput> => {
   const metadata = info.metadata;
   const description = metadata?.description;
   const truncated = !detailed && description !== undefined && description.length > CONCISE_DESCRIPTION_CHARS;
@@ -197,7 +261,7 @@ export const registerMediaTools = (server: McpServer, deps: McpDeps): void => {
         ctx,
         deps,
         (options) => deps.app.downloadMedia({ input: args.input, media: args.media }, options),
-        (output) => ({
+        (output): z.infer<typeof DownloadMediaOutput> => ({
           output_path: output.path,
           output_uri: output.uri,
           source_kind: output.sourceKind,

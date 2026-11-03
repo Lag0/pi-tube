@@ -1,8 +1,22 @@
 import type { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
-import { type NextAction, runTool } from "../results.ts";
+import { type NextAction, NextActionOutput, runTool } from "../results.ts";
 import type { McpDeps } from "../server.ts";
 import { LOCAL_READ_ONLY } from "./annotations.ts";
+
+/** Output schema of `doctor`. */
+export const DoctorOutput = z.strictObject({
+  ok: z.boolean(),
+  checks: z.array(
+    z.strictObject({
+      id: z.string(),
+      status: z.enum(["ok", "warn", "error"]),
+      summary: z.string(),
+      fix: z.string().nullable(),
+    }),
+  ),
+  next_actions: z.array(NextActionOutput),
+});
 
 const TRANSCRIBE_NEXT: NextAction = {
   tool: "transcribe",
@@ -26,7 +40,7 @@ export const registerDoctorTool = (server: McpServer, deps: McpDeps): void => {
         ctx,
         deps,
         (options) => deps.app.runDoctor({}, options),
-        (report) => ({
+        (report): z.infer<typeof DoctorOutput> => ({
           ok: report.ok,
           checks: report.checks.map((check) => ({
             id: check.id,

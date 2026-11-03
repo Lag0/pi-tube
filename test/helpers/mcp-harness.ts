@@ -4,7 +4,8 @@ import path from "node:path";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import { createMcpLogger } from "../../src/adapters/mcp/log.ts";
-import { createMcpDeps, createMcpServerFactory } from "../../src/adapters/mcp/server.ts";
+import { ToolErrorOutput } from "../../src/adapters/mcp/results.ts";
+import { createMcpDeps, createMcpServerFactory, OUTPUT_SCHEMAS } from "../../src/adapters/mcp/server.ts";
 import { type App, type AppOverrides, createApp } from "../../src/bootstrap.ts";
 
 const PUBLIC_LOOKUP = async () => [{ address: "93.184.216.34", family: 4 }];
@@ -31,7 +32,7 @@ export interface McpHarness {
   readonly app: App;
   readonly home: string;
   readonly logs: readonly string[];
-  /** Calls a tool and parses its one text block as JSON. */
+  /** Calls a tool, parses its one text block as JSON and checks it against the tool's strict output schema. */
   readonly call: (
     name: string,
     args?: Record<string, unknown>,
@@ -89,7 +90,13 @@ export const connectMcp = async (options: McpHarnessOptions = {}): Promise<McpHa
           ...(callOptions.onprogress ? { onprogress: callOptions.onprogress } : {}),
         },
       );
-      return { isError: result.isError === true, json: JSON.parse(textOf(result.content)) };
+      const isError = result.isError === true;
+      const json: unknown = JSON.parse(textOf(result.content));
+      const schema = isError ? ToolErrorOutput : OUTPUT_SCHEMAS[name];
+      if (!schema) throw new Error(`No output schema for tool ${name}`);
+      // Throws on a missing field, a wrong type or any key the schema does not name (external content included).
+      schema.parse(json);
+      return { isError, json };
     },
     shutdown: () => shutdown.abort(),
     close: async () => {

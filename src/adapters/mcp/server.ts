@@ -1,13 +1,35 @@
 import { McpServer } from "@modelcontextprotocol/server";
+import type { z } from "zod";
 import type { App } from "../../bootstrap.ts";
 import { SERVER_INSTRUCTIONS } from "./instructions.ts";
 import type { McpLogger } from "./log.ts";
 import { registerTranscriptResource } from "./resources.ts";
-import { registerDoctorTool } from "./tools/doctor.ts";
-import { registerLibraryTools } from "./tools/library.ts";
-import { registerMediaTools } from "./tools/media.ts";
-import { registerListProvidersTool } from "./tools/providers.ts";
-import { registerGetUsageTool } from "./tools/usage.ts";
+import { DoctorOutput, registerDoctorTool } from "./tools/doctor.ts";
+import {
+  GetTranscriptOutput,
+  ListTranscriptsOutput,
+  registerLibraryTools,
+  SearchTranscriptsOutput,
+} from "./tools/library.ts";
+import { DownloadMediaOutput, GetMediaInfoOutput, registerMediaTools, TranscribeOutput } from "./tools/media.ts";
+import { ListProvidersOutput, registerListProvidersTool } from "./tools/providers.ts";
+import { GetUsageOutput, registerGetUsageTool } from "./tools/usage.ts";
+
+/**
+ * Each tool's strict output schema (not given to the SDK: results are one JSON text block). The tests parse every
+ * result with it, so a missing field, a wrong type or an unnamed key, external content included, fails.
+ */
+export const OUTPUT_SCHEMAS: Readonly<Record<string, z.ZodType>> = {
+  transcribe: TranscribeOutput,
+  get_transcript: GetTranscriptOutput,
+  list_transcripts: ListTranscriptsOutput,
+  search_transcripts: SearchTranscriptsOutput,
+  get_media_info: GetMediaInfoOutput,
+  download_media: DownloadMediaOutput,
+  list_providers: ListProvidersOutput,
+  doctor: DoctorOutput,
+  get_usage: GetUsageOutput,
+};
 
 /** What every tool handler gets. */
 export interface McpDeps {

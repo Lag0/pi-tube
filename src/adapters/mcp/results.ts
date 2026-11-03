@@ -1,5 +1,7 @@
 import type { CallToolResult, ServerContext } from "@modelcontextprotocol/server";
+import { z } from "zod";
 import {
+  ERROR_CODES,
   type OperationOptions,
   type PiTubeError,
   type ProgressEvent,
@@ -14,6 +16,18 @@ export interface NextAction {
   readonly arguments: Readonly<Record<string, unknown>>;
   readonly reason: string;
 }
+
+/** Output schema of a `NextAction`; the tests check every result against its tool's strict schema. */
+export const NextActionOutput = z.strictObject({
+  tool: z.string(),
+  arguments: z.record(z.string(), z.unknown()),
+  reason: z.string(),
+});
+
+/** Output schema of every tool error. */
+export const ToolErrorOutput = z.strictObject({
+  error: z.strictObject({ code: z.enum(ERROR_CODES), message: z.string(), hint: z.string() }),
+});
 
 /** One text block of compact JSON: every client reads it the same way (no `structuredContent`, no `resource_link`). */
 export const toolResult = (value: object): CallToolResult => ({

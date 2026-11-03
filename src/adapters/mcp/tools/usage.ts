@@ -7,6 +7,48 @@ import { LOCAL_READ_ONLY } from "./annotations.ts";
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 
+const GroupOutput = z.strictObject({
+  provider: z.string().optional(),
+  operations: z.number(),
+  errors: z.number(),
+  error_rate: z.number(),
+  cache_hits: z.number(),
+  cost_estimate: z.number(),
+  audio_seconds: z.number(),
+  average_duration_ms: z.number(),
+});
+
+/** Output schema of `get_usage`. */
+export const GetUsageOutput = z.strictObject({
+  since: z.string().nullable(),
+  until: z.string().nullable(),
+  currency: z.literal("USD"),
+  price_table: z.string(),
+  stats: z.strictObject({ total: GroupOutput, by_provider: z.array(GroupOutput) }),
+  total: z.number(),
+  offset: z.number(),
+  limit: z.number(),
+  next_offset: z.number().nullable(),
+  skipped_lines: z.number(),
+  records: z.array(
+    z.strictObject({
+      started_at: z.string(),
+      operation: z.enum(AUDIT_OPERATIONS),
+      adapter: z.enum(["cli", "mcp"]),
+      result: z.enum(["ok", "error"]),
+      error_code: z.string().nullable(),
+      provider: z.string().nullable(),
+      model: z.string().nullable(),
+      input: z.string(),
+      source_key: z.string().nullable(),
+      audio_seconds: z.number().nullable(),
+      cost_estimate: z.number().nullable(),
+      cache_hit: z.boolean().nullable(),
+      duration_ms: z.number(),
+    }),
+  ),
+});
+
 const groupJson = (group: AuditGroup) => ({
   ...(group.provider === undefined ? {} : { provider: group.provider }),
   operations: group.operations,
@@ -77,7 +119,7 @@ export const registerGetUsageTool = (server: McpServer, deps: McpDeps): void => 
           );
           return page.success ? ok({ stats: stats.data, page: page.data }) : err(page.error);
         },
-        ({ stats, page }) => {
+        ({ stats, page }): z.infer<typeof GetUsageOutput> => {
           const next = page.offset + page.records.length;
           return {
             since: stats.since ?? null,
