@@ -2,7 +2,7 @@ import os from "node:os";
 import { exitCodeFor, formatErrorForCli } from "./adapters/cli/error-output.ts";
 import { createProcessIo } from "./adapters/cli/process-io.ts";
 import { runCli } from "./adapters/cli/run-cli.ts";
-import { createApp } from "./bootstrap.ts";
+import { createApp, PI_TUBE_VERSION } from "./bootstrap.ts";
 import { toPiTubeError } from "./core/index.ts";
 import { runInteractiveCommand } from "./infrastructure/interactive-command.ts";
 
@@ -10,9 +10,10 @@ import { runInteractiveCommand } from "./infrastructure/interactive-command.ts";
 const CANCEL_SIGNALS: readonly NodeJS.Signals[] = ["SIGINT", "SIGTERM", "SIGHUP"];
 
 /**
- * CLI entry point: binds the real process to `runCli` and returns the exit code. During `transcribe`,
- * `download` and `info`, the first Ctrl-C, SIGHUP or SIGTERM cancels the operation (exit 130, temp files removed)
- * and a second one kills the process; every other command keeps the default signal behavior.
+ * Entry point: binds the real process to `runCli` and returns the exit code. During `transcribe`, `download` and
+ * `info`, the first Ctrl-C, SIGHUP or SIGTERM cancels the operation (exit 130, temp files removed) and a second one
+ * kills the process; every other command keeps the default signal behavior. `pi-tube mcp`, with nothing after it,
+ * serves MCP on stdio instead, until stdin closes or one of those signals arrives (exit 0).
  */
 export const main = async (argv: readonly string[] = process.argv.slice(2)): Promise<number> => {
   const controller = new AbortController();
@@ -23,6 +24,18 @@ export const main = async (argv: readonly string[] = process.argv.slice(2)): Pro
   };
 
   try {
+    if (argv.length === 1 && argv[0] === "mcp") {
+      // Loaded only here, so the CLI never pays for the MCP SDK.
+      const { runMcpServer } = await import("./adapters/mcp/serve.ts");
+      return await runMcpServer({
+        app: createApp({ env: process.env, cwd: process.cwd(), homedir: os.homedir, adapter: "mcp" }),
+        env: process.env,
+        version: PI_TUBE_VERSION,
+        writeErr: (line) => process.stderr.write(line),
+        signal: listenForCancel(),
+        stdin: process.stdin,
+      });
+    }
     return await runCli(argv, {
       app: createApp({ env: process.env, cwd: process.cwd(), homedir: os.homedir, adapter: "cli" }),
       io: createProcessIo(),

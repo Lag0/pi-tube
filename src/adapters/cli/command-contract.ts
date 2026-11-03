@@ -17,6 +17,7 @@ export type HelpTopic =
   | "download"
   | "providers"
   | "doctor"
+  | "mcp"
   | "auth"
   | "defaults"
   | "config"
@@ -31,6 +32,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
   "download",
   "providers",
   "doctor",
+  "mcp",
   "auth",
   "defaults",
   "config",
@@ -48,6 +50,7 @@ const ROOT_HELP_DOCUMENT: HelpDocument = {
     `${COMMAND_IDENTITY} download <url> [--audio] [--output <dir>]`,
     `${COMMAND_IDENTITY} providers [--json]`,
     `${COMMAND_IDENTITY} doctor [--json]`,
+    `${COMMAND_IDENTITY} mcp`,
     `${COMMAND_IDENTITY} auth <login|status|logout> [provider]`,
     `${COMMAND_IDENTITY} defaults <provider|language|show> [value]`,
     `${COMMAND_IDENTITY} config <list|get|set> [key] [value] [--json]`,
@@ -106,6 +109,10 @@ const ROOT_HELP_DOCUMENT: HelpDocument = {
         {
           term: `${COMMAND_IDENTITY} doctor [--json]`,
           description: "Check the config, provider keys, yt-dlp, ffmpeg, cookies and the library.",
+        },
+        {
+          term: `${COMMAND_IDENTITY} mcp`,
+          description: "Serve the pi-tube tools over MCP on stdio for agent apps (the app starts it).",
         },
         { term: `${COMMAND_IDENTITY} setup yt-dlp`, description: "Show or run yt-dlp installation guidance." },
         { term: `${COMMAND_IDENTITY} setup skills`, description: "Install the pi-tube agent skill bundle." },
@@ -318,6 +325,17 @@ const DOCTOR_HELP_DOCUMENT: HelpDocument = {
   ],
 };
 
+const MCP_HELP_DOCUMENT: HelpDocument = {
+  title: `${COMMAND_IDENTITY} mcp`,
+  summary: "Serve the pi-tube tools over MCP (Model Context Protocol) on stdio.",
+  usage: [`${COMMAND_IDENTITY} mcp`],
+  options: [],
+  examples: [`claude mcp add pi-tube -- ${COMMAND_IDENTITY} mcp`],
+  notes: [
+    "Starts the pi-tube MCP server on stdio for agent apps (Claude Code, Cursor, Codex, Claude Desktop). The app starts it; stdout carries only MCP messages. Logs go to stderr: PI_TUBE_LOG_LEVEL (error, warn, info, debug; default warn) and PI_TUBE_LOG_FORMAT (text or json).",
+  ],
+};
+
 const DEFAULTS_HELP_DOCUMENT: HelpDocument = {
   title: `${COMMAND_IDENTITY} defaults`,
   summary: "Manage default transcription preferences.",
@@ -392,6 +410,7 @@ export function getHelpDocument(topic: HelpTopic): HelpDocument {
   if (topic === "download") return DOWNLOAD_HELP_DOCUMENT;
   if (topic === "providers") return PROVIDERS_HELP_DOCUMENT;
   if (topic === "doctor") return DOCTOR_HELP_DOCUMENT;
+  if (topic === "mcp") return MCP_HELP_DOCUMENT;
   if (topic === "auth") return AUTH_HELP_DOCUMENT;
   if (topic === "config") return CONFIG_HELP_DOCUMENT;
   if (topic === "defaults") return DEFAULTS_HELP_DOCUMENT;

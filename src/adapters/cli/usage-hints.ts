@@ -11,6 +11,8 @@ export function hintForCommand(command: string | undefined): string {
       return "Use one of: `pi-tube info <input>`, `pi-tube info <input> --json`.";
     case "download":
       return "Use one of: `pi-tube download <url>`, `pi-tube download <url> --audio`, `pi-tube download <url> --output <dir>`.";
+    case "mcp":
+      return "Run `pi-tube mcp` alone; your agent app starts it.";
     case "doctor":
       return "Use one of: `pi-tube doctor`, `pi-tube doctor --json`.";
     case "auth":

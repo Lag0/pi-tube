@@ -21,6 +21,7 @@ describe("CLI help contract", () => {
     expect(clean).toContain("pi-tube download <url> [--audio] [--output <dir>]");
     expect(clean).toContain("pi-tube auth <login|status|logout> [provider]");
     expect(clean).toContain("pi-tube defaults <provider|language|show> [value]");
+    expect(clean).toContain("pi-tube mcp");
     expect(clean).toContain("Core");
     expect(clean).toContain("Account");
     expect(clean).toContain("Defaults");

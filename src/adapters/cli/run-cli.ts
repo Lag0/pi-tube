@@ -32,6 +32,7 @@ type CliAction =
   | { kind: "audit"; action?: string; args: string[]; options: AuditOptions }
   | { kind: "providers"; options: JsonCommandOptions }
   | { kind: "doctor"; args: string[]; options: JsonCommandOptions }
+  | { kind: "mcp"; args: string[]; options: JsonCommandOptions }
   | { kind: "auth"; action?: string; provider?: string; options: AuthOptions; rootOptions: RootOptions }
   | { kind: "defaults"; action?: string; value?: string; rootOptions: RootOptions }
   | { kind: "setup"; subcommand?: string; options: SetupCommandOptions; rootOptions: RootOptions }
@@ -263,6 +264,15 @@ function createProgram(setAction: (action: CliAction) => void): Command {
     });
 
   program
+    .command("mcp")
+    .description("Serve the pi-tube MCP tools on stdio for agent apps; the app starts it.")
+    .argument("[args...]", "none")
+    .option("--json", "Not accepted: the server speaks MCP on stdout.")
+    .action((args: string[], options: JsonCommandOptions) => {
+      setAction({ kind: "mcp", args, options });
+    });
+
+  program
     .command("providers")
     .description("Show which providers have an API key and where it comes from.")
     .option("--json", "Output deterministic JSON format.")
@@ -436,6 +446,14 @@ export const runCli = async (argv: readonly string[], deps: CliDeps): Promise<nu
         return await runProviders(deps, { json: Boolean(action.options.json) });
       case "doctor":
         return await runDoctor(deps, { args: action.args, json: Boolean(action.options.json) });
+      case "mcp":
+        if (action.args.length > 0 || action.options.json) {
+          throw new CliFailure(
+            createError("INPUT_INVALID", "`pi-tube mcp` takes no arguments.", { hint: hintForCommand("mcp") }),
+          );
+        }
+        // `main` serves `pi-tube mcp` before the CLI runs; the CLI adapter cannot reach the MCP one.
+        throw new Error("`pi-tube mcp` is served by main, never by runCli");
       case "auth":
         return await runAuth(deps, {
           action: action.action,

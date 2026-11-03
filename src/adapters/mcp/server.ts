@@ -18,6 +18,10 @@ export interface McpDeps {
   readonly shutdown: AbortSignal;
   /** Runs the v2 import once per process; later calls await the same run. Never rejects. */
   readonly ensureImported: () => Promise<void>;
+  /** Registers a tool call, so shutdown can wait for its cleanup (temp files, the audit record). */
+  readonly track: <T>(call: Promise<T>) => Promise<T>;
+  /** Resolves when every tracked call has settled. */
+  readonly settled: () => Promise<void>;
 }
 
 /** The handlers' dependencies for one process, with the one-time v2 import. */
@@ -28,6 +32,7 @@ export const createMcpDeps = (input: {
   readonly shutdown: AbortSignal;
 }): McpDeps => {
   let imported: Promise<void> | undefined;
+  const inFlight = new Set<Promise<unknown>>();
   const runImport = async (): Promise<void> => {
     try {
       const summary = await input.app.importV2Transcripts({});
@@ -46,6 +51,14 @@ export const createMcpDeps = (input: {
     ensureImported: () => {
       imported ??= runImport();
       return imported;
+    },
+    track: (call) => {
+      inFlight.add(call);
+      void call.finally(() => inFlight.delete(call)).catch(() => undefined);
+      return call;
+    },
+    settled: async () => {
+      await Promise.allSettled([...inFlight]);
     },
   };
 };

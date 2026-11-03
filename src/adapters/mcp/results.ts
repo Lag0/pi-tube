@@ -38,7 +38,11 @@ const progressMessage = (event: ProgressEvent): string =>
  */
 export const runTool = async <T>(
   ctx: ServerContext,
-  deps: { readonly log: McpLogger; readonly shutdown: AbortSignal },
+  deps: {
+    readonly log: McpLogger;
+    readonly shutdown: AbortSignal;
+    readonly track?: <R>(call: Promise<R>) => Promise<R>;
+  },
   run: (options: OperationOptions) => Promise<Result<T>>,
   format: (data: T) => object,
 ): Promise<CallToolResult> => {
@@ -64,7 +68,8 @@ export const runTool = async <T>(
 
   let response: CallToolResult;
   try {
-    const result = await run({ signal, ...(onProgress ? { onProgress } : {}) });
+    const running = run({ signal, ...(onProgress ? { onProgress } : {}) });
+    const result = await (deps.track ? deps.track(running) : running);
     response = result.success ? toolResult(format(result.data)) : toolError(result.error);
   } catch (caught) {
     const error = toPiTubeError(caught);
