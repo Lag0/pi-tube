@@ -176,7 +176,7 @@ export {
   type TranscriptReadRequest,
 } from "./domain/transcript/read.ts";
 export { type JsonOutputArtifact, toJsonOutputArtifact } from "./domain/transcript/render-json.ts";
-export { sourceReferenceOf } from "./domain/transcript/render-markdown.ts";
+export { renderMarkdown, sourceReferenceOf } from "./domain/transcript/render-markdown.ts";
 export type { AuditLog, AuditReadout } from "./ports/audit-log.ts";
 export type { ConfigStore } from "./ports/config-store.ts";
 export type { LegacyTranscriptFile, LegacyTranscriptScan, LegacyTranscripts } from "./ports/legacy-transcripts.ts";

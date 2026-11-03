@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "vitest";
 import { SERVER_INSTRUCTIONS } from "../../../src/adapters/mcp/instructions.ts";
 import { connectMcp, type McpHarness } from "../../helpers/mcp-harness.ts";
 
-const TOOLS = ["doctor", "get_usage", "list_providers"];
+const TOOLS = ["doctor", "get_transcript", "get_usage", "list_providers", "list_transcripts", "search_transcripts"];
 
 let harness: McpHarness | undefined;
 

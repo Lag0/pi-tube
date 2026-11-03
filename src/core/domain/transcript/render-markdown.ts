@@ -111,6 +111,7 @@ function buildSegmentLines(artifact: OutputArtifact): string[] {
   return lines;
 }
 
+/** The saved transcript's Markdown file: frontmatter, summary, chapters and the transcript, as `transcribe` writes it. */
 export function renderMarkdown(artifact: OutputArtifact): string {
   const includeTranscriptHeader = artifact.summary.key_points.some((point) => point.startsWith("Timestamp mode: on"));
   const segments = artifact.transcript.segments ?? [];

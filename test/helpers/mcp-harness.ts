@@ -17,6 +17,8 @@ export interface McpHarnessOptions {
   readonly era?: "modern" | "legacy";
   /** Written as the config file before the app starts. */
   readonly config?: Record<string, unknown>;
+  /** Applied to the app before the server factory, so a test can wrap a use case (e.g. count calls). */
+  readonly wrapApp?: (app: App) => App;
 }
 
 export interface McpCallOptions {
@@ -64,7 +66,8 @@ export const connectMcp = async (options: McpHarnessOptions = {}): Promise<McpHa
   const logs: string[] = [];
   const log = createMcpLogger({ env, writeErr: (line) => logs.push(line) });
   const shutdown = new AbortController();
-  const deps = createMcpDeps({ app, log, version: "0.0.0-test", shutdown: shutdown.signal });
+  const served = options.wrapApp ? options.wrapApp(app) : app;
+  const deps = createMcpDeps({ app: served, log, version: "0.0.0-test", shutdown: shutdown.signal });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const handle = serveStdio(createMcpServerFactory(deps), { transport: serverTransport });
   const client = new Client(
