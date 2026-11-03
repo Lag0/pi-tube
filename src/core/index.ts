@@ -95,6 +95,7 @@ export {
   DEFAULT_CONFIG,
   DEFAULT_MCP_MAX_FULL_CHARS,
   type EnvironmentVariables,
+  MAX_MCP_FULL_CHARS,
   type PiTubeConfig,
   type ProviderConfig,
   resolveMcpSettings,

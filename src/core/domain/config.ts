@@ -36,6 +36,8 @@ export interface PiTubeConfig {
 
 /** Characters `get_transcript` with `full: true` returns when `mcp.max_full_chars` is not set. */
 export const DEFAULT_MCP_MAX_FULL_CHARS = 100_000;
+/** Most `mcp.max_full_chars` may be: under the 500000 characters `get_transcript` asks Claude Code to keep inline. */
+export const MAX_MCP_FULL_CHARS = 450_000;
 
 /** Config used when the file does not exist yet. */
 export const DEFAULT_CONFIG: PiTubeConfig = { version: CONFIG_VERSION, defaults: {}, providers: {} };
@@ -67,7 +69,7 @@ const isRetentionMonths = (value: unknown): value is number =>
   typeof value === "number" && Number.isSafeInteger(value) && value >= 1;
 
 const isMaxFullChars = (value: unknown): value is number =>
-  typeof value === "number" && Number.isSafeInteger(value) && value >= 1;
+  typeof value === "number" && Number.isSafeInteger(value) && value >= 1 && value <= MAX_MCP_FULL_CHARS;
 
 const isMaxBytes = (value: unknown): value is number =>
   typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= MAX_LOCAL_FILE_BYTES_LIMIT;
@@ -132,7 +134,7 @@ const parseSourceSections = (
   const mcp = parseSection(raw.mcp, "mcp", fail, (section) => {
     const maxFullChars = section.max_full_chars;
     if (maxFullChars !== undefined && !isMaxFullChars(maxFullChars)) {
-      return fail("mcp.max_full_chars", "a whole number of 1 or more");
+      return fail("mcp.max_full_chars", `a whole number from 1 to ${MAX_MCP_FULL_CHARS}`);
     }
     return ok(maxFullChars === undefined ? {} : { max_full_chars: maxFullChars });
   });
@@ -307,7 +309,9 @@ export const applyConfigValue = (
   if (checkedKey.data === "mcp.max_full_chars") {
     const maxFullChars = /^\d+$/.test(trimmedValue) ? Number(trimmedValue) : Number.NaN;
     if (!isMaxFullChars(maxFullChars)) {
-      return err(createError("INPUT_INVALID", "`mcp.max_full_chars` must be a whole number of 1 or more."));
+      return err(
+        createError("INPUT_INVALID", `\`mcp.max_full_chars\` must be a whole number from 1 to ${MAX_MCP_FULL_CHARS}.`),
+      );
     }
     return ok({ ...config, mcp: { ...config.mcp, max_full_chars: maxFullChars } });
   }
