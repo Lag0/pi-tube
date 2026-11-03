@@ -4,6 +4,7 @@ import { APP_VERSION, COMMAND_IDENTITY, getHelpDocument, HELP_TOPICS, type HelpT
 import { runAuth, runProviders } from "./commands/account.ts";
 import { runAudit } from "./commands/audit.ts";
 import { runConfig, runDefaults } from "./commands/config.ts";
+import { runDoctor } from "./commands/doctor.ts";
 import { runDownload } from "./commands/download.ts";
 import { runInfo } from "./commands/info.ts";
 import { importV2Once, runLibrary } from "./commands/library.ts";
@@ -30,6 +31,7 @@ type CliAction =
   | { kind: "library"; action?: string; args: string[]; options: LibraryOptions }
   | { kind: "audit"; action?: string; args: string[]; options: AuditOptions }
   | { kind: "providers"; options: JsonCommandOptions }
+  | { kind: "doctor"; args: string[]; options: JsonCommandOptions }
   | { kind: "auth"; action?: string; provider?: string; options: AuthOptions; rootOptions: RootOptions }
   | { kind: "defaults"; action?: string; value?: string; rootOptions: RootOptions }
   | { kind: "setup"; subcommand?: string; options: SetupCommandOptions; rootOptions: RootOptions }
@@ -252,6 +254,15 @@ function createProgram(setAction: (action: CliAction) => void): Command {
     });
 
   program
+    .command("doctor")
+    .description("Check the config, provider keys, yt-dlp, ffmpeg, cookies and the library.")
+    .argument("[args...]", "none")
+    .option("--json", "Print the report as JSON on stdout.")
+    .action((args: string[], options: JsonCommandOptions) => {
+      setAction({ kind: "doctor", args, options });
+    });
+
+  program
     .command("providers")
     .description("Show which providers have an API key and where it comes from.")
     .option("--json", "Output deterministic JSON format.")
@@ -423,6 +434,8 @@ export const runCli = async (argv: readonly string[], deps: CliDeps): Promise<nu
         });
       case "providers":
         return await runProviders(deps, { json: Boolean(action.options.json) });
+      case "doctor":
+        return await runDoctor(deps, { args: action.args, json: Boolean(action.options.json) });
       case "auth":
         return await runAuth(deps, {
           action: action.action,

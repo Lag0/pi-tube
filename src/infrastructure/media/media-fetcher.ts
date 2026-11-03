@@ -15,10 +15,10 @@ import {
   tryParseHttpUrl,
 } from "../../core/domain/source-policy.ts";
 import type { SourceSettings } from "../../core/domain/source-settings.ts";
-import type { MediaFetcher } from "../../core/ports/media-fetcher.ts";
+import type { MediaFetcher, ToolVersion } from "../../core/ports/media-fetcher.ts";
 import { errnoOf } from "../errno.ts";
 import { type ProcessRequest, type ProcessResult, runProcess } from "../process/run-process.ts";
-import { prepareCookies } from "./cookies.ts";
+import { checkCookies, prepareCookies } from "./cookies.ts";
 import { checkHost, defaultLookup, type LookupHost } from "./host-guard.ts";
 import {
   AUDIO_FORMAT_SELECTOR,
@@ -92,6 +92,14 @@ const resolveLocalFile = async (
     );
   }
   return ok({ kind: "local_file", originalInput: input, absolutePath, extension, sizeBytes: stats.size });
+};
+
+const VERSION_TIMEOUT_MS = 10_000;
+
+/** The version a tool prints: yt-dlp's first line, ffmpeg's `ffmpeg version <v>`. */
+const VERSION_OF: Readonly<Record<"yt-dlp" | "ffmpeg", (stdout: string) => string | undefined>> = {
+  "yt-dlp": (stdout) => stdout.split(/\r?\n/)[0]?.trim() || undefined,
+  ffmpeg: (stdout) => /^ffmpeg version (\S+)/.exec(stdout)?.[1],
 };
 
 /** `MediaFetcher` on yt-dlp, run through the hardened process runner. */
@@ -249,6 +257,28 @@ export const createMediaFetcher = (deps: MediaFetcherDeps): MediaFetcher => {
       if (!filePath)
         return err(createError("DOWNLOAD_FAILED", "Failed to download media via yt-dlp (no file was reported)."));
       return ok({ path: filePath, uri: pathToFileURL(filePath).href });
+    },
+
+    inspect: async (settings, options) => {
+      const version = async (command: "yt-dlp" | "ffmpeg", args: readonly string[]): Promise<Result<ToolVersion>> => {
+        const result = await run({
+          command,
+          args,
+          env: deps.env,
+          timeoutMs: VERSION_TIMEOUT_MS,
+          signal: options?.signal,
+        });
+        if (result.outcome === "aborted") return err(createError("CANCELLED", "Operation cancelled."));
+        if (result.outcome === "not_found") return ok({ found: false });
+        const found =
+          result.outcome === "exited" && result.exitCode === 0 ? VERSION_OF[command](result.stdout) : undefined;
+        return ok(found === undefined ? { found: true } : { found: true, version: found });
+      };
+      const ytDlp = await version("yt-dlp", ["--version"]);
+      if (!ytDlp.success) return ytDlp;
+      const ffmpeg = await version("ffmpeg", ["-version"]);
+      if (!ffmpeg.success) return ffmpeg;
+      return ok({ ytDlp: ytDlp.data, ffmpeg: ffmpeg.data, cookies: await checkCookies(settings) });
     },
   };
 };

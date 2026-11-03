@@ -30,6 +30,13 @@ export {
   createSetConfigValue,
 } from "./application/config.ts";
 export {
+  createRunDoctor,
+  type DoctorCheck,
+  type DoctorDeps,
+  type DoctorReport,
+  type DoctorStatus,
+} from "./application/doctor.ts";
+export {
   createDownloadMedia,
   type DownloadMediaDeps,
   type DownloadMediaInput,
@@ -185,5 +192,7 @@ export type {
   DownloadRequest,
   FetchedAudio,
   MediaFetcher,
+  MediaToolsReport,
+  ToolVersion,
 } from "./ports/media-fetcher.ts";
 export type { SttCapabilities, SttProvider, SttRequest, SttTranscript } from "./ports/stt-provider.ts";

@@ -16,6 +16,7 @@ export type HelpTopic =
   | "audit"
   | "download"
   | "providers"
+  | "doctor"
   | "auth"
   | "defaults"
   | "config"
@@ -29,6 +30,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
   "audit",
   "download",
   "providers",
+  "doctor",
   "auth",
   "defaults",
   "config",
@@ -45,6 +47,7 @@ const ROOT_HELP_DOCUMENT: HelpDocument = {
     `${COMMAND_IDENTITY} audit [list|stats] [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--json]`,
     `${COMMAND_IDENTITY} download <url> [--audio] [--output <dir>]`,
     `${COMMAND_IDENTITY} providers [--json]`,
+    `${COMMAND_IDENTITY} doctor [--json]`,
     `${COMMAND_IDENTITY} auth <login|status|logout> [provider]`,
     `${COMMAND_IDENTITY} defaults <provider|language|show> [value]`,
     `${COMMAND_IDENTITY} config <list|get|set> [key] [value] [--json]`,
@@ -100,6 +103,10 @@ const ROOT_HELP_DOCUMENT: HelpDocument = {
     {
       title: "Setup",
       rows: [
+        {
+          term: `${COMMAND_IDENTITY} doctor [--json]`,
+          description: "Check the config, provider keys, yt-dlp, ffmpeg, cookies and the library.",
+        },
         { term: `${COMMAND_IDENTITY} setup yt-dlp`, description: "Show or run yt-dlp installation guidance." },
         { term: `${COMMAND_IDENTITY} setup skills`, description: "Install the pi-tube agent skill bundle." },
       ],
@@ -299,6 +306,18 @@ const PROVIDERS_HELP_DOCUMENT: HelpDocument = {
   ],
 };
 
+const DOCTOR_HELP_DOCUMENT: HelpDocument = {
+  title: `${COMMAND_IDENTITY} doctor`,
+  summary: "Check the config, provider keys, yt-dlp, ffmpeg, cookies and the library, without network calls.",
+  usage: [`${COMMAND_IDENTITY} doctor [--json]`],
+  options: [{ term: "--json", description: "Print the report as JSON on stdout." }],
+  examples: [`${COMMAND_IDENTITY} doctor`, `${COMMAND_IDENTITY} doctor --json`],
+  notes: [
+    "Each check is `ok`, `warn` or `error`, with a fix when it is not ok; the report is ok when no check is an error.",
+    "It exits 0 even when a check is an error. Keys and the cookies file path are never printed.",
+  ],
+};
+
 const DEFAULTS_HELP_DOCUMENT: HelpDocument = {
   title: `${COMMAND_IDENTITY} defaults`,
   summary: "Manage default transcription preferences.",
@@ -372,6 +391,7 @@ export function getHelpDocument(topic: HelpTopic): HelpDocument {
   if (topic === "audit") return AUDIT_HELP_DOCUMENT;
   if (topic === "download") return DOWNLOAD_HELP_DOCUMENT;
   if (topic === "providers") return PROVIDERS_HELP_DOCUMENT;
+  if (topic === "doctor") return DOCTOR_HELP_DOCUMENT;
   if (topic === "auth") return AUTH_HELP_DOCUMENT;
   if (topic === "config") return CONFIG_HELP_DOCUMENT;
   if (topic === "defaults") return DEFAULTS_HELP_DOCUMENT;

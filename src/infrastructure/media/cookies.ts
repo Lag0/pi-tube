@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import type { PiTubeError } from "../../core/domain/errors.ts";
 import { createError } from "../../core/domain/errors.ts";
 import { err, ok, type Result } from "../../core/domain/result.ts";
 import { COOKIES_FILE_ENV, type SourceSettings } from "../../core/domain/source-settings.ts";
@@ -29,17 +30,14 @@ const removeDir = (dir: string): Promise<void> =>
   rm(dir, { recursive: true, force: true, maxRetries: 3 }).catch(() => undefined);
 
 /**
- * Copies the user's cookies file into `<tmpDir>/cookies-<uuid>/cookies.txt` (dir 0700, file 0600) for one yt-dlp
- * run. yt-dlp always rewrites the file it gets and silently creates a missing one, so it only ever sees the copy,
- * and a missing or malformed original fails here. A UTF-8 BOM is dropped, since yt-dlp would refuse it.
+ * Reads and checks the user's cookies file: readable, Netscape format, every entry with 7 fields. Errors name where
+ * the file was set, never its path. A UTF-8 BOM is dropped, since yt-dlp would refuse it.
  */
-export const prepareCookies = async (settings: SourceSettings, tmpDir: string): Promise<Result<PreparedCookies>> => {
-  if (!settings.cookies) return ok(NO_COOKIES);
-  const name = cookiesOriginName(settings.cookies.origin);
-
+const readCookiesFile = async (cookies: NonNullable<SourceSettings["cookies"]>): Promise<Result<string>> => {
+  const name = cookiesOriginName(cookies.origin);
   let content: string;
   try {
-    content = (await readFile(settings.cookies.file, "utf8")).replace(/^﻿/, "");
+    content = (await readFile(cookies.file, "utf8")).replace(/^﻿/, "");
   } catch (error) {
     return err(
       createError("COOKIES_FILE_INVALID", `The cookies file set by \`${name}\` cannot be read (${errnoOf(error)}).`),
@@ -65,6 +63,26 @@ export const prepareCookies = async (settings: SourceSettings, tmpDir: string): 
       ),
     );
   }
+  return ok(content);
+};
+
+/** Whether the cookies file can be used, checked as `prepareCookies` checks it, without copying it. */
+export const checkCookies = async (settings: SourceSettings): Promise<"none" | "ok" | PiTubeError> => {
+  if (!settings.cookies) return "none";
+  const content = await readCookiesFile(settings.cookies);
+  return content.success ? "ok" : content.error;
+};
+
+/**
+ * Copies the user's cookies file into `<tmpDir>/cookies-<uuid>/cookies.txt` (dir 0700, file 0600) for one yt-dlp
+ * run. yt-dlp always rewrites the file it gets and silently creates a missing one, so it only ever sees the copy,
+ * and a missing or malformed original fails here.
+ */
+export const prepareCookies = async (settings: SourceSettings, tmpDir: string): Promise<Result<PreparedCookies>> => {
+  if (!settings.cookies) return ok(NO_COOKIES);
+  const checked = await readCookiesFile(settings.cookies);
+  if (!checked.success) return checked;
+  const content = checked.data;
 
   const dir = path.join(tmpDir, `cookies-${randomUUID()}`);
   const copy = path.join(dir, "cookies.txt");
