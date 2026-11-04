@@ -13,7 +13,7 @@ const SHOW_CURSOR = "\u001b[?25h";
 const boom = async (): Promise<never> => {
   throw new Error("boom");
 };
-const throwingMedia: MediaFetcher = { resolve: boom, fetchAudio: boom, download: boom };
+const throwingMedia: MediaFetcher = { resolve: boom, fetchAudio: boom, download: boom, inspect: boom };
 
 describe("progress spinner", () => {
   test.each([

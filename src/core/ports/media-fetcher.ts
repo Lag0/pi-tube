@@ -1,3 +1,4 @@
+import type { PiTubeError } from "../domain/errors.ts";
 import type { OperationOptions } from "../domain/operation.ts";
 import type { Result } from "../domain/result.ts";
 import type { AudioInput, ResolvedSource, SiteSource } from "../domain/source.ts";
@@ -19,6 +20,20 @@ export interface DownloadedMedia {
   readonly uri: string;
 }
 
+/** Whether a tool is on PATH, and the version it reports. */
+export interface ToolVersion {
+  readonly found: boolean;
+  readonly version?: string;
+}
+
+/** What `inspect` finds: the media tools and whether the cookies file can be used. */
+export interface MediaToolsReport {
+  readonly ytDlp: ToolVersion;
+  readonly ffmpeg: ToolVersion;
+  /** "none": no cookies file set; "ok": set and readable; otherwise the reason it cannot be used. */
+  readonly cookies: "none" | "ok" | PiTubeError;
+}
+
 /** Resolves inputs into sources, fetches their audio and downloads media, under the caller's source settings. */
 export interface MediaFetcher {
   resolve(input: string, settings: SourceSettings, options?: OperationOptions): Promise<Result<ResolvedSource>>;
@@ -33,4 +48,6 @@ export interface MediaFetcher {
     settings: SourceSettings,
     options?: OperationOptions,
   ): Promise<Result<DownloadedMedia>>;
+  /** yt-dlp and ffmpeg on PATH (with versions) and whether the cookies file can be used; never returns the path. */
+  inspect(settings: SourceSettings, options?: OperationOptions): Promise<Result<MediaToolsReport>>;
 }

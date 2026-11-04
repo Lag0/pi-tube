@@ -142,7 +142,8 @@ export const ensureFinishedMedia = (source: ResolvedSource): Result<void> => {
   if (!isSiteSource(source)) return ok(undefined);
   const status = source.metadata.liveStatus;
   if (status === undefined || !LIVE_NOT_ENDED_STATUSES.includes(status)) return ok(undefined);
-  const name = source.metadata.title ?? source.normalizedUrl;
+  // Named by its URL (the caller's input), never by the page title, which the page controls.
+  const name = source.normalizedUrl;
   const message =
     status === "post_live"
       ? `\`${name}\` is a live stream whose recording is still being processed (live_status=post_live).`

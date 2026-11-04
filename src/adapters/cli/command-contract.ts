@@ -16,6 +16,8 @@ export type HelpTopic =
   | "audit"
   | "download"
   | "providers"
+  | "doctor"
+  | "mcp"
   | "auth"
   | "defaults"
   | "config"
@@ -29,6 +31,8 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
   "audit",
   "download",
   "providers",
+  "doctor",
+  "mcp",
   "auth",
   "defaults",
   "config",
@@ -45,6 +49,8 @@ const ROOT_HELP_DOCUMENT: HelpDocument = {
     `${COMMAND_IDENTITY} audit [list|stats] [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--json]`,
     `${COMMAND_IDENTITY} download <url> [--audio] [--output <dir>]`,
     `${COMMAND_IDENTITY} providers [--json]`,
+    `${COMMAND_IDENTITY} doctor [--json]`,
+    `${COMMAND_IDENTITY} mcp`,
     `${COMMAND_IDENTITY} auth <login|status|logout> [provider]`,
     `${COMMAND_IDENTITY} defaults <provider|language|show> [value]`,
     `${COMMAND_IDENTITY} config <list|get|set> [key] [value] [--json]`,
@@ -100,6 +106,14 @@ const ROOT_HELP_DOCUMENT: HelpDocument = {
     {
       title: "Setup",
       rows: [
+        {
+          term: `${COMMAND_IDENTITY} doctor [--json]`,
+          description: "Check the config, provider keys, yt-dlp, ffmpeg, cookies and the library.",
+        },
+        {
+          term: `${COMMAND_IDENTITY} mcp`,
+          description: "Serve the pi-tube tools over MCP on stdio for agent apps (the app starts it).",
+        },
         { term: `${COMMAND_IDENTITY} setup yt-dlp`, description: "Show or run yt-dlp installation guidance." },
         { term: `${COMMAND_IDENTITY} setup skills`, description: "Install the pi-tube agent skill bundle." },
       ],
@@ -171,15 +185,22 @@ const LIBRARY_HELP_DOCUMENT: HelpDocument = {
   summary:
     "The local library: every transcript pi-tube saved, by source, provider, model and language, and the audio kept for reuse.",
   usage: [
-    `${COMMAND_IDENTITY} library list [--limit <n>] [--offset <n>] [--json]`,
+    `${COMMAND_IDENTITY} library list [--limit <n>] [--offset <n>] [filters] [--json]`,
     `${COMMAND_IDENTITY} library show <transcript_id> [--json]`,
-    `${COMMAND_IDENTITY} library search <query> [--limit <n>] [--offset <n>] [--json]`,
+    `${COMMAND_IDENTITY} library search <query> [--limit <n>] [--offset <n>] [filters] [--json]`,
     `${COMMAND_IDENTITY} library prune [--older-than <days>] [--include-transcripts] [--yes] [--json]`,
     `${COMMAND_IDENTITY} library import [--json]`,
   ],
   options: [
     { term: "--limit <n>", description: "How many entries to print (default 20, at most 500)." },
     { term: "--offset <n>", description: "How many entries to skip (default 0)." },
+    { term: "--provider <id>", description: "list, search: only transcripts made with this provider." },
+    {
+      term: "--source <kind>",
+      description: "list, search: only this source kind (youtube, instagram, site, direct_url, local_file).",
+    },
+    { term: "--since <YYYY-MM-DD>", description: "list, search: only transcripts made on or after this UTC day." },
+    { term: "--until <YYYY-MM-DD>", description: "list, search: only transcripts made on or before this UTC day." },
     { term: "--older-than <days>", description: "prune: only audio, or sources, older than this many days." },
     {
       term: "--include-transcripts",
@@ -192,6 +213,7 @@ const LIBRARY_HELP_DOCUMENT: HelpDocument = {
     `${COMMAND_IDENTITY} library list`,
     `${COMMAND_IDENTITY} library prune --older-than 30 --yes`,
     `${COMMAND_IDENTITY} library search "aula penal"`,
+    `${COMMAND_IDENTITY} library list --provider groq --since 2026-10-01 --json`,
     `${COMMAND_IDENTITY} library show 0123456789abcdef0123 --json`,
   ],
   notes: [
@@ -291,6 +313,29 @@ const PROVIDERS_HELP_DOCUMENT: HelpDocument = {
   ],
 };
 
+const DOCTOR_HELP_DOCUMENT: HelpDocument = {
+  title: `${COMMAND_IDENTITY} doctor`,
+  summary: "Check the config, provider keys, yt-dlp, ffmpeg, cookies and the library, without network calls.",
+  usage: [`${COMMAND_IDENTITY} doctor [--json]`],
+  options: [{ term: "--json", description: "Print the report as JSON on stdout." }],
+  examples: [`${COMMAND_IDENTITY} doctor`, `${COMMAND_IDENTITY} doctor --json`],
+  notes: [
+    "Each check is `ok`, `warn` or `error`, with a fix when it is not ok; the report is ok when no check is an error.",
+    "It exits 0 even when a check is an error. Keys and the cookies file path are never printed.",
+  ],
+};
+
+const MCP_HELP_DOCUMENT: HelpDocument = {
+  title: `${COMMAND_IDENTITY} mcp`,
+  summary: "Serve the pi-tube tools over MCP (Model Context Protocol) on stdio.",
+  usage: [`${COMMAND_IDENTITY} mcp`],
+  options: [],
+  examples: [`claude mcp add pi-tube -- ${COMMAND_IDENTITY} mcp`],
+  notes: [
+    "Starts the pi-tube MCP server on stdio for agent apps (Claude Code, Cursor, Codex, Claude Desktop). The app starts it; stdout carries only MCP messages. Logs go to stderr: PI_TUBE_LOG_LEVEL (error, warn, info, debug; default warn) and PI_TUBE_LOG_FORMAT (text or json).",
+  ],
+};
+
 const DEFAULTS_HELP_DOCUMENT: HelpDocument = {
   title: `${COMMAND_IDENTITY} defaults`,
   summary: "Manage default transcription preferences.",
@@ -324,6 +369,7 @@ const CONFIG_HELP_DOCUMENT: HelpDocument = {
   notes: [
     "Keys: `defaults.provider`, `defaults.language` and `providers.<id>.api_key_env`.",
     "`audit.retention_months`: months of audit log kept, 12 by default; older months are deleted.",
+    "`mcp.max_full_chars`: most characters the MCP tool `get_transcript` returns with `full: true`, 100000 by default, at most 450000.",
     "API keys are not config values: store one with `pi-tube auth login <provider>`.",
   ],
 };
@@ -363,6 +409,8 @@ export function getHelpDocument(topic: HelpTopic): HelpDocument {
   if (topic === "audit") return AUDIT_HELP_DOCUMENT;
   if (topic === "download") return DOWNLOAD_HELP_DOCUMENT;
   if (topic === "providers") return PROVIDERS_HELP_DOCUMENT;
+  if (topic === "doctor") return DOCTOR_HELP_DOCUMENT;
+  if (topic === "mcp") return MCP_HELP_DOCUMENT;
   if (topic === "auth") return AUTH_HELP_DOCUMENT;
   if (topic === "config") return CONFIG_HELP_DOCUMENT;
   if (topic === "defaults") return DEFAULTS_HELP_DOCUMENT;

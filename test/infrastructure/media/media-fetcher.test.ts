@@ -652,3 +652,63 @@ describe("hardening", () => {
     },
   );
 });
+
+describe("inspect", () => {
+  const COOKIES = "# Netscape HTTP Cookie File\n.example.com\tTRUE\t/\tTRUE\t0\tsid\tabc\n";
+
+  test("reads the yt-dlp and ffmpeg versions with a 10 s timeout", async () => {
+    const { requests, run } = fakeRun((request) =>
+      request.command === "yt-dlp"
+        ? exited("2026.10.26\n")
+        : exited("ffmpeg version 7.1 Copyright (c) 2000-2025 the FFmpeg developers\nbuilt with clang\n"),
+    );
+
+    const report = await fetcherWith(run).inspect(SETTINGS);
+
+    expect(report.success ? report.data : report).toEqual({
+      ytDlp: { found: true, version: "2026.10.26" },
+      ffmpeg: { found: true, version: "7.1" },
+      cookies: "none",
+    });
+    expect(requests.map((request) => [request.command, request.args, request.timeoutMs])).toEqual([
+      ["yt-dlp", ["--version"], 10_000],
+      ["ffmpeg", ["-version"], 10_000],
+    ]);
+  });
+
+  test("a tool not on PATH is not found; one that fails is found without a version", async () => {
+    const { run } = fakeRun((request) =>
+      request.command === "yt-dlp"
+        ? { outcome: "not_found", exitCode: null, stdout: "", stderr: "" }
+        : exited("", 1, "broken"),
+    );
+
+    const report = await fetcherWith(run).inspect(SETTINGS);
+
+    expect(report.success ? report.data : report).toMatchObject({ ytDlp: { found: false }, ffmpeg: { found: true } });
+    expect(report.success && "version" in report.data.ffmpeg).toBe(false);
+  });
+
+  test("a readable cookies file is ok, and no copy is made", async () => {
+    const file = path.join(root, "cookies.txt");
+    writeFileSync(file, COOKIES);
+    const { run } = fakeRun(() => exited("1\n"));
+
+    const report = await fetcherWith(run).inspect({ ...SETTINGS, cookies: { file, origin: "env" } });
+
+    expect(report.success && report.data.cookies).toBe("ok");
+    expect(existsSync(tmpDir)).toBe(false);
+  });
+
+  test("a missing cookies file is COOKIES_FILE_INVALID naming where it was set, never the path", async () => {
+    const file = path.join(root, "cookies-SECRET.txt");
+    const { run } = fakeRun(() => exited("1\n"));
+
+    const report = await fetcherWith(run).inspect({ ...SETTINGS, cookies: { file, origin: "config" } });
+    const cookies = report.success ? report.data.cookies : undefined;
+
+    expect(typeof cookies === "object" ? cookies : undefined).toMatchObject({ code: "COOKIES_FILE_INVALID" });
+    expect(JSON.stringify(cookies)).toContain("cookies.file");
+    expect(JSON.stringify(cookies)).not.toContain("SECRET");
+  });
+});

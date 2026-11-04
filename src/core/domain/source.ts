@@ -1,6 +1,9 @@
 /** What an input is: a page yt-dlp reads (`youtube`, `instagram`, any other `site`), a direct media URL or a local file. */
 export type SourceKind = "youtube" | "instagram" | "site" | "direct_url" | "local_file";
 
+/** Every source kind, in the order help and error hints list them. */
+export const SOURCE_KINDS: readonly SourceKind[] = ["youtube", "instagram", "site", "direct_url", "local_file"];
+
 /** The kinds that are pages yt-dlp reads. */
 export type SiteKind = "youtube" | "instagram" | "site";
 

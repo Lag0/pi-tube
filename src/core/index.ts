@@ -30,6 +30,13 @@ export {
   createSetConfigValue,
 } from "./application/config.ts";
 export {
+  createRunDoctor,
+  type DoctorCheck,
+  type DoctorDeps,
+  type DoctorReport,
+  type DoctorStatus,
+} from "./application/doctor.ts";
+export {
   createDownloadMedia,
   type DownloadMediaDeps,
   type DownloadMediaInput,
@@ -38,14 +45,19 @@ export {
 export { createGetMediaInfo, type GetMediaInfoDeps } from "./application/get-media-info.ts";
 export { createImportV2Transcripts, type ImportV2Deps, type ImportV2Input } from "./application/import-v2.ts";
 export {
+  checkLibraryFilter,
   createGetTranscript,
   createListTranscripts,
   createPruneLibrary,
+  createReadTranscript,
   createSearchTranscripts,
   type LibraryDeps,
   type LibraryPage,
+  type ListTranscriptsInput,
   MAX_PAGE_LIMIT,
   type PruneInput,
+  type ReadTranscriptInput,
+  type SearchTranscriptsInput,
 } from "./application/library.ts";
 export { ensureNotAborted, type OperationOptions, type ProgressEvent, type UseCase } from "./application/operation.ts";
 export {
@@ -81,12 +93,16 @@ export {
   type ConfigScalar,
   configKeysFor,
   DEFAULT_CONFIG,
+  DEFAULT_MCP_MAX_FULL_CHARS,
   type EnvironmentVariables,
+  MAX_MCP_FULL_CHARS,
   type PiTubeConfig,
   type ProviderConfig,
+  resolveMcpSettings,
 } from "./domain/config.ts";
 export {
   createError,
+  ERROR_CODES,
   type ErrorCategory,
   type ErrorCode,
   getErrorCategory,
@@ -96,7 +112,9 @@ export {
 } from "./domain/errors.ts";
 export { normalizeLanguageTag, sameLanguage } from "./domain/language.ts";
 export {
+  type LibraryFilter,
   type LibrarySettings,
+  matchesLibraryFilter,
   matchesName,
   type NamedEntry,
   resolveLibrarySettings,
@@ -127,10 +145,11 @@ export {
   type ResolvedSource,
   type SiteKind,
   type SiteSource,
+  SOURCE_KINDS,
   type SourceKind,
   type SourceTier,
 } from "./domain/source.ts";
-export { tierOf } from "./domain/source-policy.ts";
+export { LIVE_NOT_ENDED_STATUSES, tierOf } from "./domain/source-policy.ts";
 export {
   COOKIES_FILE_ENV,
   DEFAULT_MAX_LOCAL_FILE_BYTES,
@@ -138,7 +157,7 @@ export {
   resolveSourceSettings,
   type SourceSettings,
 } from "./domain/source-settings.ts";
-export { toSafeLine } from "./domain/text.ts";
+export { estimateTokens, toSafeLine } from "./domain/text.ts";
 export type { OutputArtifact } from "./domain/transcript/contract.ts";
 export {
   type ImportSummary,
@@ -150,8 +169,15 @@ export {
   type V2Transcript,
   v2SourceOf,
 } from "./domain/transcript/parse-v2.ts";
+export {
+  MAX_SEGMENT_PAGE,
+  MAX_TEXT_PAGE_CHARS,
+  pageTranscript,
+  type TranscriptPage,
+  type TranscriptReadRequest,
+} from "./domain/transcript/read.ts";
 export { type JsonOutputArtifact, toJsonOutputArtifact } from "./domain/transcript/render-json.ts";
-export { sourceReferenceOf } from "./domain/transcript/render-markdown.ts";
+export { renderMarkdown, sourceReferenceOf } from "./domain/transcript/render-markdown.ts";
 export type { AuditLog, AuditReadout } from "./ports/audit-log.ts";
 export type { ConfigStore } from "./ports/config-store.ts";
 export type { LegacyTranscriptFile, LegacyTranscriptScan, LegacyTranscripts } from "./ports/legacy-transcripts.ts";
@@ -168,5 +194,7 @@ export type {
   DownloadRequest,
   FetchedAudio,
   MediaFetcher,
+  MediaToolsReport,
+  ToolVersion,
 } from "./ports/media-fetcher.ts";
 export type { SttCapabilities, SttProvider, SttRequest, SttTranscript } from "./ports/stt-provider.ts";

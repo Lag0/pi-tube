@@ -23,15 +23,19 @@ import {
   createLogoutProvider,
   createPruneLibrary,
   createQueryAudit,
+  createReadTranscript,
+  createRunDoctor,
   createSearchTranscripts,
   createSetConfigValue,
   createTranscribe,
+  type DoctorReport,
   type DownloadMediaInput,
   type DownloadMediaOutput,
   type EnvironmentVariables,
   type ImportSummary,
   type ImportV2Input,
   type LibraryPage,
+  type ListTranscriptsInput,
   type LoginInput,
   type LoginOutput,
   type LogoutInput,
@@ -42,10 +46,13 @@ import {
   type ProviderListing,
   type PruneInput,
   type PruneReport,
+  type ReadTranscriptInput,
+  type SearchTranscriptsInput,
   type StoredTranscript,
   type SttProvider,
   type TranscribeInput,
   type TranscribeOutput,
+  type TranscriptPage,
   type UseCase,
 } from "./core/index.ts";
 import { createFileAuditLog } from "./infrastructure/audit/file-audit-log.ts";
@@ -87,23 +94,24 @@ export interface App {
   readonly transcribe: UseCase<TranscribeInput, TranscribeOutput>;
   readonly downloadMedia: UseCase<DownloadMediaInput, DownloadMediaOutput>;
   readonly getMediaInfo: UseCase<{ readonly input: string }, MediaInfo>;
-  readonly listTranscripts: UseCase<{ readonly limit: number; readonly offset: number }, LibraryPage>;
-  readonly searchTranscripts: UseCase<
-    { readonly query: string; readonly limit: number; readonly offset: number },
-    LibraryPage
-  >;
+  readonly listTranscripts: UseCase<ListTranscriptsInput, LibraryPage>;
+  readonly searchTranscripts: UseCase<SearchTranscriptsInput, LibraryPage>;
   readonly getTranscript: UseCase<{ readonly transcriptId: string }, StoredTranscript>;
+  readonly readTranscript: UseCase<ReadTranscriptInput, TranscriptPage & { readonly transcriptId: string }>;
   readonly pruneLibrary: UseCase<PruneInput, PruneReport>;
   readonly queryAudit: UseCase<AuditListInput, AuditPage>;
   readonly auditStats: UseCase<AuditStatsInput, AuditStatsOutput>;
   readonly importV2Transcripts: UseCase<ImportV2Input, ImportSummary>;
+  readonly runDoctor: UseCase<Record<string, never>, DoctorReport>;
 }
 
 const PACKAGE_JSON = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {
   version?: string;
 };
-const PI_TUBE_VERSION = typeof PACKAGE_JSON.version === "string" ? PACKAGE_JSON.version : "0.0.0";
-const RUNTIME_VERSION = process.versions.bun ? `bun ${process.versions.bun}` : `node ${process.versions.node}`;
+/** The installed pi-tube version, from package.json. */
+export const PI_TUBE_VERSION = typeof PACKAGE_JSON.version === "string" ? PACKAGE_JSON.version : "0.0.0";
+/** The runtime pi-tube runs on, as `bun <version>` or `node <version>`. */
+export const RUNTIME_VERSION = process.versions.bun ? `bun ${process.versions.bun}` : `node ${process.versions.node}`;
 
 /** Wires the core and the infrastructure for one environment. */
 export const createApp = (environment: AppEnvironment, overrides: AppOverrides = {}): App => {
@@ -121,12 +129,13 @@ export const createApp = (environment: AppEnvironment, overrides: AppOverrides =
     });
   const library = createFileLibraryStore({ libraryDir: paths.libraryDir });
   const auditLog = createFileAuditLog({ auditDir: paths.auditDir, configStore });
+  const versions = { piTube: PI_TUBE_VERSION, runtime: RUNTIME_VERSION };
   const audit: AuditTrailDeps = {
     audit: auditLog,
     now: () => new Date(),
     newId: randomUUID,
     adapter: environment.adapter,
-    versions: { piTube: PI_TUBE_VERSION, runtime: RUNTIME_VERSION },
+    versions,
   };
   const accountDeps = { configStore, env, providers: PROVIDER_DESCRIPTORS };
   const configDeps = { configStore, providers: PROVIDER_DESCRIPTORS };
@@ -154,6 +163,7 @@ export const createApp = (environment: AppEnvironment, overrides: AppOverrides =
     listTranscripts: createListTranscripts({ library }),
     searchTranscripts: createSearchTranscripts({ library }),
     getTranscript: createGetTranscript({ library }),
+    readTranscript: createReadTranscript({ library, configStore }),
     pruneLibrary: createPruneLibrary({ library, configStore, audit }),
     queryAudit: createQueryAudit({ audit: auditLog }),
     auditStats: createAuditStats({ audit: auditLog }),
@@ -161,5 +171,6 @@ export const createApp = (environment: AppEnvironment, overrides: AppOverrides =
       legacy: createV2Transcripts({ dirs: paths.legacyDirs, libraryDir: paths.libraryDir }),
       library,
     }),
+    runDoctor: createRunDoctor({ ...accountDeps, media, library, versions }),
   };
 };

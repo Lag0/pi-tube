@@ -137,6 +137,9 @@ describe("CLI transcription", () => {
       "detected_language",
       "summary",
       "characters",
+      "audio_seconds",
+      "cost",
+      "estimated_tokens",
       "segments",
     ]);
     expect(payload).toMatchObject({
@@ -148,6 +151,25 @@ describe("CLI transcription", () => {
     });
     expect(JSON.parse(readOutputFileFromStdout(result.stdout)).transcript.full_text).toBe("json response");
     expect(result.stdout).not.toContain("[OUTPUT_FILE]");
+  });
+
+  test("--json reports the audio duration, the estimated cost and the estimated tokens", async () => {
+    const deepgram = {
+      ...createFakeSttProvider("deepgram", { ...transcript("priced response", "en"), durationSeconds: 19 }),
+      model: "nova-3",
+    };
+    const priced = JSON.parse((await run([mediaUrl, "--json"], { stt: { deepgram } })).stdout);
+    const unpriced = JSON.parse(
+      (await run([mediaUrl, "--json"], { stt: { deepgram: { ...transcript("x"), durationSeconds: 19 } } })).stdout,
+    );
+
+    expect(priced).toMatchObject({
+      audio_seconds: 19,
+      cost: { estimate: 0.001362, currency: "USD", price_table: "2026-10-31" },
+      estimated_tokens: Math.ceil("priced response".length / 4),
+    });
+    expect(unpriced.cost).toBeNull();
+    expect(unpriced.audio_seconds).toBe(19);
   });
 
   test("never writes to the process stdout or console", async () => {

@@ -8,3 +8,6 @@ const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]+/g;
  */
 export const toSafeLine = (value: string): string =>
   value.replace(CONTROL_CHARACTERS, " ").replace(/ {2,}/g, " ").trim();
+
+/** Rough token count for a model: one token per 4 characters, rounded up. */
+export const estimateTokens = (characters: number): number => Math.ceil(characters / 4);

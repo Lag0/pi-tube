@@ -1,3 +1,4 @@
+import { type AuditCost, estimateCost, PRICE_TABLE_DATE } from "../domain/audit.ts";
 import type { EnvironmentVariables } from "../domain/config.ts";
 import { createError, type PiTubeError } from "../domain/errors.ts";
 import { normalizeLanguageTag } from "../domain/language.ts";
@@ -46,6 +47,10 @@ export interface TranscribeOutput {
   readonly paths: StoredTranscript["paths"];
   readonly format: "markdown" | "json";
   readonly artifact: OutputArtifact;
+  /** Fresh: provider's, else yt-dlp's, else last segment end. Cache hit: saved source duration, else last segment end. */
+  readonly audioSeconds?: number;
+  /** Estimated cost of this call: 0 on a cache hit; absent when the duration or the model's price is unknown. */
+  readonly cost?: AuditCost;
 }
 
 /** Dependencies of `transcribe`. */
@@ -98,6 +103,12 @@ const audioSecondsOf = (transcript: SttTranscript, source: ResolvedSource): numb
   );
 };
 
+/** A saved transcript's audio length: the source's duration, else where its last segment ends. */
+const savedAudioSecondsOf = (artifact: OutputArtifact): number | undefined => {
+  const lastSegment = artifact.transcript.segments?.at(-1);
+  return artifact.source.duration_seconds ?? (lastSegment === undefined ? undefined : lastSegment.end_ms / 1000);
+};
+
 const runTranscribe =
   (deps: TranscribeDeps, trail: AuditTrail): UseCase<TranscribeInput, TranscribeOutput> =>
   async (input, options) => {
@@ -140,12 +151,15 @@ const runTranscribe =
     const hit = (stored: StoredTranscript): TranscribeOutput => {
       trail.note({ cacheHit: true });
       options?.onProgress?.({ label: "Found in library" });
+      const audioSeconds = savedAudioSecondsOf(stored.artifact);
       return {
         transcriptId: stored.transcriptId,
         cacheHit: true,
         paths: stored.paths,
         format: input.format,
         artifact: stored.artifact,
+        ...(audioSeconds === undefined ? {} : { audioSeconds }),
+        cost: { estimate: 0, currency: "USD", priceTable: PRICE_TABLE_DATE },
       };
     };
 
@@ -221,6 +235,7 @@ const runTranscribe =
     // Noted before the save: the provider has billed this audio even if the save fails.
     const audioSeconds = audioSecondsOf(transcript.data, source);
     trail.note({ cacheHit: false, ...(audioSeconds === undefined ? {} : { audioSeconds }) });
+    const cost = audioSeconds === undefined ? undefined : estimateCost(providerId, provider.model, audioSeconds);
 
     const artifact = buildOutputArtifact(
       {
@@ -245,6 +260,8 @@ const runTranscribe =
       paths: saved.data.paths,
       format: input.format,
       artifact: saved.data.artifact,
+      ...(audioSeconds === undefined ? {} : { audioSeconds }),
+      ...(cost === undefined ? {} : { cost }),
     });
   };
 

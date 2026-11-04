@@ -30,7 +30,7 @@ describe("queryAudit", () => {
     for (const value of ["2026-13-01", "31/10/2026", "2026-02-30"]) {
       const result = await query({ ...PAGE, [field]: value });
       expect(result.success ? undefined : result.error.code).toBe("INPUT_INVALID");
-      expect(result.success ? undefined : result.error.message).toBe(`\`--${field}\` must be a date as YYYY-MM-DD.`);
+      expect(result.success ? undefined : result.error.message).toBe(`\`${field}\` must be a date as YYYY-MM-DD.`);
     }
   });
 
@@ -126,6 +126,6 @@ describe("auditStats", () => {
   test("checks the dates like the list", async () => {
     const result = await createAuditStats({ audit: createInMemoryAuditLog() })({ until: "2026-1-1" });
 
-    expect(result.success ? undefined : result.error.message).toBe("`--until` must be a date as YYYY-MM-DD.");
+    expect(result.success ? undefined : result.error.message).toBe("`until` must be a date as YYYY-MM-DD.");
   });
 });

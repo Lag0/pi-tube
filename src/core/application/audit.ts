@@ -55,17 +55,21 @@ const isCalendarDate = (value: string): boolean => {
   return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
 };
 
-const checkDates = ({ since, until }: AuditStatsInput): Result<void> => {
+/**
+ * Checks `since` and `until`: calendar dates as YYYY-MM-DD, `since` not after `until`. Messages name the field, not
+ * a flag, so the CLI (`--since`) and the MCP tools (`since`) share them.
+ */
+export const checkDayRange = ({ since, until }: { readonly since?: string; readonly until?: string }): Result<void> => {
   for (const [flag, value] of [
     ["since", since],
     ["until", until],
   ] as const) {
     if (value !== undefined && !isCalendarDate(value)) {
-      return err(createError("INPUT_INVALID", `\`--${flag}\` must be a date as YYYY-MM-DD.`));
+      return err(createError("INPUT_INVALID", `\`${flag}\` must be a date as YYYY-MM-DD.`));
     }
   }
   if (since !== undefined && until !== undefined && since > until) {
-    return err(createError("INPUT_INVALID", "`--since` must not be after `--until`."));
+    return err(createError("INPUT_INVALID", "`since` must not be after `until`."));
   }
   return ok(undefined);
 };
@@ -87,7 +91,7 @@ export const createQueryAudit =
   async (input, options) => {
     const ready = ensureNotAborted(options?.signal);
     if (!ready.success) return ready;
-    const dates = checkDates(input);
+    const dates = checkDayRange(input);
     if (!dates.success) return dates;
     const operation = checkOperation(input.operation);
     if (!operation.success) return operation;
@@ -116,7 +120,7 @@ export const createAuditStats =
   async (input, options) => {
     const ready = ensureNotAborted(options?.signal);
     if (!ready.success) return ready;
-    const dates = checkDates(input);
+    const dates = checkDayRange(input);
     if (!dates.success) return dates;
     const read = await deps.audit.read(input);
     if (!read.success) return read;

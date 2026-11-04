@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -8,7 +9,7 @@ export const SPAWN_ROOT = mkdtempSync(path.join(os.tmpdir(), "pi-tube-spawn-"));
 process.once("exit", () => rmSync(SPAWN_ROOT, { recursive: true, force: true }));
 
 /** Env that keeps a spawned CLI off the developer's real keys, config and `~/.pi-tube`. */
-const HERMETIC_ENV = {
+export const HERMETIC_ENV: Readonly<Record<string, string>> = {
   HOME: SPAWN_ROOT,
   DEEPGRAM_API_KEY: "",
   GROQ_API_KEY: "",
@@ -43,3 +44,83 @@ export const spawnCli = (
   });
   return { exitCode: result.exitCode, stdout: result.stdout.toString(), stderr: result.stderr.toString() };
 };
+
+export interface SpawnMcpResult {
+  readonly exitCode: number | null;
+  readonly stdoutLines: readonly string[];
+  readonly stderr: string;
+  /** With `signalAfterMs`: how long the server took to exit after SIGTERM. */
+  readonly exitedAfterSignalMs?: number;
+}
+
+/**
+ * Runs `bin/pi-tube.ts mcp` in a child process and writes one JSON line per message. Once every message with an
+ * `id` has an answer, it ends stdin (`endAfterMs` later), or sends SIGTERM `signalAfterMs` later. Killed after
+ * `timeoutMs` (20 s).
+ */
+export const spawnMcp = (
+  messages: readonly object[],
+  env: Record<string, string> = {},
+  options: {
+    readonly timeoutMs?: number;
+    readonly signalAfterMs?: number;
+    /** How long stdin stays open after the last answer (default 0). */
+    readonly endAfterMs?: number;
+    readonly cwd?: string;
+  } = {},
+): Promise<SpawnMcpResult> =>
+  new Promise((resolve) => {
+    const child = spawn("bun", ["run", "--bun", "--no-env-file", BIN, "mcp"], {
+      env: { ...process.env, ...HERMETIC_ENV, ...env },
+      stdio: ["pipe", "pipe", "pipe"],
+      ...(options.cwd ? { cwd: options.cwd } : {}),
+    });
+    const expected = messages.filter((message) => "id" in message).length;
+    let stdout = "";
+    let stderr = "";
+    let signalledAt: number | undefined;
+    let finishing = false;
+    const answered = (): number =>
+      stdout
+        .split("\n")
+        .filter((line) => line.trim().length > 0)
+        .filter((line) => {
+          try {
+            const parsed: unknown = JSON.parse(line);
+            return typeof parsed === "object" && parsed !== null && "id" in parsed && !("method" in parsed);
+          } catch {
+            return false;
+          }
+        }).length;
+    const finish = (): void => {
+      if (finishing) return;
+      finishing = true;
+      if (options.signalAfterMs === undefined) {
+        setTimeout(() => child.stdin.end(), options.endAfterMs ?? 0);
+        return;
+      }
+      setTimeout(() => {
+        signalledAt = Date.now();
+        child.kill("SIGTERM");
+      }, options.signalAfterMs);
+    };
+    child.stdout.on("data", (chunk: Buffer) => {
+      stdout += chunk.toString();
+      if (answered() >= expected) finish();
+    });
+    child.stderr.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString();
+    });
+    const timer = setTimeout(() => child.kill("SIGKILL"), options.timeoutMs ?? 20_000);
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      resolve({
+        exitCode: code,
+        stdoutLines: stdout.split("\n").filter((line) => line.length > 0),
+        stderr,
+        ...(signalledAt === undefined ? {} : { exitedAfterSignalMs: Date.now() - signalledAt }),
+      });
+    });
+    for (const message of messages) child.stdin.write(`${JSON.stringify(message)}\n`);
+    if (expected === 0) finish();
+  });

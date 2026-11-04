@@ -3,13 +3,17 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
+  checkLibraryFilter,
   createGetTranscript,
   createListTranscripts,
   createPruneLibrary,
+  createReadTranscript,
   createSearchTranscripts,
 } from "../../../src/core/application/library.ts";
 import { DEFAULT_CONFIG } from "../../../src/core/domain/config.ts";
 import { matchesName } from "../../../src/core/domain/library.ts";
+import { ok } from "../../../src/core/domain/result.ts";
+import { buildOutputArtifact } from "../../../src/core/domain/transcript/build-artifact.ts";
 import type { LibraryEntry } from "../../../src/core/ports/library-store.ts";
 import { createFileLibraryStore } from "../../../src/infrastructure/library/file-library-store.ts";
 import { auditDepsFor, createInMemoryAuditLog } from "../../helpers/in-memory-audit-log.ts";
@@ -99,5 +103,156 @@ describe("pruneLibrary", () => {
       ["library_prune", "older_than_days=none include_transcripts=false dry_run=true", "ok"],
       ["library_prune", "older_than_days=30 include_transcripts=true dry_run=false", "ok"],
     ]);
+  });
+});
+
+describe("library filters", () => {
+  const entries: readonly LibraryEntry[] = [
+    entry({
+      transcriptId: "a",
+      provider: "groq",
+      kind: "youtube",
+      title: "Aula penal",
+      generatedAt: "2026-11-02T10:00:00.000Z",
+    }),
+    entry({
+      transcriptId: "b",
+      provider: "deepgram",
+      kind: "youtube",
+      title: "Aula civil",
+      generatedAt: "2026-11-01T10:00:00.000Z",
+    }),
+    entry({
+      transcriptId: "c",
+      provider: "groq",
+      kind: "local_file",
+      title: "Aula penal 2",
+      generatedAt: "2026-10-31T10:00:00.000Z",
+    }),
+  ];
+  const library = () => ({ ...createFileLibraryStore({ libraryDir }), entries: async () => ok(entries) });
+  const ids = (result: Awaited<ReturnType<ReturnType<typeof createListTranscripts>>>) =>
+    result.success ? result.data.entries.map((found) => found.transcriptId) : result.error.code;
+
+  test("list keeps the entries that match, and total counts after the filters", async () => {
+    const result = await createListTranscripts({ library: library() })({ limit: 1, offset: 0, provider: "groq" });
+
+    expect(ids(result)).toEqual(["a"]);
+    expect(result.success && result.data.total).toBe(2);
+  });
+
+  test("list filters by source kind and by date", async () => {
+    const list = createListTranscripts({ library: library() });
+
+    expect(ids(await list({ limit: 20, offset: 0, kind: "local_file" }))).toEqual(["c"]);
+    expect(ids(await list({ limit: 20, offset: 0, since: "2026-11-01", until: "2026-11-01" }))).toEqual(["b"]);
+  });
+
+  test("search applies the name match and then the filter", async () => {
+    const result = await createSearchTranscripts({ library: library() })({
+      query: "penal",
+      limit: 20,
+      offset: 0,
+      kind: "youtube",
+    });
+
+    expect(ids(result)).toEqual(["a"]);
+  });
+
+  test.each(["since", "until"] as const)("a bad %s date is INPUT_INVALID", async (flag) => {
+    const result = await createListTranscripts({ library: library() })({ limit: 20, offset: 0, [flag]: "2026-13-01" });
+
+    expect(result.success ? undefined : result.error).toMatchObject({
+      code: "INPUT_INVALID",
+      message: `\`${flag}\` must be a date as YYYY-MM-DD.`,
+    });
+  });
+
+  test("since after until is INPUT_INVALID", async () => {
+    const result = checkLibraryFilter({ since: "2026-11-02", until: "2026-11-01" });
+
+    expect(result.success ? undefined : result.error.code).toBe("INPUT_INVALID");
+  });
+
+  test("an unknown source kind is INPUT_INVALID with the kinds as the hint", async () => {
+    const result = await createSearchTranscripts({ library: library() })({
+      query: "aula",
+      limit: 20,
+      offset: 0,
+      kind: "tiktok",
+    });
+
+    expect(result.success ? undefined : result.error).toMatchObject({
+      code: "INPUT_INVALID",
+      message: "Unknown source kind `tiktok`.",
+      hint: "Use one of: youtube, instagram, site, direct_url, local_file.",
+    });
+  });
+});
+
+describe("readTranscript", () => {
+  const seedText = async (text: string) => {
+    const library = createFileLibraryStore({ libraryDir });
+    const source = {
+      kind: "youtube",
+      originalInput: "https://www.youtube.com/watch?v=abc",
+      normalizedUrl: "https://www.youtube.com/watch?v=abc",
+      metadata: { platform: "Youtube", mediaId: "abc", title: "Aula" },
+    } as const;
+    const artifact = buildOutputArtifact(
+      { source, provider: "groq", model: "whisper-large-v3", transcript: text },
+      { generatedAt: "2026-11-02T00:00:00.000Z", includeTimestamps: true },
+    );
+    const saved = await library.save({
+      key: { sourceKey: "youtube:abc", provider: "groq", model: "whisper-large-v3" },
+      source,
+      artifact,
+    });
+    if (!saved.success) throw new Error("save failed");
+    return { library, transcriptId: saved.data.transcriptId };
+  };
+  const read = (library: ReturnType<typeof createFileLibraryStore>, config = DEFAULT_CONFIG) =>
+    createReadTranscript({ library, configStore: createInMemoryConfigStore(config) });
+
+  test("an unknown id is TRANSCRIPT_NOT_FOUND", async () => {
+    const result = await read(createFileLibraryStore({ libraryDir }))({
+      transcriptId: "ffffffffffffffffffff",
+      format: "text",
+      offset: 0,
+      limit: 100,
+    });
+
+    expect(result.success ? undefined : result.error.code).toBe("TRANSCRIPT_NOT_FOUND");
+  });
+
+  test("returns the page with the transcript id", async () => {
+    const { library, transcriptId } = await seedText("hello world");
+
+    const result = await read(library)({ transcriptId: ` ${transcriptId} `, format: "text", offset: 6, limit: 100 });
+
+    expect(result.success ? result.data : result).toMatchObject({ transcriptId, text: "world", total: 11 });
+  });
+
+  test("full stops at mcp.max_full_chars from the config", async () => {
+    const { library, transcriptId } = await seedText("abcdefghij");
+
+    const result = await read(library, { ...DEFAULT_CONFIG, mcp: { max_full_chars: 4 } })({
+      transcriptId,
+      format: "text",
+      offset: 0,
+      limit: 1,
+      full: true,
+    });
+
+    expect(result.success ? result.data : result).toMatchObject({ text: "abcd", truncated: true, nextOffset: 4 });
+  });
+
+  test("without mcp.max_full_chars, full stops at 100000 characters", async () => {
+    const { library, transcriptId } = await seedText("x".repeat(100_001));
+
+    const result = await read(library)({ transcriptId, format: "text", offset: 0, limit: 1, full: true });
+
+    expect(result.success && result.data.text?.length).toBe(100_000);
+    expect(result.success && result.data.truncated).toBe(true);
   });
 });

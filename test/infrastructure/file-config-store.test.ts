@@ -116,6 +116,18 @@ describe("file config store", () => {
     expect(read.success ? read.data.audit : read).toEqual({ retention_months: 6 });
   });
 
+  test("writes the mcp section only when it is set, and reads it back", async () => {
+    const store = createFileConfigStore(configFile);
+
+    await store.write(SAMPLE);
+    expect(Object.hasOwn(JSON.parse(readFileSync(configFile, "utf8")), "mcp")).toBe(false);
+    await store.write({ ...SAMPLE, mcp: { max_full_chars: 5000 } });
+
+    expect(JSON.parse(readFileSync(configFile, "utf8")).mcp).toEqual({ max_full_chars: 5000 });
+    const read = await store.read();
+    expect(read.success ? read.data.mcp : read).toEqual({ max_full_chars: 5000 });
+  });
+
   test("does not add empty source sections to a file that lacks them", async () => {
     writeRaw(JSON.stringify(SAMPLE));
 

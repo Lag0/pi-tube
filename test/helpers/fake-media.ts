@@ -5,7 +5,7 @@ import { err, ok } from "../../src/core/domain/result.ts";
 import type { AudioInput, ResolvedSource, SiteSource } from "../../src/core/domain/source.ts";
 import { classifyInput } from "../../src/core/domain/source-policy.ts";
 import type { SourceSettings } from "../../src/core/domain/source-settings.ts";
-import type { DownloadRequest, MediaFetcher } from "../../src/core/ports/media-fetcher.ts";
+import type { DownloadRequest, MediaFetcher, MediaToolsReport } from "../../src/core/ports/media-fetcher.ts";
 import { waitForAbort } from "./fake-stt.ts";
 
 export interface FakeMediaOptions {
@@ -16,7 +16,15 @@ export interface FakeMediaOptions {
   readonly downloadPath?: string;
   readonly downloadError?: PiTubeError;
   readonly waitForAbort?: "fetchAudio" | "download";
+  /** What `inspect` reports; by default both tools are found and no cookies file is set. */
+  readonly inspect?: MediaToolsReport;
 }
+
+const TOOLS_FOUND: MediaToolsReport = {
+  ytDlp: { found: true, version: "2026.10.26" },
+  ffmpeg: { found: true, version: "7.1" },
+  cookies: "none",
+};
 
 export interface FakeMedia {
   readonly fetcher: MediaFetcher;
@@ -89,6 +97,10 @@ export const createFakeMediaFetcher = (options: FakeMediaOptions = {}): FakeMedi
       if (options.downloadError) return err(options.downloadError);
       const file = options.downloadPath ?? path.join(request.outputDir, "media.mp4");
       return ok({ path: file, uri: pathToFileURL(file).href });
+    },
+    inspect: async (settings) => {
+      calls.settings.push(settings);
+      return ok(options.inspect ?? TOOLS_FOUND);
     },
   };
   return { fetcher, calls, released: () => released };

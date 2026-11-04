@@ -39,49 +39,47 @@ describe("CLI error exits and formatting", () => {
     );
   });
 
-  test("returns command-specific guidance for missing or unsupported command actions", () => {
-    const cases: Array<{ args: string[]; expected: string }> = [
-      {
-        args: ["sample-input"],
-        expected:
-          "hint: Use one of: `pi-tube transcribe <input>`, `pi-tube download <url>`, `pi-tube auth status`, `pi-tube defaults show`, `pi-tube setup yt-dlp`.",
-      },
-      {
-        args: ["auth"],
-        expected:
-          "hint: Use one of: `pi-tube auth login <deepgram|groq|elevenlabs>`, `pi-tube auth status`, `pi-tube auth logout <deepgram|groq|elevenlabs>`.",
-      },
-      {
-        args: ["auth", "login"],
-        expected:
-          "hint: Use one of: `pi-tube auth login <deepgram|groq|elevenlabs>`, `pi-tube auth status`, `pi-tube auth logout <deepgram|groq|elevenlabs>`.",
-      },
-      {
-        args: ["defaults"],
-        expected:
-          "hint: Use one of: `pi-tube defaults provider <deepgram|groq|elevenlabs>`, `pi-tube defaults language <code>`, `pi-tube defaults show`.",
-      },
-      {
-        args: ["setup"],
-        expected: "hint: Use one of: `pi-tube setup yt-dlp`, `pi-tube setup skills`, `pi-tube setup mcp`.",
-      },
-      {
-        args: ["download"],
-        expected:
-          "hint: Use one of: `pi-tube download <url>`, `pi-tube download <url> --audio`, `pi-tube download <url> --output <dir>`.",
-      },
-      {
-        args: ["transcribe"],
-        expected:
-          "hint: Use one of: `pi-tube transcribe <input>`, `pi-tube transcribe <input> --provider <deepgram|groq|elevenlabs>`, `pi-tube transcribe <input> --json`.",
-      },
-    ];
+  // One spawn per test: seven sequential CLI spawns in a single test passed its 30 s budget under a loaded suite.
+  test.each<{ args: string[]; expected: string }>([
+    {
+      args: ["sample-input"],
+      expected:
+        "hint: Use one of: `pi-tube transcribe <input>`, `pi-tube download <url>`, `pi-tube auth status`, `pi-tube defaults show`, `pi-tube setup yt-dlp`.",
+    },
+    {
+      args: ["auth"],
+      expected:
+        "hint: Use one of: `pi-tube auth login <deepgram|groq|elevenlabs>`, `pi-tube auth status`, `pi-tube auth logout <deepgram|groq|elevenlabs>`.",
+    },
+    {
+      args: ["auth", "login"],
+      expected:
+        "hint: Use one of: `pi-tube auth login <deepgram|groq|elevenlabs>`, `pi-tube auth status`, `pi-tube auth logout <deepgram|groq|elevenlabs>`.",
+    },
+    {
+      args: ["defaults"],
+      expected:
+        "hint: Use one of: `pi-tube defaults provider <deepgram|groq|elevenlabs>`, `pi-tube defaults language <code>`, `pi-tube defaults show`.",
+    },
+    {
+      args: ["setup"],
+      expected: "hint: Use one of: `pi-tube setup yt-dlp`, `pi-tube setup skills`, `pi-tube setup mcp`.",
+    },
+    {
+      args: ["download"],
+      expected:
+        "hint: Use one of: `pi-tube download <url>`, `pi-tube download <url> --audio`, `pi-tube download <url> --output <dir>`.",
+    },
+    {
+      args: ["transcribe"],
+      expected:
+        "hint: Use one of: `pi-tube transcribe <input>`, `pi-tube transcribe <input> --provider <deepgram|groq|elevenlabs>`, `pi-tube transcribe <input> --json`.",
+    },
+  ])("returns command-specific guidance for `$args`", (testCase) => {
+    const result = runCli(testCase.args);
 
-    for (const testCase of cases) {
-      const result = runCli(testCase.args);
-      expect(result.exitCode).toBe(2);
-      expect(result.stderr.toString()).toContain(testCase.expected);
-    }
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr.toString()).toContain(testCase.expected);
   });
 
   test("returns deterministic intake error code and guidance formatting", () => {

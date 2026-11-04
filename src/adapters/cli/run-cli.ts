@@ -4,6 +4,7 @@ import { APP_VERSION, COMMAND_IDENTITY, getHelpDocument, HELP_TOPICS, type HelpT
 import { runAuth, runProviders } from "./commands/account.ts";
 import { runAudit } from "./commands/audit.ts";
 import { runConfig, runDefaults } from "./commands/config.ts";
+import { runDoctor } from "./commands/doctor.ts";
 import { runDownload } from "./commands/download.ts";
 import { runInfo } from "./commands/info.ts";
 import { importV2Once, runLibrary } from "./commands/library.ts";
@@ -30,6 +31,8 @@ type CliAction =
   | { kind: "library"; action?: string; args: string[]; options: LibraryOptions }
   | { kind: "audit"; action?: string; args: string[]; options: AuditOptions }
   | { kind: "providers"; options: JsonCommandOptions }
+  | { kind: "doctor"; args: string[]; options: JsonCommandOptions }
+  | { kind: "mcp"; args: string[]; options: JsonCommandOptions }
   | { kind: "auth"; action?: string; provider?: string; options: AuthOptions; rootOptions: RootOptions }
   | { kind: "defaults"; action?: string; value?: string; rootOptions: RootOptions }
   | { kind: "setup"; subcommand?: string; options: SetupCommandOptions; rootOptions: RootOptions }
@@ -59,6 +62,10 @@ interface DownloadOptions extends JsonCommandOptions {
 interface LibraryOptions extends JsonCommandOptions {
   limit?: string;
   offset?: string;
+  provider?: string;
+  source?: string;
+  since?: string;
+  until?: string;
   olderThan?: string;
   includeTranscripts?: boolean;
   yes?: boolean;
@@ -218,6 +225,10 @@ function createProgram(setAction: (action: CliAction) => void): Command {
     .argument("[args...]", "a transcript id, or search terms")
     .option("--limit <n>", "How many entries to print (default 20, at most 500).")
     .option("--offset <n>", "How many entries to skip (default 0).")
+    .option("--provider <id>", "list, search: only transcripts made with this provider.")
+    .option("--source <kind>", "list, search: youtube, instagram, site, direct_url or local_file.")
+    .option("--since <YYYY-MM-DD>", "list, search: only transcripts made on or after this UTC day.")
+    .option("--until <YYYY-MM-DD>", "list, search: only transcripts made on or before this UTC day.")
     .option("--older-than <days>", "prune: only audio, or sources, older than this many days.")
     .option("--include-transcripts", "prune: delete whole sources, transcripts included (needs --older-than).")
     .option("--yes", "prune: delete; without it, prune only reports.")
@@ -241,6 +252,24 @@ function createProgram(setAction: (action: CliAction) => void): Command {
     .option("--json", "Print the result as JSON on stdout.")
     .action((action: string | undefined, args: string[], options: AuditOptions) => {
       setAction({ kind: "audit", action, args, options });
+    });
+
+  program
+    .command("doctor")
+    .description("Check the config, provider keys, yt-dlp, ffmpeg, cookies and the library.")
+    .argument("[args...]", "none")
+    .option("--json", "Print the report as JSON on stdout.")
+    .action((args: string[], options: JsonCommandOptions) => {
+      setAction({ kind: "doctor", args, options });
+    });
+
+  program
+    .command("mcp")
+    .description("Serve the pi-tube MCP tools on stdio for agent apps; the app starts it.")
+    .argument("[args...]", "none")
+    .option("--json", "Not accepted: the server speaks MCP on stdout.")
+    .action((args: string[], options: JsonCommandOptions) => {
+      setAction({ kind: "mcp", args, options });
     });
 
   program
@@ -391,6 +420,10 @@ export const runCli = async (argv: readonly string[], deps: CliDeps): Promise<nu
           args: action.args,
           limit: action.options.limit,
           offset: action.options.offset,
+          provider: action.options.provider,
+          source: action.options.source,
+          since: action.options.since,
+          until: action.options.until,
           olderThan: action.options.olderThan,
           includeTranscripts: Boolean(action.options.includeTranscripts),
           yes: Boolean(action.options.yes),
@@ -411,6 +444,16 @@ export const runCli = async (argv: readonly string[], deps: CliDeps): Promise<nu
         });
       case "providers":
         return await runProviders(deps, { json: Boolean(action.options.json) });
+      case "doctor":
+        return await runDoctor(deps, { args: action.args, json: Boolean(action.options.json) });
+      case "mcp":
+        if (action.args.length > 0 || action.options.json) {
+          throw new CliFailure(
+            createError("INPUT_INVALID", "`pi-tube mcp` takes no arguments.", { hint: hintForCommand("mcp") }),
+          );
+        }
+        // `main` serves `pi-tube mcp` before the CLI runs; the CLI adapter cannot reach the MCP one.
+        throw new Error("`pi-tube mcp` is served by main, never by runCli");
       case "auth":
         return await runAuth(deps, {
           action: action.action,

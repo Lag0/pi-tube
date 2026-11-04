@@ -115,6 +115,7 @@ describe("listConfigValues", () => {
       "library.keep_audio",
       "library.max_audio_bytes",
       "audit.retention_months",
+      "mcp.max_full_chars",
       "providers.deepgram.api_key_env",
       "providers.groq.api_key_env",
       "providers.elevenlabs.api_key_env",

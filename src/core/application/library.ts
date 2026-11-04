@@ -1,8 +1,12 @@
+import { resolveMcpSettings } from "../domain/config.ts";
 import { createError } from "../domain/errors.ts";
-import { matchesName, resolveLibrarySettings } from "../domain/library.ts";
+import { type LibraryFilter, matchesLibraryFilter, matchesName, resolveLibrarySettings } from "../domain/library.ts";
 import { err, ok, type Result } from "../domain/result.ts";
+import { SOURCE_KINDS } from "../domain/source.ts";
+import { pageTranscript, type TranscriptPage, type TranscriptReadRequest } from "../domain/transcript/read.ts";
 import type { ConfigStore } from "../ports/config-store.ts";
 import type { LibraryEntry, LibraryStore, PruneReport, StoredTranscript } from "../ports/library-store.ts";
+import { checkDayRange } from "./audit.ts";
 import { type AuditTrailDeps, beginAudit } from "./audit-trail.ts";
 import { ensureNotAborted, type UseCase } from "./operation.ts";
 
@@ -45,36 +49,80 @@ const pageOf = (entries: readonly LibraryEntry[], { limit, offset }: PageRequest
   entries: entries.slice(offset, offset + limit),
 });
 
-/** Lists the library, newest first. */
+/** What `library list` asks for: a page, filtered; `kind` arrives as text from the adapters. */
+export interface ListTranscriptsInput extends Omit<LibraryFilter, "kind"> {
+  readonly kind?: string;
+  readonly limit: number;
+  readonly offset: number;
+}
+
+/** What `library search` asks for: a list plus the name query. */
+export interface SearchTranscriptsInput extends ListTranscriptsInput {
+  readonly query: string;
+}
+
+/** Checks a filter's dates and kind, and returns it with the kind typed. */
+export const checkLibraryFilter = (input: {
+  readonly provider?: string;
+  readonly kind?: string;
+  readonly since?: string;
+  readonly until?: string;
+}): Result<LibraryFilter> => {
+  const dates = checkDayRange(input);
+  if (!dates.success) return dates;
+  const kind = input.kind === undefined ? undefined : SOURCE_KINDS.find((candidate) => candidate === input.kind);
+  if (input.kind !== undefined && kind === undefined) {
+    return err(
+      createError("INPUT_INVALID", `Unknown source kind \`${input.kind}\`.`, {
+        hint: `Use one of: ${SOURCE_KINDS.join(", ")}.`,
+      }),
+    );
+  }
+  return ok({
+    ...(input.provider === undefined ? {} : { provider: input.provider }),
+    ...(kind === undefined ? {} : { kind }),
+    ...(input.since === undefined ? {} : { since: input.since }),
+    ...(input.until === undefined ? {} : { until: input.until }),
+  });
+};
+
+/** Checks the page and the filter, then returns the entries `keep` and the filter both accept. */
+const listFiltered = async (
+  deps: LibraryDeps,
+  input: ListTranscriptsInput,
+  keep: (entry: LibraryEntry) => boolean,
+): Promise<Result<LibraryPage>> => {
+  const page = checkPage(input);
+  if (!page.success) return page;
+  const filter = checkLibraryFilter(input);
+  if (!filter.success) return filter;
+  const entries = await deps.library.entries();
+  if (!entries.success) return entries;
+  return ok(
+    pageOf(
+      entries.data.filter((entry) => keep(entry) && matchesLibraryFilter(entry, filter.data)),
+      input,
+    ),
+  );
+};
+
+/** Lists the library, newest first, optionally by provider, source kind and day range. */
 export const createListTranscripts =
-  (deps: LibraryDeps): UseCase<PageRequest, LibraryPage> =>
+  (deps: LibraryDeps): UseCase<ListTranscriptsInput, LibraryPage> =>
   async (input, options) => {
     const ready = ensureNotAborted(options?.signal);
     if (!ready.success) return ready;
-    const page = checkPage(input);
-    if (!page.success) return page;
-    const entries = await deps.library.entries();
-    if (!entries.success) return entries;
-    return ok(pageOf(entries.data, input));
+    return listFiltered(deps, input, () => true);
   };
 
-/** Searches the library by name (title, file name or URL, platform, source key), not by content. */
+/** Searches the library by name (title, file name or URL, platform, source key), not by content; then filters. */
 export const createSearchTranscripts =
-  (deps: LibraryDeps): UseCase<PageRequest & { readonly query: string }, LibraryPage> =>
+  (deps: LibraryDeps): UseCase<SearchTranscriptsInput, LibraryPage> =>
   async (input, options) => {
     const ready = ensureNotAborted(options?.signal);
     if (!ready.success) return ready;
     if (input.query.trim().length === 0) return err(createError("INPUT_INVALID", "The search query is empty."));
-    const page = checkPage(input);
-    if (!page.success) return page;
-    const entries = await deps.library.entries();
-    if (!entries.success) return entries;
-    return ok(
-      pageOf(
-        entries.data.filter((entry) => matchesName(entry, input.query)),
-        input,
-      ),
-    );
+    return listFiltered(deps, input, (entry) => matchesName(entry, input.query));
   };
 
 /** Reads one transcript by id. */
@@ -90,6 +138,30 @@ export const createGetTranscript =
     }
     return ok(stored.data);
   };
+
+/** What `readTranscript` asks for: which transcript, and which page of it. */
+export interface ReadTranscriptInput extends TranscriptReadRequest {
+  readonly transcriptId: string;
+}
+
+/**
+ * Reads one page of a transcript (see `pageTranscript`); `full` stops at `mcp.max_full_chars`. An unknown id is
+ * `TRANSCRIPT_NOT_FOUND`.
+ */
+export const createReadTranscript = (
+  deps: LibraryDeps & { readonly configStore: ConfigStore },
+): UseCase<ReadTranscriptInput, TranscriptPage & { readonly transcriptId: string }> => {
+  const getTranscript = createGetTranscript(deps);
+  return async (input, options) => {
+    const config = await deps.configStore.read();
+    if (!config.success) return config;
+    const stored = await getTranscript(input, options);
+    if (!stored.success) return stored;
+    const page = pageTranscript(stored.data.artifact, input, resolveMcpSettings(config.data).maxFullChars);
+    if (!page.success) return page;
+    return ok({ transcriptId: stored.data.transcriptId, ...page.data });
+  };
+};
 
 /** What `library prune` asks for; without `dryRun: false` nothing is deleted. */
 export interface PruneInput {

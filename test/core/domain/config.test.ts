@@ -3,8 +3,11 @@ import {
   applyConfigValue,
   configKeysFor,
   DEFAULT_CONFIG,
+  DEFAULT_MCP_MAX_FULL_CHARS,
   getConfigValue,
+  MAX_MCP_FULL_CHARS,
   parseConfig,
+  resolveMcpSettings,
 } from "../../../src/core/domain/config.ts";
 import { PROVIDER_DESCRIPTORS } from "../../../src/infrastructure/stt/registry.ts";
 
@@ -86,6 +89,9 @@ describe("source sections", () => {
     [{ network: [] }, "`network` must be an object."],
     [{ audit: { retention_months: "x" } }, "`audit.retention_months` must be a whole number of 1 or more."],
     [{ audit: { retention_months: 0 } }, "`audit.retention_months` must be a whole number of 1 or more."],
+    [{ mcp: { max_full_chars: 0 } }, "`mcp.max_full_chars` must be a whole number from 1 to 450000."],
+    [{ mcp: { max_full_chars: "x" } }, "`mcp.max_full_chars` must be a whole number from 1 to 450000."],
+    [{ mcp: { max_full_chars: 450_001 } }, "`mcp.max_full_chars` must be a whole number from 1 to 450000."],
   ])("rejects %j", (raw, detail) => {
     const result = parseConfig(raw, LOCATION);
 
@@ -107,6 +113,7 @@ describe("config keys", () => {
       "library.keep_audio",
       "library.max_audio_bytes",
       "audit.retention_months",
+      "mcp.max_full_chars",
       "providers.deepgram.api_key_env",
       "providers.groq.api_key_env",
       "providers.elevenlabs.api_key_env",
@@ -198,6 +205,34 @@ describe("config keys", () => {
     if (result.success) return;
     expect(result.error.code).toBe("INPUT_INVALID");
     expect(result.error.message).toBe("`audit.retention_months` must be a whole number of 1 or more.");
+  });
+
+  test("mcp.max_full_chars takes up to 450000, under the 500000 characters get_transcript asks Claude Code to keep inline", () => {
+    const result = applyConfigValue(DEFAULT_CONFIG, "mcp.max_full_chars", "450000", PROVIDER_DESCRIPTORS);
+
+    expect(result.success ? result.data.mcp : result).toEqual({ max_full_chars: MAX_MCP_FULL_CHARS });
+  });
+
+  test("mcp.max_full_chars stores a number", () => {
+    const result = applyConfigValue(DEFAULT_CONFIG, "mcp.max_full_chars", "50000", PROVIDER_DESCRIPTORS);
+
+    expect(result.success ? result.data.mcp : result).toEqual({ max_full_chars: 50_000 });
+    expect(result.success ? getConfigValue(result.data, "mcp.max_full_chars") : undefined).toBe(50_000);
+  });
+
+  test.each(["0", "abc", "1.5", "450001"])("mcp.max_full_chars refuses %s", (value) => {
+    const result = applyConfigValue(DEFAULT_CONFIG, "mcp.max_full_chars", value, PROVIDER_DESCRIPTORS);
+
+    expect(result.success ? undefined : result.error).toMatchObject({
+      code: "INPUT_INVALID",
+      message: "`mcp.max_full_chars` must be a whole number from 1 to 450000.",
+    });
+  });
+
+  test("resolveMcpSettings defaults to 100000 characters and reads mcp.max_full_chars", () => {
+    expect(resolveMcpSettings(DEFAULT_CONFIG)).toEqual({ maxFullChars: 100_000 });
+    expect(DEFAULT_MCP_MAX_FULL_CHARS).toBe(100_000);
+    expect(resolveMcpSettings({ ...DEFAULT_CONFIG, mcp: { max_full_chars: 1000 } })).toEqual({ maxFullChars: 1000 });
   });
 
   test("local_files.max_bytes stores a number", () => {
