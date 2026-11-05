@@ -143,7 +143,7 @@ npm publish automation is defined in `.github/workflows/publish.yml` with proven
 ## Instagram Public-Only Policy
 
 - Supported URL classes: Instagram public post/reel/video URLs (for example `/p/...`, `/reel/...`, `/tv/...`).
-- Auth-gated Instagram inputs fail with `SOURCE_AUTH_REQUIRED`; a cookies file (`pi-tube config set cookies.file <absolute path>`) gives access.
+- Auth-gated Instagram inputs fail with `SOURCE_AUTH_REQUIRED`.
 - CLI exits non-zero on auth-required failures and prints remediation guidance to use publicly accessible URLs.
 
 ## Runtime Policy
