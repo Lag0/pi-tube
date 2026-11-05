@@ -91,12 +91,11 @@ describe("GitHub workflows", () => {
     ["v3.0.0", "tag", "v3.0.0", "3.0.0", 0],
     ["v3.0.0", "tag", "v3.0.0", "3.0.1", 1],
     ["3.0.0", "tag", "3.0.0", "3.0.0", 1],
-    // A manual run: only on a version tag.
-    ["", "branch", "main", "3.0.0", 1],
-    // A branch that merely looks like a version tag.
-    ["", "branch", "v3.0.0", "3.0.0", 1],
+    // A manual run: only on its version tag; never on a branch, even one named like a tag.
     ["", "tag", "v3.0.0", "3.0.0", 0],
     ["", "tag", "v3.0.1", "3.0.0", 1],
+    ["", "branch", "main", "3.0.0", 1],
+    ["", "branch", "v3.0.0", "3.0.0", 1],
   ])("release tag %j, ref %s %s, version %s exits %i", (tag, refType, refName, version, status) => {
     const script = [
       `RELEASE_TAG=${JSON.stringify(tag)}`,

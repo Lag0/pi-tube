@@ -62,15 +62,16 @@ jobs:
 
           # tag-guard:start (this block and dist-tag are read by test/architecture/workflows.test.ts)
           # The tag must name the version it publishes: the release's tag, or the tag a manual run is on.
-          if [[ -z "$RELEASE_TAG" ]]; then
+          TAG="$RELEASE_TAG"
+          if [[ -z "$TAG" ]]; then
             if [[ "$REF_TYPE" != "tag" ]]; then
               echo "Run this workflow on a version tag (v$VERSION), not on the $REF_NAME branch." >&2
               exit 1
             fi
-            RELEASE_TAG="$REF_NAME"
+            TAG="$REF_NAME"
           fi
-          if [[ "$RELEASE_TAG" != "v$VERSION" ]]; then
-            echo "Tag $RELEASE_TAG does not match package.json version v$VERSION." >&2
+          if [[ "$TAG" != "v$VERSION" ]]; then
+            echo "Tag $TAG does not match package.json version v$VERSION." >&2
             exit 1
           fi
           # tag-guard:end
