@@ -120,8 +120,8 @@ export const createMediaFetcher = (deps: MediaFetcherDeps): MediaFetcher => {
     const allowed = await checkHost(url, settings, lookupHost, purpose, {
       ...(options?.signal ? { signal: options.signal } : {}),
     });
+    // checkHost returns CANCELLED for an aborted signal, so a cancelled operation never copies the cookies.
     if (!allowed.success) return allowed;
-    if (options?.signal?.aborted) return err(createError("CANCELLED", "Operation cancelled."));
     const cookies = await prepareCookies(settings, deps.tmpDir);
     if (!cookies.success) return cookies;
     try {

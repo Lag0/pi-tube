@@ -591,10 +591,16 @@ describe("cancellation before yt-dlp", () => {
       return [{ address: "93.184.216.34", family: 4 }];
     };
     const fetcher = createMediaFetcher({ env: { PATH: "/bin" }, cwd: root, tmpDir, run, lookup });
+    const cookiesFile = path.join(root, "cookies.txt");
+    writeFileSync(cookiesFile, "# Netscape HTTP Cookie File\n.example.com\tTRUE\t/\tTRUE\t0\tsid\tabc\n");
     const controller = new AbortController();
     controller.abort();
 
-    const result = await fetcher.resolve(YOUTUBE, SETTINGS, { signal: controller.signal });
+    const result = await fetcher.resolve(
+      YOUTUBE,
+      { ...SETTINGS, cookies: { file: cookiesFile, origin: "config" } },
+      { signal: controller.signal },
+    );
 
     expect(result.success ? undefined : result.error.code).toBe("CANCELLED");
     expect(hosts).toEqual([]);
