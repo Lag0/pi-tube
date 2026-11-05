@@ -293,6 +293,22 @@ describe("library cache", () => {
     expect(stt.groq.requests).toHaveLength(1);
   });
 
+  test("with the key gone, a direct URL already in the library is a cache hit after the resolve", async () => {
+    const { stt, deps } = setup({ env: { GROQ_API_KEY: "gq" } });
+    const media = createFakeMediaFetcher();
+    await createTranscribe({ ...deps, media: media.fetcher })({ input: INPUT, provider: "groq", format: "markdown" });
+
+    const again = await createTranscribe({ ...deps, env: {}, media: media.fetcher })({
+      input: INPUT,
+      provider: "groq",
+      format: "markdown",
+    });
+
+    expect(again.success ? again.data.cacheHit : again.error.code).toBe(true);
+    expect(media.calls.fetchAudio).toHaveLength(1);
+    expect(stt.groq.requests).toHaveLength(1);
+  });
+
   test("a page miss without a key is PROVIDER_NOT_CONFIGURED before yt-dlp runs", async () => {
     const { deps } = setup();
     const media = createFakeMediaFetcher({ source: youtube });
