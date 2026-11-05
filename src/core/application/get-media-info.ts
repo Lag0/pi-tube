@@ -6,7 +6,7 @@ import { isSiteSource } from "../domain/source.ts";
 import { resolveSourceSettings } from "../domain/source-settings.ts";
 import type { ConfigStore } from "../ports/config-store.ts";
 import type { MediaFetcher } from "../ports/media-fetcher.ts";
-import { type AuditTrail, type AuditTrailDeps, beginAudit } from "./audit-trail.ts";
+import { type AuditTrail, type AuditTrailDeps, audited } from "./audit-trail.ts";
 import { ensureNotAborted, type UseCase } from "./operation.ts";
 
 /** Dependencies of `getMediaInfo`. */
@@ -39,6 +39,5 @@ const runGetMediaInfo =
 export const createGetMediaInfo =
   (deps: GetMediaInfoDeps): UseCase<{ readonly input: string }, MediaInfo> =>
   async (input, options) => {
-    const trail = beginAudit(deps.audit, "info", input.input);
-    return trail.finish(await runGetMediaInfo(deps, trail)(input, options), options);
+    return audited(deps.audit, "info", input.input, options, (trail) => runGetMediaInfo(deps, trail)(input, options));
   };

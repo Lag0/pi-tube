@@ -710,6 +710,20 @@ describe("audit", () => {
     expect(result.success && "cost" in result.data).toBe(false);
   });
 
+  test("a provider that throws still leaves a record, as UNEXPECTED with the provider", async () => {
+    const throwing = {
+      ...paidDeepgram(),
+      transcribe: async () => {
+        throw new SyntaxError("Unexpected token < in JSON");
+      },
+    };
+    const { audit, deps } = auditSetup(throwing);
+
+    await expect(run(createTranscribe(deps))).rejects.toThrow("Unexpected token");
+    expect(audit.records).toHaveLength(1);
+    expect(audit.records[0]).toMatchObject({ result: "error", errorCode: "UNEXPECTED", provider: "deepgram" });
+  });
+
   test("a provider failure records its code and the provider, without a cost", async () => {
     const { audit, deps } = auditSetup(paidDeepgram(createError("PROVIDER_RATE_LIMIT", "Too many requests.")));
 

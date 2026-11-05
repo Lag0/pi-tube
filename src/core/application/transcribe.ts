@@ -15,7 +15,7 @@ import type { ConfigStore } from "../ports/config-store.ts";
 import type { LibraryStore, StoredTranscript } from "../ports/library-store.ts";
 import type { FetchedAudio, MediaFetcher } from "../ports/media-fetcher.ts";
 import type { SttProvider, SttTranscript } from "../ports/stt-provider.ts";
-import { type AuditTrail, type AuditTrailDeps, beginAudit } from "./audit-trail.ts";
+import { type AuditTrail, type AuditTrailDeps, audited } from "./audit-trail.ts";
 import { ensureNotAborted, type UseCase } from "./operation.ts";
 
 /** Env var naming the default provider; wins over the config default. */
@@ -274,6 +274,7 @@ const runTranscribe =
 export const createTranscribe =
   (deps: TranscribeDeps): UseCase<TranscribeInput, TranscribeOutput> =>
   async (input, options) => {
-    const trail = beginAudit(deps.audit, "transcribe", input.input);
-    return trail.finish(await runTranscribe(deps, trail)(input, options), options);
+    return audited(deps.audit, "transcribe", input.input, options, (trail) =>
+      runTranscribe(deps, trail)(input, options),
+    );
   };

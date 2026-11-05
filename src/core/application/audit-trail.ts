@@ -7,8 +7,9 @@ import {
   PRICE_TABLE_DATE,
   redactAuditInput,
 } from "../domain/audit.ts";
+import { toPiTubeError } from "../domain/errors.ts";
 import type { OperationOptions } from "../domain/operation.ts";
-import type { Result } from "../domain/result.ts";
+import { err, type Result } from "../domain/result.ts";
 import type { AuditLog } from "../ports/audit-log.ts";
 
 /** What an audited use case needs to record its operation. */
@@ -53,25 +54,50 @@ export const beginAudit = (deps: AuditTrailDeps, operation: AuditOperation, inpu
     },
     finish: async (result, options) => {
       const cost = costOf(noted);
-      const appended = await deps.audit.append({
-        operationId,
-        startedAt: startedAt.toISOString(),
-        operation,
-        adapter: deps.adapter,
-        input: redactAuditInput(input),
-        ...(noted.sourceKey === undefined ? {} : { sourceKey: noted.sourceKey }),
-        ...(noted.provider === undefined ? {} : { provider: noted.provider }),
-        ...(noted.model === undefined ? {} : { model: noted.model }),
-        durationMs: deps.now().getTime() - startedAt.getTime(),
-        ...(noted.audioSeconds === undefined ? {} : { audioSeconds: noted.audioSeconds }),
-        ...(cost === undefined ? {} : { cost }),
-        ...(noted.cacheHit === undefined ? {} : { cacheHit: noted.cacheHit }),
-        result: result.success ? "ok" : "error",
-        ...(result.success ? {} : { errorCode: result.error.code }),
-        versions: deps.versions,
-      });
+      // A log that throws instead of returning an error must not turn a finished (maybe paid) operation into a crash.
+      const appended = await deps.audit
+        .append({
+          operationId,
+          startedAt: startedAt.toISOString(),
+          operation,
+          adapter: deps.adapter,
+          input: redactAuditInput(input),
+          ...(noted.sourceKey === undefined ? {} : { sourceKey: noted.sourceKey }),
+          ...(noted.provider === undefined ? {} : { provider: noted.provider }),
+          ...(noted.model === undefined ? {} : { model: noted.model }),
+          durationMs: deps.now().getTime() - startedAt.getTime(),
+          ...(noted.audioSeconds === undefined ? {} : { audioSeconds: noted.audioSeconds }),
+          ...(cost === undefined ? {} : { cost }),
+          ...(noted.cacheHit === undefined ? {} : { cacheHit: noted.cacheHit }),
+          result: result.success ? "ok" : "error",
+          ...(result.success ? {} : { errorCode: result.error.code }),
+          versions: deps.versions,
+        })
+        .catch((caught: unknown) => err(toPiTubeError(caught)));
       if (!appended.success) options?.onProgress?.({ label: "Audit log not written", detail: appended.error.code });
       return result;
     },
   };
+};
+
+/**
+ * Runs an audited use case body and always records it: its result, or a throw, recorded as UNEXPECTED and then
+ * rethrown, so the caller still sees the bug.
+ */
+export const audited = async <T>(
+  deps: AuditTrailDeps,
+  operation: AuditOperation,
+  input: string,
+  options: OperationOptions | undefined,
+  body: (trail: AuditTrail) => Promise<Result<T>>,
+): Promise<Result<T>> => {
+  const trail = beginAudit(deps, operation, input);
+  let result: Result<T>;
+  try {
+    result = await body(trail);
+  } catch (caught) {
+    await trail.finish(err(toPiTubeError(caught)), options);
+    throw caught;
+  }
+  return trail.finish(result, options);
 };

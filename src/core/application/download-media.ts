@@ -7,7 +7,7 @@ import { classifyInput, ensureFinishedMedia } from "../domain/source-policy.ts";
 import { resolveSourceSettings } from "../domain/source-settings.ts";
 import type { ConfigStore } from "../ports/config-store.ts";
 import type { MediaFetcher } from "../ports/media-fetcher.ts";
-import { type AuditTrail, type AuditTrailDeps, beginAudit } from "./audit-trail.ts";
+import { type AuditTrail, type AuditTrailDeps, audited } from "./audit-trail.ts";
 import { ensureNotAborted, type UseCase } from "./operation.ts";
 
 /** Input of `downloadMedia`. A missing `outputDir` means the default downloads directory, never the cwd. */
@@ -78,6 +78,5 @@ const runDownload =
 export const createDownloadMedia =
   (deps: DownloadMediaDeps): UseCase<DownloadMediaInput, DownloadMediaOutput> =>
   async (input, options) => {
-    const trail = beginAudit(deps.audit, "download", input.input);
-    return trail.finish(await runDownload(deps, trail)(input, options), options);
+    return audited(deps.audit, "download", input.input, options, (trail) => runDownload(deps, trail)(input, options));
   };
