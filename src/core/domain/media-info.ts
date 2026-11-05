@@ -1,6 +1,6 @@
 import type { MediaMetadata, ResolvedSource, SourceKind, SourceTier } from "./source.ts";
-import { tierOf } from "./source-policy.ts";
-import { toPersistedUrl, withoutCredentials } from "./transcript/build-artifact.ts";
+import { tierOf, withoutCredentials } from "./source-policy.ts";
+import { toPersistedUrl } from "./transcript/build-artifact.ts";
 
 /** What `info` reports about a source, with the same URL redaction as a saved transcript. */
 export interface MediaInfo {

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { beginAudit } from "../../../src/core/application/audit-trail.ts";
+import { audited, beginAudit } from "../../../src/core/application/audit-trail.ts";
 import { createError } from "../../../src/core/domain/errors.ts";
 import type { ProgressEvent } from "../../../src/core/domain/operation.ts";
 import { err, ok } from "../../../src/core/domain/result.ts";
@@ -66,6 +66,51 @@ describe("beginAudit", () => {
       cacheHit: false,
       cost: { estimate: 0.001362, currency: "USD", priceTable: "2026-10-31" },
     });
+  });
+
+  test("an append that throws keeps the operation's result and reports it as progress", async () => {
+    const events: ProgressEvent[] = [];
+    const throwing = {
+      ...createInMemoryAuditLog(),
+      append: async () => {
+        throw new Error("disk vanished");
+      },
+    };
+    const trail = beginAudit(auditDepsFor(throwing), "transcribe", "x");
+
+    const result = await trail.finish(ok("saved"), { onProgress: (event) => events.push(event) });
+
+    expect(result).toEqual(ok("saved"));
+    expect(events).toEqual([{ label: "Audit log not written", detail: "UNEXPECTED" }]);
+  });
+
+  test("an append that throws before returning a promise is reported the same way", async () => {
+    const events: ProgressEvent[] = [];
+    const throwing = {
+      ...createInMemoryAuditLog(),
+      append: (): Promise<never> => {
+        throw new Error("not even a promise");
+      },
+    };
+    const trail = beginAudit(auditDepsFor(throwing), "transcribe", "x");
+
+    const result = await trail.finish(ok("saved"), { onProgress: (event) => events.push(event) });
+
+    expect(result).toEqual(ok("saved"));
+    expect(events).toEqual([{ label: "Audit log not written", detail: "UNEXPECTED" }]);
+  });
+
+  test("audited records a throw in the body as UNEXPECTED and rethrows it", async () => {
+    const log = createInMemoryAuditLog();
+    const boom = new SyntaxError("Unexpected token");
+
+    const run = audited(auditDepsFor(log), "info", "x", undefined, async () => {
+      throw boom;
+    });
+
+    await expect(run).rejects.toBe(boom);
+    expect(log.records).toHaveLength(1);
+    expect(log.records[0]).toMatchObject({ operation: "info", result: "error", errorCode: "UNEXPECTED" });
   });
 
   test("a failed append keeps the operation's result and reports it as progress", async () => {

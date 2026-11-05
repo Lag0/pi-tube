@@ -7,7 +7,7 @@ import { pageTranscript, type TranscriptPage, type TranscriptReadRequest } from 
 import type { ConfigStore } from "../ports/config-store.ts";
 import type { LibraryEntry, LibraryStore, PruneReport, StoredTranscript } from "../ports/library-store.ts";
 import { checkDayRange } from "./audit.ts";
-import { type AuditTrailDeps, beginAudit } from "./audit-trail.ts";
+import { type AuditTrailDeps, audited } from "./audit-trail.ts";
 import { ensureNotAborted, type UseCase } from "./operation.ts";
 
 /** Most entries one page may hold. */
@@ -206,6 +206,5 @@ export const createPruneLibrary =
       `include_transcripts=${input.includeTranscripts}`,
       `dry_run=${input.dryRun}`,
     ].join(" ");
-    const trail = beginAudit(deps.audit, "library_prune", auditInput);
-    return trail.finish(await runPrune(deps)(input, options), options);
+    return audited(deps.audit, "library_prune", auditInput, options, () => runPrune(deps)(input, options));
   };

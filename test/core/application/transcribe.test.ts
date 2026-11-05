@@ -278,6 +278,80 @@ describe("library cache", () => {
     expect(stt.groq.requests).toHaveLength(1);
   });
 
+  test("with the key gone, a chosen provider still serves a cache hit", async () => {
+    const { stt, deps } = setup({ env: { GROQ_API_KEY: "gq" } });
+    const media = createFakeMediaFetcher({ source: youtube });
+    await createTranscribe({ ...deps, media: media.fetcher })({ input: YOUTUBE, provider: "groq", format: "markdown" });
+
+    const again = await createTranscribe({ ...deps, env: {}, media: media.fetcher })({
+      input: YOUTUBE,
+      provider: "groq",
+      format: "markdown",
+    });
+
+    expect(again.success ? again.data.cacheHit : again.error.code).toBe(true);
+    expect(stt.groq.requests).toHaveLength(1);
+  });
+
+  test("with the key gone, a direct URL already in the library is a cache hit after the resolve", async () => {
+    const { stt, deps } = setup({ env: { GROQ_API_KEY: "gq" } });
+    const media = createFakeMediaFetcher();
+    await createTranscribe({ ...deps, media: media.fetcher })({ input: INPUT, provider: "groq", format: "markdown" });
+
+    const again = await createTranscribe({ ...deps, env: {}, media: media.fetcher })({
+      input: INPUT,
+      provider: "groq",
+      format: "markdown",
+    });
+
+    expect(again.success ? again.data.cacheHit : again.error.code).toBe(true);
+    expect(media.calls.fetchAudio).toHaveLength(1);
+    expect(stt.groq.requests).toHaveLength(1);
+  });
+
+  test("a page miss without a key is PROVIDER_NOT_CONFIGURED before yt-dlp runs", async () => {
+    const { deps } = setup();
+    const media = createFakeMediaFetcher({ source: youtube });
+
+    const result = await createTranscribe({ ...deps, media: media.fetcher })({
+      input: YOUTUBE,
+      provider: "groq",
+      format: "markdown",
+    });
+
+    expect(result.success ? undefined : result.error.code).toBe("PROVIDER_NOT_CONFIGURED");
+    expect(media.calls.resolve).toHaveLength(0);
+  });
+
+  test("force without a key fails before resolving: the library is not read, so nothing can be served", async () => {
+    const { deps } = setup();
+    const media = createFakeMediaFetcher();
+
+    const result = await createTranscribe({ ...deps, media: media.fetcher })({
+      input: INPUT,
+      provider: "groq",
+      force: true,
+      format: "markdown",
+    });
+
+    expect(result.success ? undefined : result.error.code).toBe("PROVIDER_NOT_CONFIGURED");
+    expect(media.calls.resolve).toHaveLength(0);
+  });
+
+  test("a direct URL miss without a key fails before any download", async () => {
+    const { deps } = setup();
+    const media = createFakeMediaFetcher();
+
+    const result = await createTranscribe({ ...deps, media: media.fetcher })({
+      input: INPUT,
+      provider: "groq",
+      format: "markdown",
+    });
+
+    expect(result.success ? undefined : result.error.code).toBe("PROVIDER_NOT_CONFIGURED");
+    expect(media.calls.fetchAudio).toHaveLength(0);
+  });
+
   test("a direct URL is resolved again (no yt-dlp) but neither downloaded nor transcribed again", async () => {
     const { stt, media, transcribe } = cached();
 
@@ -708,6 +782,20 @@ describe("audit", () => {
 
     expect(result.success && result.data.audioSeconds).toBe(19);
     expect(result.success && "cost" in result.data).toBe(false);
+  });
+
+  test("a provider that throws still leaves a record, as UNEXPECTED with the provider", async () => {
+    const throwing = {
+      ...paidDeepgram(),
+      transcribe: async () => {
+        throw new SyntaxError("Unexpected token < in JSON");
+      },
+    };
+    const { audit, deps } = auditSetup(throwing);
+
+    await expect(run(createTranscribe(deps))).rejects.toThrow("Unexpected token");
+    expect(audit.records).toHaveLength(1);
+    expect(audit.records[0]).toMatchObject({ result: "error", errorCode: "UNEXPECTED", provider: "deepgram" });
   });
 
   test("a provider failure records its code and the provider, without a cost", async () => {

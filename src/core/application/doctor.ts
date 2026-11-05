@@ -83,6 +83,14 @@ const providerChecks = (deps: DoctorDeps, config: PiTubeConfig): readonly Doctor
 const ytDlpCheck = (tool: ToolVersion): DoctorCheck => {
   const fix = createError("YTDLP_NOT_FOUND", "yt-dlp is not on PATH.").hint;
   if (!tool.found) return { id: "yt-dlp", status: "error", summary: "yt-dlp is not on PATH.", fix };
+  if (tool.cannotRun !== undefined) {
+    return {
+      id: "yt-dlp",
+      status: "error",
+      summary: `yt-dlp is on PATH but cannot be run (${tool.cannotRun}).`,
+      fix: "Make yt-dlp executable (`chmod +x` on its file) or reinstall it (`brew install yt-dlp` or `pipx install yt-dlp`).",
+    };
+  }
   if (tool.version === undefined) return warn("yt-dlp", "yt-dlp is on PATH but did not report its version.", fix);
   return pass("yt-dlp", `yt-dlp ${tool.version}.`);
 };
@@ -95,6 +103,13 @@ const ffmpegCheck = (tool: ToolVersion): DoctorCheck => {
       "ffmpeg",
       "ffmpeg is not on PATH; `download` needs it to save audio as mp3 and to merge video.",
       FFMPEG_FIX,
+    );
+  }
+  if (tool.cannotRun !== undefined) {
+    return warn(
+      "ffmpeg",
+      `ffmpeg is on PATH but cannot be run (${tool.cannotRun}); \`download\` needs it to save audio as mp3 and to merge video.`,
+      "Make ffmpeg executable (`chmod +x` on its file) or reinstall it (`brew install ffmpeg`, `winget install ffmpeg` or your package manager).",
     );
   }
   if (tool.version === undefined)

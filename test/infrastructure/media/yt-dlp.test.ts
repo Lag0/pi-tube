@@ -108,6 +108,16 @@ describe("parseYtDlpInfo", () => {
   });
 });
 
+describe("parseYtDlpInfo and credentials", () => {
+  test("a playlist error never shows the URL's user:password", () => {
+    const result = parseYtDlpInfo(JSON.stringify({ _type: "multi_video" }), "https://u:p@example.com/v");
+
+    expect(result.success ? undefined : result.error.message).toBe(
+      "`https://example.com/v` holds several videos (_type=multi_video); pi-tube takes one video at a time.",
+    );
+  });
+});
+
 describe("interpretYtDlpRun", () => {
   const failed = (stderr: string): ProcessResult => ({ outcome: "exited", exitCode: 1, stdout: "", stderr });
   const URL_ = "https://www.youtube.com/watch?v=abc";
@@ -121,6 +131,50 @@ describe("interpretYtDlpRun", () => {
       code: "SOURCE_AUTH_REQUIRED",
       message: `\`${URL_}\` requires a logged-in session (${BOT}).`,
       hint: "Export cookies for this site from a browser where you are logged in to a cookies.txt file (Netscape format), then run `pi-tube config set cookies.file <absolute path>` or set PI_TUBE_COOKIES_FILE.",
+    });
+  });
+
+  test.each([
+    ["SOURCE_UNSUPPORTED", "ERROR: Unsupported URL: https://u:p@vimeo.com/1"],
+    [
+      "SOURCE_AUTH_REQUIRED",
+      "ERROR: [vimeo] 1: This video is only available for registered users https://u:p@vimeo.com/1",
+    ],
+    ["SOURCE_EXTRACT_FAILED", "ERROR: [generic] https://u:p@vimeo.com/1: boom"],
+  ])("%s never shows the URL's user:password, in the message or in yt-dlp's detail", (code, stderr) => {
+    const result = interpretYtDlpRun(failed(stderr), "site_metadata", {
+      url: "https://u:p@vimeo.com/1",
+      timeoutMs: 1000,
+    });
+
+    expect(result.success ? undefined : result.error.code).toBe(code);
+    expect(JSON.stringify(result)).not.toContain("u:p@");
+    expect(result.success ? "" : result.error.message).toContain("https://vimeo.com/1");
+  });
+
+  test("a yt-dlp that cannot be executed is YTDLP_NOT_FOUND (a dependency, exit 3)", () => {
+    const result = interpretYtDlpRun(
+      { outcome: "spawn_failed", exitCode: null, stdout: "", stderr: "EACCES" },
+      "youtube_metadata",
+      { url: URL_, timeoutMs: 1000 },
+    );
+
+    expect(result.success ? undefined : result.error).toMatchObject({
+      code: "YTDLP_NOT_FOUND",
+      message: "`yt-dlp` was found but cannot be run (EACCES).",
+    });
+  });
+
+  test("a run spawn refuses for another reason is the purpose's extraction error", () => {
+    const result = interpretYtDlpRun(
+      { outcome: "spawn_failed", exitCode: null, stdout: "", stderr: "ERR_INVALID_ARG_VALUE" },
+      "download",
+      { url: URL_, timeoutMs: 1000 },
+    );
+
+    expect(result.success ? undefined : result.error).toMatchObject({
+      code: "DOWNLOAD_FAILED",
+      message: "Failed to download media via yt-dlp (yt-dlp could not be started: ERR_INVALID_ARG_VALUE).",
     });
   });
 

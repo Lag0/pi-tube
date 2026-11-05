@@ -1,5 +1,5 @@
 import { type Chapter, isSiteSource, type ResolvedSource } from "../source.ts";
-import { tierOf } from "../source-policy.ts";
+import { tierOf, withoutCredentials } from "../source-policy.ts";
 import type { OutputArtifact, OutputArtifactSegment, OutputArtifactSource } from "./contract.ts";
 import { OUTPUT_SCHEMA_VERSION } from "./contract.ts";
 import type { TranscriptionExecutionResult } from "./types.ts";
@@ -20,18 +20,6 @@ const SEGMENT_COMPACTION_MAX_DURATION_MS = 18000;
 export interface BuildOutputArtifactOptions {
   generatedAt?: string;
   includeTimestamps?: boolean;
-}
-
-/** Drops `user:password@`; a string that is not a URL is returned as is. */
-export function withoutCredentials(url: string): string {
-  try {
-    const parsed = new URL(url);
-    parsed.username = "";
-    parsed.password = "";
-    return parsed.toString();
-  } catch {
-    return url;
-  }
 }
 
 /** Drops credentials, query and fragment, which can carry signatures or tokens; a non-URL is returned as is. */

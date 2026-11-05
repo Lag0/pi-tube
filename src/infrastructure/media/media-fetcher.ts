@@ -14,7 +14,7 @@ import {
   normalizeDirectMediaUrl,
   tryParseHttpUrl,
 } from "../../core/domain/source-policy.ts";
-import type { SourceSettings } from "../../core/domain/source-settings.ts";
+import { MAX_LOCAL_FILE_BYTES_LIMIT, type SourceSettings } from "../../core/domain/source-settings.ts";
 import type { MediaFetcher, ToolVersion } from "../../core/ports/media-fetcher.ts";
 import { errnoOf } from "../errno.ts";
 import { type ProcessRequest, type ProcessResult, runProcess } from "../process/run-process.ts";
@@ -117,7 +117,10 @@ export const createMediaFetcher = (deps: MediaFetcherDeps): MediaFetcher => {
     settings: SourceSettings,
     options: OperationOptions | undefined,
   ): Promise<Result<string>> => {
-    const allowed = await checkHost(url, settings, lookupHost, purpose);
+    const allowed = await checkHost(url, settings, lookupHost, purpose, {
+      ...(options?.signal ? { signal: options.signal } : {}),
+    });
+    // checkHost returns CANCELLED for an aborted signal, so a cancelled operation never copies the cookies.
     if (!allowed.success) return allowed;
     const cookies = await prepareCookies(settings, deps.tmpDir);
     if (!cookies.success) return cookies;
@@ -193,6 +196,9 @@ export const createMediaFetcher = (deps: MediaFetcherDeps): MediaFetcher => {
           "--no-progress",
           "-f",
           AUDIO_FORMAT_SELECTOR,
+          // The provider upload reads the whole file into memory: the local file limit bounds page audio too.
+          "--max-filesize",
+          String(settings.maxLocalFileBytes),
           "--print",
           "after_move:filepath",
           "-o",
@@ -207,9 +213,29 @@ export const createMediaFetcher = (deps: MediaFetcherDeps): MediaFetcher => {
       const filePath = stdout.success ? parseDownloadedPath(stdout.data) : undefined;
       if (!filePath) {
         await removeDir(dir);
+        // `--max-filesize` makes yt-dlp skip the file and still exit 0, with nothing printed.
         return stdout.success
-          ? err(createError("DOWNLOAD_FAILED", "Failed to download media via yt-dlp (no file was reported)."))
+          ? err(
+              createError(
+                "DOWNLOAD_FAILED",
+                "Failed to download media via yt-dlp (no file was reported; the audio may be larger than local_files.max_bytes).",
+                {
+                  hint: `If the audio is larger than local_files.max_bytes, raise it with \`pi-tube config set local_files.max_bytes <bytes>\` (at most ${MAX_LOCAL_FILE_BYTES_LIMIT}); otherwise check that the page opens in a browser and retry.`,
+                },
+              ),
+            )
           : stdout;
+      }
+      // yt-dlp cannot apply `--max-filesize` when the size is unknown in advance (fragmented streams).
+      const size = (await stat(filePath).catch(() => undefined))?.size;
+      if (size !== undefined && size > settings.maxLocalFileBytes) {
+        await removeDir(dir);
+        return err(
+          createError(
+            "LOCAL_FILE_TOO_LARGE",
+            `The audio downloaded from the page is ${size} bytes; the limit is ${settings.maxLocalFileBytes} bytes (local_files.max_bytes).`,
+          ),
+        );
       }
       let released = false;
       const release = async (): Promise<void> => {
@@ -270,6 +296,7 @@ export const createMediaFetcher = (deps: MediaFetcherDeps): MediaFetcher => {
         });
         if (result.outcome === "aborted") return err(createError("CANCELLED", "Operation cancelled."));
         if (result.outcome === "not_found") return ok({ found: false });
+        if (result.outcome === "spawn_failed") return ok({ found: true, cannotRun: result.stderr });
         const found =
           result.outcome === "exited" && result.exitCode === 0 ? VERSION_OF[command](result.stdout) : undefined;
         return ok(found === undefined ? { found: true } : { found: true, version: found });

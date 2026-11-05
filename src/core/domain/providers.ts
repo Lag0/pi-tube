@@ -69,7 +69,8 @@ const PROVIDER_CHOICE_LABEL: Readonly<Record<ProviderChoiceSource, string>> = {
   config: " in config `defaults.provider`",
 };
 
-const notConfigured = (descriptor: ProviderDescriptor): PiTubeError =>
+/** The error for a chosen provider that has no key. */
+export const providerNotConfigured = (descriptor: ProviderDescriptor): PiTubeError =>
   createError("PROVIDER_NOT_CONFIGURED", `Provider \`${descriptor.id}\` is not configured.`, {
     hint: `Run \`pi-tube auth login ${descriptor.id}\` or set ${descriptor.credentialEnvNames[0] ?? "its API key env var"}.`,
   });
@@ -77,7 +78,8 @@ const notConfigured = (descriptor: ProviderDescriptor): PiTubeError =>
 /**
  * Picks the provider for a transcription, with no fallback: the explicit choice, then
  * `PI_TUBE_TRANSCRIPTION_PROVIDER`, then the config default, then the first configured provider in
- * registry order. A chosen provider without a key fails instead of trying another one.
+ * registry order. A chosen provider without a key comes back without one, never replaced by another: the caller
+ * fails with `providerNotConfigured` before any paid work, and a cache hit needs no key.
  */
 export const selectProvider = (input: {
   readonly explicit?: string;
@@ -86,7 +88,7 @@ export const selectProvider = (input: {
   readonly descriptors: readonly ProviderDescriptor[];
   readonly config: PiTubeConfig;
   readonly env: EnvironmentVariables;
-}): Result<{ readonly descriptor: ProviderDescriptor; readonly apiKey: string }> => {
+}): Result<{ readonly descriptor: ProviderDescriptor; readonly apiKey?: string }> => {
   const choices: ReadonlyArray<readonly [string | undefined, ProviderChoiceSource]> = [
     [input.explicit, "explicit"],
     [input.envDefault, "env"],
@@ -104,7 +106,7 @@ export const selectProvider = (input: {
       );
     }
     const { apiKey } = resolveCredential(found.data, input.config, input.env);
-    return apiKey ? ok({ descriptor: found.data, apiKey }) : err(notConfigured(found.data));
+    return ok(apiKey ? { descriptor: found.data, apiKey } : { descriptor: found.data });
   }
   for (const descriptor of input.descriptors) {
     const { apiKey } = resolveCredential(descriptor, input.config, input.env);

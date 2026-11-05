@@ -242,6 +242,17 @@ describe("resolve", () => {
     });
   });
 
+  test("a page URL's user:password never reaches an error, though yt-dlp gets it", async () => {
+    const url = "https://u:p@www.youtube.com/playlist?list=PL1";
+    const { requests, run } = fakeRun(() => exited(JSON.stringify({ _type: "playlist", id: "PL1", entries: [] })));
+
+    const result = await fetcherWith(run).resolve(url, SETTINGS);
+
+    expect(result.success ? undefined : result.error.code).toBe("SOURCE_UNSUPPORTED");
+    expect(JSON.stringify(result)).not.toContain("u:p@");
+    expect(requests[0]?.args.at(-1)).toContain("u:p@");
+  });
+
   test.each(["is_live", "is_upcoming"])(
     "a %s page resolves with its live status instead of failing",
     async (status) => {
@@ -348,6 +359,48 @@ describe("fetchAudio", () => {
     expect(requests[0]?.timeoutMs).toBe(1_800_000);
     await result.data.release();
     expect(readdirSync(tmpDir)).toEqual([]);
+  });
+
+  const writesAudio = (content: string) => (request: ProcessRequest) => {
+    const outputTemplate = request.args[request.args.indexOf("-o") + 1] ?? "";
+    const file = outputTemplate.replace("%(id)s.%(ext)s", "abc.m4a");
+    mkdirSync(path.dirname(file), { recursive: true });
+    writeFileSync(file, content);
+    return exited(`${file}\n`);
+  };
+
+  test("the audio download is capped at local_files.max_bytes", async () => {
+    const { requests, run } = fakeRun(writesAudio("audio"));
+
+    await fetcherWith(run).fetchAudio(youtubeSource, { ...SETTINGS, maxLocalFileBytes: 1234 });
+
+    const args = requests[0]?.args ?? [];
+    expect(args[args.indexOf("--max-filesize") + 1]).toBe("1234");
+  });
+
+  test("downloaded audio over local_files.max_bytes is LOCAL_FILE_TOO_LARGE and leaves the temp dir empty", async () => {
+    const { run } = fakeRun(writesAudio("audio"));
+
+    const result = await fetcherWith(run).fetchAudio(youtubeSource, { ...SETTINGS, maxLocalFileBytes: 4 });
+
+    expect(result.success ? undefined : result.error).toMatchObject({
+      code: "LOCAL_FILE_TOO_LARGE",
+      message: "The audio downloaded from the page is 5 bytes; the limit is 4 bytes (local_files.max_bytes).",
+    });
+    expect(existsSync(tmpDir) ? readdirSync(tmpDir) : []).toEqual([]);
+  });
+
+  test("a download yt-dlp skipped (no file reported) names the size limit as a likely cause", async () => {
+    const { run } = fakeRun(() => exited(""));
+
+    const result = await fetcherWith(run).fetchAudio(youtubeSource, SETTINGS);
+
+    expect(result.success ? undefined : result.error).toMatchObject({
+      code: "DOWNLOAD_FAILED",
+      message:
+        "Failed to download media via yt-dlp (no file was reported; the audio may be larger than local_files.max_bytes).",
+      hint: "If the audio is larger than local_files.max_bytes, raise it with `pi-tube config set local_files.max_bytes <bytes>` (at most 2147483647); otherwise check that the page opens in a browser and retry.",
+    });
   });
 
   test("a failed audio download is DOWNLOAD_FAILED and leaves the temp dir empty", async () => {
@@ -529,6 +582,33 @@ describe("cookies", () => {
   });
 });
 
+describe("cancellation before yt-dlp", () => {
+  test("an aborted signal resolves nothing: no lookup, no cookies copy, no yt-dlp", async () => {
+    const { requests, run } = fakeRun(() => exited("{}"));
+    const hosts: string[] = [];
+    const lookup = async (hostname: string) => {
+      hosts.push(hostname);
+      return [{ address: "93.184.216.34", family: 4 }];
+    };
+    const fetcher = createMediaFetcher({ env: { PATH: "/bin" }, cwd: root, tmpDir, run, lookup });
+    const cookiesFile = path.join(root, "cookies.txt");
+    writeFileSync(cookiesFile, "# Netscape HTTP Cookie File\n.example.com\tTRUE\t/\tTRUE\t0\tsid\tabc\n");
+    const controller = new AbortController();
+    controller.abort();
+
+    const result = await fetcher.resolve(
+      YOUTUBE,
+      { ...SETTINGS, cookies: { file: cookiesFile, origin: "config" } },
+      { signal: controller.signal },
+    );
+
+    expect(result.success ? undefined : result.error.code).toBe("CANCELLED");
+    expect(hosts).toEqual([]);
+    expect(requests).toEqual([]);
+    expect(existsSync(tmpDir)).toBe(false);
+  });
+});
+
 describe("host guard", () => {
   test("resolve, fetchAudio and download refuse a private host and never run yt-dlp", async () => {
     const { requests, run } = fakeRun(() => exited("{}"));
@@ -687,6 +767,18 @@ describe("inspect", () => {
 
     expect(report.success ? report.data : report).toMatchObject({ ytDlp: { found: false }, ffmpeg: { found: true } });
     expect(report.success && "version" in report.data.ffmpeg).toBe(false);
+  });
+
+  test("a tool that cannot be run is found, with the reason it cannot run", async () => {
+    const { run } = fakeRun((request) =>
+      request.command === "yt-dlp"
+        ? { outcome: "spawn_failed", exitCode: null, stdout: "", stderr: "EACCES" }
+        : exited("ffmpeg version 7.1\n"),
+    );
+
+    const report = await fetcherWith(run).inspect(SETTINGS);
+
+    expect(report.success ? report.data.ytDlp : report).toEqual({ found: true, cannotRun: "EACCES" });
   });
 
   test("a readable cookies file is ok, and no copy is made", async () => {

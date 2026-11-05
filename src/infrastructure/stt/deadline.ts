@@ -101,7 +101,7 @@ export const audioReadError = (audioPath: string, error: unknown): PiTubeError =
   });
 };
 
-// The whole file is read into memory: the local file limit (`local_files.max_bytes`) bounds it.
+// The whole file is read into memory: `local_files.max_bytes` bounds local files and audio downloaded from a page.
 const loadAudio = async (audio: AudioInput): Promise<Result<LoadedAudio>> => {
   if (audio.kind === "url") return ok(audio);
   try {
@@ -111,9 +111,20 @@ const loadAudio = async (audio: AudioInput): Promise<Result<LoadedAudio>> => {
   }
 };
 
+/** Longest provider error message pi-tube shows: SDK messages carry the whole response body. */
+const MAX_PROVIDER_MESSAGE_CHARS = 600;
+
+/** Takes the request's API key out of a provider error (SDKs echo request details) and bounds its length. */
+const redactProviderError = (error: PiTubeError, apiKey: string): PiTubeError => {
+  const redacted = apiKey.length > 0 ? error.message.split(apiKey).join("***") : error.message;
+  const message =
+    redacted.length > MAX_PROVIDER_MESSAGE_CHARS ? `${redacted.slice(0, MAX_PROVIDER_MESSAGE_CHARS)}…` : redacted;
+  return message === error.message ? error : { ...error, message };
+};
+
 /**
  * The flow every cloud provider shares: cancellation check, audio loading, the SDK call under a deadline,
- * then `interpret` turning the SDK response into a transcript or an error.
+ * then `interpret` turning the SDK response into a transcript or an error. A provider error never shows the key.
  */
 export const runProviderCall = async <T>(input: {
   readonly provider: ProviderId;
@@ -127,11 +138,13 @@ export const runProviderCall = async <T>(input: {
   const audio = await loadAudio(input.request.audio);
   if (!audio.success) return audio;
 
-  const outcome = await withDeadline((signal) => input.call(audio.data, signal), {
+  // `async`: an SDK that throws before returning a promise is a provider error like any other, redacted below.
+  const outcome = await withDeadline(async (signal) => input.call(audio.data, signal), {
     signal: input.options?.signal,
     timeoutMs: input.timeoutMs,
   });
-  if (!outcome.ok) return err(deadlineError(input.provider, outcome, input.timeoutMs));
+  if (!outcome.ok)
+    return err(redactProviderError(deadlineError(input.provider, outcome, input.timeoutMs), input.request.apiKey));
   const parsed = input.interpret(outcome.value);
   if (!parsed.success) return parsed;
   return ok({

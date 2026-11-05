@@ -24,6 +24,8 @@ export interface DownloadedMedia {
 export interface ToolVersion {
   readonly found: boolean;
   readonly version?: string;
+  /** Set when the tool is on PATH but cannot start, with the error code (EACCES, EPERM). */
+  readonly cannotRun?: string;
 }
 
 /** What `inspect` finds: the media tools and whether the cookies file can be used. */
