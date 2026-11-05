@@ -361,6 +361,47 @@ describe("fetchAudio", () => {
     expect(readdirSync(tmpDir)).toEqual([]);
   });
 
+  const writesAudio = (content: string) => (request: ProcessRequest) => {
+    const outputTemplate = request.args[request.args.indexOf("-o") + 1] ?? "";
+    const file = outputTemplate.replace("%(id)s.%(ext)s", "abc.m4a");
+    mkdirSync(path.dirname(file), { recursive: true });
+    writeFileSync(file, content);
+    return exited(`${file}\n`);
+  };
+
+  test("the audio download is capped at local_files.max_bytes", async () => {
+    const { requests, run } = fakeRun(writesAudio("audio"));
+
+    await fetcherWith(run).fetchAudio(youtubeSource, { ...SETTINGS, maxLocalFileBytes: 1234 });
+
+    const args = requests[0]?.args ?? [];
+    expect(args[args.indexOf("--max-filesize") + 1]).toBe("1234");
+  });
+
+  test("downloaded audio over local_files.max_bytes is LOCAL_FILE_TOO_LARGE and leaves the temp dir empty", async () => {
+    const { run } = fakeRun(writesAudio("audio"));
+
+    const result = await fetcherWith(run).fetchAudio(youtubeSource, { ...SETTINGS, maxLocalFileBytes: 4 });
+
+    expect(result.success ? undefined : result.error).toMatchObject({
+      code: "LOCAL_FILE_TOO_LARGE",
+      message: "The audio downloaded from the page is 5 bytes; the limit is 4 bytes (local_files.max_bytes).",
+    });
+    expect(existsSync(tmpDir) ? readdirSync(tmpDir) : []).toEqual([]);
+  });
+
+  test("a download yt-dlp skipped (no file reported) names the size limit as a likely cause", async () => {
+    const { run } = fakeRun(() => exited(""));
+
+    const result = await fetcherWith(run).fetchAudio(youtubeSource, SETTINGS);
+
+    expect(result.success ? undefined : result.error).toMatchObject({
+      code: "DOWNLOAD_FAILED",
+      message:
+        "Failed to download media via yt-dlp (no file was reported; the audio may be larger than local_files.max_bytes).",
+    });
+  });
+
   test("a failed audio download is DOWNLOAD_FAILED and leaves the temp dir empty", async () => {
     const { run } = fakeRun((request) => {
       const outputTemplate = request.args[request.args.indexOf("-o") + 1] ?? "";

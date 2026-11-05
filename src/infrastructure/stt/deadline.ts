@@ -101,7 +101,7 @@ export const audioReadError = (audioPath: string, error: unknown): PiTubeError =
   });
 };
 
-// The whole file is read into memory: the local file limit (`local_files.max_bytes`) bounds it.
+// The whole file is read into memory: `local_files.max_bytes` bounds local files and audio downloaded from a page.
 const loadAudio = async (audio: AudioInput): Promise<Result<LoadedAudio>> => {
   if (audio.kind === "url") return ok(audio);
   try {

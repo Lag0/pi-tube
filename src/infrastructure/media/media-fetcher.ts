@@ -196,6 +196,9 @@ export const createMediaFetcher = (deps: MediaFetcherDeps): MediaFetcher => {
           "--no-progress",
           "-f",
           AUDIO_FORMAT_SELECTOR,
+          // The provider upload reads the whole file into memory: the local file limit bounds page audio too.
+          "--max-filesize",
+          String(settings.maxLocalFileBytes),
           "--print",
           "after_move:filepath",
           "-o",
@@ -210,9 +213,26 @@ export const createMediaFetcher = (deps: MediaFetcherDeps): MediaFetcher => {
       const filePath = stdout.success ? parseDownloadedPath(stdout.data) : undefined;
       if (!filePath) {
         await removeDir(dir);
+        // `--max-filesize` makes yt-dlp skip the file and still exit 0, with nothing printed.
         return stdout.success
-          ? err(createError("DOWNLOAD_FAILED", "Failed to download media via yt-dlp (no file was reported)."))
+          ? err(
+              createError(
+                "DOWNLOAD_FAILED",
+                "Failed to download media via yt-dlp (no file was reported; the audio may be larger than local_files.max_bytes).",
+              ),
+            )
           : stdout;
+      }
+      // yt-dlp cannot apply `--max-filesize` when the size is unknown in advance (fragmented streams).
+      const size = (await stat(filePath).catch(() => undefined))?.size;
+      if (size !== undefined && size > settings.maxLocalFileBytes) {
+        await removeDir(dir);
+        return err(
+          createError(
+            "LOCAL_FILE_TOO_LARGE",
+            `The audio downloaded from the page is ${size} bytes; the limit is ${settings.maxLocalFileBytes} bytes (local_files.max_bytes).`,
+          ),
+        );
       }
       let released = false;
       const release = async (): Promise<void> => {
