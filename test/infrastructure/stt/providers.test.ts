@@ -17,7 +17,12 @@ afterAll(() => {
   rmSync(workDir, { recursive: true, force: true });
 });
 
-type Behavior = { kind: "resolve"; payload: unknown } | { kind: "reject"; error: unknown } | { kind: "hang" };
+type Behavior =
+  | { kind: "resolve"; payload: unknown }
+  | { kind: "reject"; error: unknown }
+  // The SDK method throws before returning a promise.
+  | { kind: "throw"; error: unknown }
+  | { kind: "hang" };
 
 interface Recorded {
   readonly keys: string[];
@@ -27,6 +32,7 @@ interface Recorded {
 const settle = (behavior: Behavior): Promise<unknown> => {
   if (behavior.kind === "resolve") return Promise.resolve(behavior.payload);
   if (behavior.kind === "reject") return Promise.reject(behavior.error);
+  if (behavior.kind === "throw") throw behavior.error;
   return new Promise(() => {});
 };
 
@@ -211,6 +217,15 @@ describe.each(HARNESSES)("$id provider", (harness) => {
     expect(result.success ? undefined : result.error.code).toBe("PROVIDER_AUTH");
     expect(JSON.stringify(result)).not.toContain(API_KEY);
     expect(result.success ? 0 : result.error.message.length).toBeLessThanOrEqual(601);
+  });
+
+  test("an SDK call that throws at once is a provider error without the key, not a crash", async () => {
+    const result = await harness
+      .build({ kind: "throw", error: new TypeError(`bad header for ${API_KEY}`) }, recorder())
+      .transcribe(urlRequest);
+
+    expect(result.success).toBe(false);
+    expect(JSON.stringify(result)).not.toContain(API_KEY);
   });
 
   test("a response without text is PROVIDER_INVALID_RESPONSE", async () => {

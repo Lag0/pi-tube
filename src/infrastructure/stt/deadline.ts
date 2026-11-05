@@ -138,7 +138,8 @@ export const runProviderCall = async <T>(input: {
   const audio = await loadAudio(input.request.audio);
   if (!audio.success) return audio;
 
-  const outcome = await withDeadline((signal) => input.call(audio.data, signal), {
+  // `async`: an SDK that throws before returning a promise is a provider error like any other, redacted below.
+  const outcome = await withDeadline(async (signal) => input.call(audio.data, signal), {
     signal: input.options?.signal,
     timeoutMs: input.timeoutMs,
   });
