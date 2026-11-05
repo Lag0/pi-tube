@@ -192,6 +192,27 @@ describe("doctor", () => {
     });
   });
 
+  test("a tool on PATH that cannot be run is an error for yt-dlp and a warning for ffmpeg, with a chmod fix", async () => {
+    const checks = await checksOf(
+      doctor({ tools: { ytDlp: { found: true, cannotRun: "EACCES" }, ffmpeg: { found: true, cannotRun: "EPERM" } } })
+        .run,
+    );
+
+    expect(checks.find((candidate) => candidate.id === "yt-dlp")).toEqual({
+      id: "yt-dlp",
+      status: "error",
+      summary: "yt-dlp is on PATH but cannot be run (EACCES).",
+      fix: "Make yt-dlp executable (`chmod +x` on its file) or reinstall it (`brew install yt-dlp` or `pipx install yt-dlp`).",
+    });
+    expect(checks.find((candidate) => candidate.id === "ffmpeg")).toEqual({
+      id: "ffmpeg",
+      status: "warn",
+      summary:
+        "ffmpeg is on PATH but cannot be run (EPERM); `download` needs it to save audio as mp3 and to merge video.",
+      fix: "Make ffmpeg executable (`chmod +x` on its file) or reinstall it (`brew install ffmpeg`, `winget install ffmpeg` or your package manager).",
+    });
+  });
+
   test("a tool on PATH that reports no version is a warning", async () => {
     const checks = await checksOf(doctor({ tools: { ytDlp: { found: true }, ffmpeg: { found: true } } }).run);
 

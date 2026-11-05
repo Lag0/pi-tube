@@ -769,6 +769,18 @@ describe("inspect", () => {
     expect(report.success && "version" in report.data.ffmpeg).toBe(false);
   });
 
+  test("a tool that cannot be run is found, with the reason it cannot run", async () => {
+    const { run } = fakeRun((request) =>
+      request.command === "yt-dlp"
+        ? { outcome: "spawn_failed", exitCode: null, stdout: "", stderr: "EACCES" }
+        : exited("ffmpeg version 7.1\n"),
+    );
+
+    const report = await fetcherWith(run).inspect(SETTINGS);
+
+    expect(report.success ? report.data.ytDlp : report).toEqual({ found: true, cannotRun: "EACCES" });
+  });
+
   test("a readable cookies file is ok, and no copy is made", async () => {
     const file = path.join(root, "cookies.txt");
     writeFileSync(file, COOKIES);

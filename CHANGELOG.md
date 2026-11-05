@@ -39,7 +39,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Dependencies are pinned to exact versions.
 - Error messages never show the `user:password@` of an input URL, also when yt-dlp echoes it; yt-dlp still gets the URL as given.
-- A yt-dlp that is on PATH but cannot be run (EACCES, EPERM) is `YTDLP_NOT_FOUND` (exit 3) with a `chmod +x` hint, instead of an extraction error (exit 5). A process that cannot start for another reason fails cleanly instead of crashing pi-tube, and the Windows `taskkill` that stops a process tree sees only the allowlisted environment.
+- A yt-dlp that is on PATH but cannot be run (EACCES, EPERM) is `YTDLP_NOT_FOUND` (exit 3) with a `chmod +x` hint, instead of an extraction error (exit 5), and `pi-tube doctor` reports it as an error ("on PATH but cannot be run"; for ffmpeg, a warning). A process that cannot start for another reason fails cleanly instead of crashing pi-tube, and the Windows `taskkill` that stops a process tree sees only the allowlisted environment.
 - The host check before yt-dlp stops at Ctrl-C (also mid-lookup) and gives up on a lookup after 10 seconds instead of waiting on the system resolver forever; an operation already cancelled runs no DNS lookup and makes no cookies copy.
 - A provider error never shows the API key, even when the provider's SDK echoes it from the request, and is cut at 600 characters (SDK messages carry the whole response body).
 - An operation that fails unexpectedly (a bug, reported as `UNEXPECTED`) is still recorded in the audit log, and an audit log that throws instead of failing cleanly no longer turns a finished, paid transcription into an error.

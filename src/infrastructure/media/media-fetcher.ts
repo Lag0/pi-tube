@@ -296,6 +296,7 @@ export const createMediaFetcher = (deps: MediaFetcherDeps): MediaFetcher => {
         });
         if (result.outcome === "aborted") return err(createError("CANCELLED", "Operation cancelled."));
         if (result.outcome === "not_found") return ok({ found: false });
+        if (result.outcome === "spawn_failed") return ok({ found: true, cannotRun: result.stderr });
         const found =
           result.outcome === "exited" && result.exitCode === 0 ? VERSION_OF[command](result.stdout) : undefined;
         return ok(found === undefined ? { found: true } : { found: true, version: found });
