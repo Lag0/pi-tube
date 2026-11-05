@@ -1,6 +1,7 @@
 import { createError, type PiTubeError } from "../../core/domain/errors.ts";
 import { err, ok, type Result } from "../../core/domain/result.ts";
 import type { Chapter, LiveStatus, MediaMetadata } from "../../core/domain/source.ts";
+import { scrubUrlCredentials, withoutCredentials } from "../../core/domain/source-policy.ts";
 import type { ProcessResult } from "../process/run-process.ts";
 import { cookiesOriginName } from "./cookies.ts";
 
@@ -82,23 +83,26 @@ export const interpretYtDlpRun = (
       if (result.exitCode === 0) return ok(result.stdout);
       // Only stderr: on a failed `-J`, stdout holds `null` or a whole JSON with format cookies and signed URLs.
       // yt-dlp prints each skipped cookie line, value included, on stderr even with --no-warnings: those go too.
-      const detail =
+      // yt-dlp echoes the URL it was given, `user:password@` included: errors never show it.
+      const detail = scrubUrlCredentials(
         result.stderr
           .split(/\r?\n/)
           .filter((line) => line.trim().length > 0 && !line.includes("skipping cookie file entry"))
           .join("\n")
-          .trim() || `exit code ${result.exitCode}`;
+          .trim() || `exit code ${result.exitCode}`,
+      );
+      const shownUrl = withoutCredentials(input.url);
       // The detail names the temporary copy, never the user's file, but it is still left out of the message.
       if (/does not look like a Netscape format cookies file|Cookies file must be Netscape formatted/.test(detail)) {
         const origin = cookiesOriginName(input.cookies ?? "config");
         return err(createError("COOKIES_FILE_INVALID", `yt-dlp rejected the cookies file set by \`${origin}\`.`));
       }
       if (/Unsupported URL|No suitable extractor found/.test(detail)) {
-        return err(createError("SOURCE_UNSUPPORTED", `yt-dlp cannot read \`${input.url}\` (${detail}).`));
+        return err(createError("SOURCE_UNSUPPORTED", `yt-dlp cannot read \`${shownUrl}\` (${detail}).`));
       }
       if (isAuthRequiredFailure(detail)) {
         return err(
-          createError("SOURCE_AUTH_REQUIRED", `\`${input.url}\` requires a logged-in session (${detail}).`, {
+          createError("SOURCE_AUTH_REQUIRED", `\`${shownUrl}\` requires a logged-in session (${detail}).`, {
             ...(input.cookies ? { hint: COOKIES_DID_NOT_WORK_HINT } : {}),
           }),
         );
@@ -247,10 +251,11 @@ export const parseYtDlpInfo = (stdout: string, url: string): Result<MediaMetadat
   if (!isRecord(info)) return err(malformedOutput());
   // `multi_video` (a video split into parts) is refused too: only the last part would be downloaded.
   if (info._type !== undefined && info._type !== "video") {
+    const shown = withoutCredentials(url);
     const message =
       info._type === "playlist"
-        ? `\`${url}\` is a playlist or channel; pi-tube takes one video at a time.`
-        : `\`${url}\` holds several videos (_type=${String(info._type)}); pi-tube takes one video at a time.`;
+        ? `\`${shown}\` is a playlist or channel; pi-tube takes one video at a time.`
+        : `\`${shown}\` holds several videos (_type=${String(info._type)}); pi-tube takes one video at a time.`;
     return err(createError("SOURCE_UNSUPPORTED", message, { hint: "Pass the URL of a single video." }));
   }
 

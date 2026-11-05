@@ -242,6 +242,17 @@ describe("resolve", () => {
     });
   });
 
+  test("a page URL's user:password never reaches an error, though yt-dlp gets it", async () => {
+    const url = "https://u:p@www.youtube.com/playlist?list=PL1";
+    const { requests, run } = fakeRun(() => exited(JSON.stringify({ _type: "playlist", id: "PL1", entries: [] })));
+
+    const result = await fetcherWith(run).resolve(url, SETTINGS);
+
+    expect(result.success ? undefined : result.error.code).toBe("SOURCE_UNSUPPORTED");
+    expect(JSON.stringify(result)).not.toContain("u:p@");
+    expect(requests[0]?.args.at(-1)).toContain("u:p@");
+  });
+
   test.each(["is_live", "is_upcoming"])(
     "a %s page resolves with its live status instead of failing",
     async (status) => {

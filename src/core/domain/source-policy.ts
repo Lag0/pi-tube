@@ -143,7 +143,7 @@ export const ensureFinishedMedia = (source: ResolvedSource): Result<void> => {
   const status = source.metadata.liveStatus;
   if (status === undefined || !LIVE_NOT_ENDED_STATUSES.includes(status)) return ok(undefined);
   // Named by its URL (the caller's input), never by the page title, which the page controls.
-  const name = source.normalizedUrl;
+  const name = withoutCredentials(source.normalizedUrl);
   const message =
     status === "post_live"
       ? `\`${name}\` is a live stream whose recording is still being processed (live_status=post_live).`
@@ -152,4 +152,20 @@ export const ensureFinishedMedia = (source: ResolvedSource): Result<void> => {
 };
 
 /** Only `site` is best-effort; the other kinds have contract tests. */
+/** Drops `user:password@`; a string that is not a URL is returned as is. */
+export function withoutCredentials(url: string): string {
+  try {
+    const parsed = new URL(url);
+    parsed.username = "";
+    parsed.password = "";
+    return parsed.toString();
+  } catch {
+    return url;
+  }
+}
+
+/** Drops the `user:password@` of every URL inside free text, such as a tool's error output. */
+export const scrubUrlCredentials = (text: string): string =>
+  text.replace(/\b([a-z][a-z0-9+.-]*:\/\/)[^\s/?#@]+@/gi, "$1");
+
 export const tierOf = (kind: SourceKind): SourceTier => (kind === "site" ? "best_effort" : "tested");

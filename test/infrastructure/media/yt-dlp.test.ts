@@ -108,6 +108,16 @@ describe("parseYtDlpInfo", () => {
   });
 });
 
+describe("parseYtDlpInfo and credentials", () => {
+  test("a playlist error never shows the URL's user:password", () => {
+    const result = parseYtDlpInfo(JSON.stringify({ _type: "multi_video" }), "https://u:p@example.com/v");
+
+    expect(result.success ? undefined : result.error.message).toBe(
+      "`https://example.com/v` holds several videos (_type=multi_video); pi-tube takes one video at a time.",
+    );
+  });
+});
+
 describe("interpretYtDlpRun", () => {
   const failed = (stderr: string): ProcessResult => ({ outcome: "exited", exitCode: 1, stdout: "", stderr });
   const URL_ = "https://www.youtube.com/watch?v=abc";
@@ -122,6 +132,24 @@ describe("interpretYtDlpRun", () => {
       message: `\`${URL_}\` requires a logged-in session (${BOT}).`,
       hint: "Export cookies for this site from a browser where you are logged in to a cookies.txt file (Netscape format), then run `pi-tube config set cookies.file <absolute path>` or set PI_TUBE_COOKIES_FILE.",
     });
+  });
+
+  test.each([
+    ["SOURCE_UNSUPPORTED", "ERROR: Unsupported URL: https://u:p@vimeo.com/1"],
+    [
+      "SOURCE_AUTH_REQUIRED",
+      "ERROR: [vimeo] 1: This video is only available for registered users https://u:p@vimeo.com/1",
+    ],
+    ["SOURCE_EXTRACT_FAILED", "ERROR: [generic] https://u:p@vimeo.com/1: boom"],
+  ])("%s never shows the URL's user:password, in the message or in yt-dlp's detail", (code, stderr) => {
+    const result = interpretYtDlpRun(failed(stderr), "site_metadata", {
+      url: "https://u:p@vimeo.com/1",
+      timeoutMs: 1000,
+    });
+
+    expect(result.success ? undefined : result.error.code).toBe(code);
+    expect(JSON.stringify(result)).not.toContain("u:p@");
+    expect(result.success ? "" : result.error.message).toContain("https://vimeo.com/1");
   });
 
   test("with cookies configured the hint says they did not grant access", () => {
