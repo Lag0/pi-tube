@@ -3,7 +3,12 @@ import type { EnvironmentVariables } from "../domain/config.ts";
 import { createError, type PiTubeError } from "../domain/errors.ts";
 import { normalizeLanguageTag } from "../domain/language.ts";
 import { resolveLibrarySettings, sourceKeyFromInput, type TranscriptKey } from "../domain/library.ts";
-import { type ProviderDescriptor, resolveCredential, selectProvider } from "../domain/providers.ts";
+import {
+  type ProviderDescriptor,
+  providerNotConfigured,
+  resolveCredential,
+  selectProvider,
+} from "../domain/providers.ts";
 import { err, ok } from "../domain/result.ts";
 import { isSiteSource, type ResolvedSource } from "../domain/source.ts";
 import { ensureFinishedMedia } from "../domain/source-policy.ts";
@@ -128,6 +133,8 @@ const runTranscribe =
       env: deps.env,
     });
     if (!selected.success) return selected;
+    // Without a key only a cache hit can succeed; the key is checked on a miss, before any download or paid call.
+    const { apiKey } = selected.data;
     const providerId = selected.data.descriptor.id;
     const provider = deps.stt[providerId];
     if (!provider) throw new Error(`No SttProvider registered for \`${providerId}\``);
@@ -182,6 +189,8 @@ const runTranscribe =
       if (!early.success) return early;
       if (early.data) return ok(hit(early.data));
     }
+    // A YouTube or Instagram key is final: without a provider key, a miss stops before yt-dlp runs.
+    if (inputKey !== undefined && apiKey === undefined) return err(providerNotConfigured(selected.data.descriptor));
     const storedEarly = inputKey === undefined ? undefined : await deps.library.storedSource(inputKey);
     if (storedEarly && !storedEarly.success) return storedEarly;
     const reusedEarly = storedEarly?.data?.audioPath === undefined ? undefined : storedEarly.data;
@@ -206,6 +215,7 @@ const runTranscribe =
       if (!cached.success) return cached;
       if (cached.data) return ok(hit(cached.data));
     }
+    if (apiKey === undefined) return err(providerNotConfigured(selected.data.descriptor));
     // A best-effort page has no key before the resolve, but its kept audio is reused after it.
     const storedLate =
       reusedEarly || !isSiteSource(source) ? undefined : await deps.library.storedSource(sourceKey.data);
@@ -225,7 +235,7 @@ const runTranscribe =
     let transcript: Awaited<ReturnType<SttProvider["transcribe"]>>;
     try {
       transcript = await provider.transcribe(
-        { audio: audio.audio, apiKey: selected.data.apiKey, ...(language ? { language } : {}) },
+        { audio: audio.audio, apiKey, ...(language ? { language } : {}) },
         options,
       );
     } finally {

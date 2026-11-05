@@ -278,6 +278,49 @@ describe("library cache", () => {
     expect(stt.groq.requests).toHaveLength(1);
   });
 
+  test("with the key gone, a chosen provider still serves a cache hit", async () => {
+    const { stt, deps } = setup({ env: { GROQ_API_KEY: "gq" } });
+    const media = createFakeMediaFetcher({ source: youtube });
+    await createTranscribe({ ...deps, media: media.fetcher })({ input: YOUTUBE, provider: "groq", format: "markdown" });
+
+    const again = await createTranscribe({ ...deps, env: {}, media: media.fetcher })({
+      input: YOUTUBE,
+      provider: "groq",
+      format: "markdown",
+    });
+
+    expect(again.success ? again.data.cacheHit : again.error.code).toBe(true);
+    expect(stt.groq.requests).toHaveLength(1);
+  });
+
+  test("a page miss without a key is PROVIDER_NOT_CONFIGURED before yt-dlp runs", async () => {
+    const { deps } = setup();
+    const media = createFakeMediaFetcher({ source: youtube });
+
+    const result = await createTranscribe({ ...deps, media: media.fetcher })({
+      input: YOUTUBE,
+      provider: "groq",
+      format: "markdown",
+    });
+
+    expect(result.success ? undefined : result.error.code).toBe("PROVIDER_NOT_CONFIGURED");
+    expect(media.calls.resolve).toHaveLength(0);
+  });
+
+  test("a direct URL miss without a key fails before any download", async () => {
+    const { deps } = setup();
+    const media = createFakeMediaFetcher();
+
+    const result = await createTranscribe({ ...deps, media: media.fetcher })({
+      input: INPUT,
+      provider: "groq",
+      format: "markdown",
+    });
+
+    expect(result.success ? undefined : result.error.code).toBe("PROVIDER_NOT_CONFIGURED");
+    expect(media.calls.fetchAudio).toHaveLength(0);
+  });
+
   test("a direct URL is resolved again (no yt-dlp) but neither downloaded nor transcribed again", async () => {
     const { stt, media, transcribe } = cached();
 
