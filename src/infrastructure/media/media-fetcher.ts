@@ -117,8 +117,11 @@ export const createMediaFetcher = (deps: MediaFetcherDeps): MediaFetcher => {
     settings: SourceSettings,
     options: OperationOptions | undefined,
   ): Promise<Result<string>> => {
-    const allowed = await checkHost(url, settings, lookupHost, purpose);
+    const allowed = await checkHost(url, settings, lookupHost, purpose, {
+      ...(options?.signal ? { signal: options.signal } : {}),
+    });
     if (!allowed.success) return allowed;
+    if (options?.signal?.aborted) return err(createError("CANCELLED", "Operation cancelled."));
     const cookies = await prepareCookies(settings, deps.tmpDir);
     if (!cookies.success) return cookies;
     try {

@@ -75,6 +75,42 @@ describe("checkHost", () => {
     );
   });
 
+  test("an aborted signal is CANCELLED before any lookup", async () => {
+    const { hosts, lookup } = fakeLookup([{ address: "93.184.216.34", family: 4 }]);
+    const controller = new AbortController();
+    controller.abort();
+
+    const result = await checkHost("https://example.com/x", SETTINGS, lookup, "site_metadata", {
+      signal: controller.signal,
+    });
+
+    expect(result.success ? undefined : result.error.code).toBe("CANCELLED");
+    expect(hosts).toEqual([]);
+  });
+
+  test("an abort during a lookup that never answers settles CANCELLED", async () => {
+    const controller = new AbortController();
+    const hung: LookupHost = () => new Promise(() => {});
+    setTimeout(() => controller.abort(), 20);
+
+    const result = await checkHost("https://example.com/x", SETTINGS, hung, "site_metadata", {
+      signal: controller.signal,
+    });
+
+    expect(result.success ? undefined : result.error.code).toBe("CANCELLED");
+  });
+
+  test("a lookup that never answers times out with the purpose's extraction error", async () => {
+    const hung: LookupHost = () => new Promise(() => {});
+
+    const result = await checkHost("https://example.com/x", SETTINGS, hung, "youtube_metadata", { timeoutMs: 30 });
+
+    expect(result.success ? undefined : result.error).toMatchObject({
+      code: "YOUTUBE_EXTRACT_FAILED",
+      message: "Failed to resolve YouTube media via yt-dlp (cannot resolve host `example.com` (timed out after 0s)).",
+    });
+  });
+
   test("allow_private_hosts skips the check and the lookup", async () => {
     const { hosts, lookup } = fakeLookup([{ address: "127.0.0.1", family: 4 }]);
 

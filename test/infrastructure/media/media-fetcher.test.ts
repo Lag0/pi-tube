@@ -540,6 +540,27 @@ describe("cookies", () => {
   });
 });
 
+describe("cancellation before yt-dlp", () => {
+  test("an aborted signal resolves nothing: no lookup, no cookies copy, no yt-dlp", async () => {
+    const { requests, run } = fakeRun(() => exited("{}"));
+    const hosts: string[] = [];
+    const lookup = async (hostname: string) => {
+      hosts.push(hostname);
+      return [{ address: "93.184.216.34", family: 4 }];
+    };
+    const fetcher = createMediaFetcher({ env: { PATH: "/bin" }, cwd: root, tmpDir, run, lookup });
+    const controller = new AbortController();
+    controller.abort();
+
+    const result = await fetcher.resolve(YOUTUBE, SETTINGS, { signal: controller.signal });
+
+    expect(result.success ? undefined : result.error.code).toBe("CANCELLED");
+    expect(hosts).toEqual([]);
+    expect(requests).toEqual([]);
+    expect(existsSync(tmpDir)).toBe(false);
+  });
+});
+
 describe("host guard", () => {
   test("resolve, fetchAudio and download refuse a private host and never run yt-dlp", async () => {
     const { requests, run } = fakeRun(() => exited("{}"));
