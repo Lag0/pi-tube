@@ -33,6 +33,7 @@ bun run test -- test/cli/error-exit-codes.test.ts
 ## 5. Docs and Script Alignment
 
 - Confirm `.github/workflows/ci.yml` runs `bun run test` and `bun run verify:fixtures`.
-- Confirm `.github/workflows/publish.yml` publishes only from a published GitHub release whose tag is `v<package.json version>` (a prerelease goes to the `next` dist-tag, a plain version to `latest`), with npm provenance, actions pinned by SHA and the version-exists guard.
+- Confirm `.github/workflows/publish.yml` publishes only from a published GitHub release tagged `v<package.json version>`, with npm provenance and the version-exists guard.
+- A prerelease version publishes to the `next` dist-tag; a plain version to `latest`.
 - Confirm `package.json` contains `verify:fixtures`.
 - Confirm README references this checklist and fixture verification command.

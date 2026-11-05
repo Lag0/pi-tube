@@ -84,7 +84,7 @@ pi-tube download "https://instagram.com/reel/abc123" --output ./media
 
 - Always pass `--language` matching the audio. With a mismatched language (e.g. default `pt` on English audio) Whisper translates instead of transcribing.
 - Groq rejects files above 25MB; use ElevenLabs for long audio.
-- pi-tube never switches providers on its own: on a rate limit or outage the hint names the other configured providers.
+- pi-tube never switches providers on its own: check `provider` in the output frontmatter/JSON.
 
 ## Auth-Gated Sources
 
