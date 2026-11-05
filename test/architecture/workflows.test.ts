@@ -87,12 +87,24 @@ describe("GitHub workflows", () => {
 
   // Same Windows limit as above.
   test.skipIf(process.platform === "win32").each([
-    ["v3.0.0", "3.0.0", 0],
-    ["", "3.0.0", 0],
-    ["v3.0.0", "3.0.1", 1],
-    ["3.0.0", "3.0.0", 1],
-  ])("release tag %j with version %s exits %i", (tag, version, status) => {
-    const script = `RELEASE_TAG=${JSON.stringify(tag)}\nVERSION=${JSON.stringify(version)}\n${publishScriptBlock("tag-guard")}`;
+    // A published release: its tag must be v<version>.
+    ["v3.0.0", "tag", "v3.0.0", "3.0.0", 0],
+    ["v3.0.0", "tag", "v3.0.0", "3.0.1", 1],
+    ["3.0.0", "tag", "3.0.0", "3.0.0", 1],
+    // A manual run: only on a version tag.
+    ["", "branch", "main", "3.0.0", 1],
+    // A branch that merely looks like a version tag.
+    ["", "branch", "v3.0.0", "3.0.0", 1],
+    ["", "tag", "v3.0.0", "3.0.0", 0],
+    ["", "tag", "v3.0.1", "3.0.0", 1],
+  ])("release tag %j, ref %s %s, version %s exits %i", (tag, refType, refName, version, status) => {
+    const script = [
+      `RELEASE_TAG=${JSON.stringify(tag)}`,
+      `REF_TYPE=${JSON.stringify(refType)}`,
+      `REF_NAME=${JSON.stringify(refName)}`,
+      `VERSION=${JSON.stringify(version)}`,
+      publishScriptBlock("tag-guard"),
+    ].join("\n");
     const run = runBash(script);
 
     expect(run.status, run.stderr).toBe(status);
