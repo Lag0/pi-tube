@@ -135,6 +135,8 @@ const runTranscribe =
     if (!selected.success) return selected;
     // Without a key only a cache hit can succeed; the key is checked on a miss, before any download or paid call.
     const { apiKey } = selected.data;
+    // `force` never reads the library, so without a key nothing can succeed: fail before any resolve or hashing.
+    if (input.force && apiKey === undefined) return err(providerNotConfigured(selected.data.descriptor));
     const providerId = selected.data.descriptor.id;
     const provider = deps.stt[providerId];
     if (!provider) throw new Error(`No SttProvider registered for \`${providerId}\``);

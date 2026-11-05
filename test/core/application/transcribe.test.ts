@@ -323,6 +323,21 @@ describe("library cache", () => {
     expect(media.calls.resolve).toHaveLength(0);
   });
 
+  test("force without a key fails before resolving: the library is not read, so nothing can be served", async () => {
+    const { deps } = setup();
+    const media = createFakeMediaFetcher();
+
+    const result = await createTranscribe({ ...deps, media: media.fetcher })({
+      input: INPUT,
+      provider: "groq",
+      force: true,
+      format: "markdown",
+    });
+
+    expect(result.success ? undefined : result.error.code).toBe("PROVIDER_NOT_CONFIGURED");
+    expect(media.calls.resolve).toHaveLength(0);
+  });
+
   test("a direct URL miss without a key fails before any download", async () => {
     const { deps } = setup();
     const media = createFakeMediaFetcher();
