@@ -37,7 +37,7 @@ pi-tube download "https://youtube.com/watch?v=dQw4w9WgXcQ"
 
 Core:
 
-- `pi-tube transcribe <input> [--provider <deepgram|groq|elevenlabs>] [--language <code>] [--timestamps] [--json]`
+- `pi-tube transcribe <input> [--provider <deepgram|groq|elevenlabs>] [--language <code>] [--json]`
 - `pi-tube download <url> [--audio] [--output <dir>]`
 
 Authentication:
@@ -62,7 +62,7 @@ Setup:
 ```bash
 pi-tube transcribe "https://youtube.com/watch?v=dQw4w9WgXcQ"
 pi-tube transcribe "./recording.mp3" --provider elevenlabs --language pt-BR
-pi-tube transcribe "./recording.mp3" --timestamps --json
+pi-tube transcribe "./recording.mp3" --json
 ```
 
 Providers: `deepgram`, `groq` (Whisper), and `elevenlabs` (ElevenLabs Scribe speech-to-text).
@@ -92,7 +92,7 @@ Defaults:
 
 ## Auth and Defaults
 
-Provider API keys are saved in `~/.pi-tube/config.json` with restricted file permissions. Command output always masks keys.
+Provider API keys are saved in `~/.pi-tube/config.json` (mode 600). Keys are never printed, not even masked.
 
 ```bash
 pi-tube auth login elevenlabs
@@ -100,7 +100,7 @@ pi-tube auth status
 pi-tube auth logout elevenlabs
 ```
 
-Environment variables remain automatic fallbacks and do not require configuration:
+Environment variables win over a stored key and need no configuration:
 
 - `DEEPGRAM_API_KEY`
 - `GROQ_API_KEY`
@@ -143,7 +143,7 @@ npm publish automation is defined in `.github/workflows/publish.yml` with proven
 ## Instagram Public-Only Policy
 
 - Supported URL classes: Instagram public post/reel/video URLs (for example `/p/...`, `/reel/...`, `/tv/...`).
-- Auth-gated Instagram inputs fail with `INSTAGRAM_AUTH_REQUIRED`.
+- Auth-gated Instagram inputs fail with `SOURCE_AUTH_REQUIRED`; a cookies file (`pi-tube config set cookies.file <absolute path>`) gives access.
 - CLI exits non-zero on auth-required failures and prints remediation guidance to use publicly accessible URLs.
 
 ## Runtime Policy

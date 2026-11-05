@@ -56,7 +56,6 @@ pi-tube defaults show
 ```bash
 pi-tube transcribe <input>
 pi-tube transcribe "https://youtube.com/watch?v=dQw4w9WgXcQ" --provider groq --language pt --json
-pi-tube transcribe "./recording.mp3" --timestamps
 ```
 
 3. Download media when needed:
