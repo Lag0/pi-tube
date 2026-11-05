@@ -399,6 +399,7 @@ describe("fetchAudio", () => {
       code: "DOWNLOAD_FAILED",
       message:
         "Failed to download media via yt-dlp (no file was reported; the audio may be larger than local_files.max_bytes).",
+      hint: "If the audio is larger than local_files.max_bytes, raise it with `pi-tube config set local_files.max_bytes <bytes>` (at most 2147483647); otherwise check that the page opens in a browser and retry.",
     });
   });
 

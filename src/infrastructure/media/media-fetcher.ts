@@ -14,7 +14,7 @@ import {
   normalizeDirectMediaUrl,
   tryParseHttpUrl,
 } from "../../core/domain/source-policy.ts";
-import type { SourceSettings } from "../../core/domain/source-settings.ts";
+import { MAX_LOCAL_FILE_BYTES_LIMIT, type SourceSettings } from "../../core/domain/source-settings.ts";
 import type { MediaFetcher, ToolVersion } from "../../core/ports/media-fetcher.ts";
 import { errnoOf } from "../errno.ts";
 import { type ProcessRequest, type ProcessResult, runProcess } from "../process/run-process.ts";
@@ -219,6 +219,9 @@ export const createMediaFetcher = (deps: MediaFetcherDeps): MediaFetcher => {
               createError(
                 "DOWNLOAD_FAILED",
                 "Failed to download media via yt-dlp (no file was reported; the audio may be larger than local_files.max_bytes).",
+                {
+                  hint: `If the audio is larger than local_files.max_bytes, raise it with \`pi-tube config set local_files.max_bytes <bytes>\` (at most ${MAX_LOCAL_FILE_BYTES_LIMIT}); otherwise check that the page opens in a browser and retry.`,
+                },
               ),
             )
           : stdout;
