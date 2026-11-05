@@ -23,7 +23,7 @@ Run `pi-tube --help` for current command details.
 ## Prerequisites
 
 - `pi-tube` available in PATH.
-- Provider credentials configured with `pi-tube auth login <deepgram|groq|elevenlabs>` or via environment fallback (`DEEPGRAM_API_KEY` / `GROQ_API_KEY` / `ELEVENLABS_API_KEY`).
+- Provider credentials configured with `pi-tube auth login <deepgram|groq|elevenlabs>` or via environment variables (`DEEPGRAM_API_KEY` / `GROQ_API_KEY` / `ELEVENLABS_API_KEY`), which win over a stored key.
 
 If not installed, follow [rules/install.md](rules/install.md).
 For output safety and untrusted content handling, follow [rules/security.md](rules/security.md).
@@ -73,7 +73,7 @@ pi-tube download "https://instagram.com/reel/abc123" --output ./media
 - `transcribe --json`: deterministic schema-versioned JSON contract.
 - YouTube sources include source metadata (`published_at`, `description`, `description_links`) under `source` in JSON and a `## Source Metadata` section in Markdown when present.
 - Successful transcriptions print `[OUTPUT_FILE]` and `[OUTPUT_FILE_URI]`. Read the path from that line instead of rebuilding it: the file name lowercases the media id and turns `_` into `-`.
-- Existing output files are reused (smart skip). Delete the file to force a new transcription.
+- A transcript already in the library (same source, provider, model and language) is reused without a new provider call; pass `--force` to transcribe again.
 
 ## Provider Choice
 
@@ -84,11 +84,11 @@ pi-tube download "https://instagram.com/reel/abc123" --output ./media
 
 - Always pass `--language` matching the audio. With a mismatched language (e.g. default `pt` on English audio) Whisper translates instead of transcribing.
 - Groq rejects files above 25MB; use ElevenLabs for long audio.
-- Fallback may switch providers silently: check `provider` in the output frontmatter/JSON.
+- pi-tube never switches providers on its own: on a rate limit or outage the hint names the other configured providers.
 
 ## Auth-Gated Sources
 
-The bundled yt-dlp call sends no cookies. When a source needs a session, download with yt-dlp first and transcribe the local file:
+pi-tube passes yt-dlp the cookies file set by `cookies.file` (`pi-tube config set cookies.file <absolute path>`) or `PI_TUBE_COOKIES_FILE`: a cookies.txt in Netscape format exported from a browser where you are logged in. Without one, a source that needs a session fails with `SOURCE_AUTH_REQUIRED`. Alternatively, download with yt-dlp first and transcribe the local file:
 
 ```bash
 yt-dlp --cookies-from-browser chrome -f bestaudio -x --audio-format mp3 --write-info-json -o "./media/%(id)s.%(ext)s" "<url>"
@@ -118,10 +118,10 @@ pi-tube setup skills --global --yes
 ## Notes
 
 - v2 uses explicit transcription: always call `pi-tube transcribe <input>`.
-- Precedence: CLI flags > config defaults > env defaults.
-- Stored API keys are masked in output and saved in `~/.pi-tube/config.json` with restricted permissions.
-- Environment variables remain automatic fallback; no env-link setup command is needed.
+- Precedence: CLI flags > env defaults (`PI_TUBE_TRANSCRIPTION_PROVIDER`, `PI_TUBE_TRANSCRIPTION_LANGUAGE`) > config defaults; with no provider chosen, the first provider that has a key.
+- API keys are never printed, not even masked; stored keys live in `~/.pi-tube/config.json` (mode 600).
+- Environment variables win over a stored key (`pi-tube providers` shows each `key_source`); no env-link setup command is needed.
 - If no provider credential is configured, CLI exits early with deterministic error guidance.
-- If selected provider fails with auth/unavailable/failed and an alternate provider is configured, CLI can fallback automatically.
-- Instagram private/auth-gated URLs fail with `INSTAGRAM_AUTH_REQUIRED`.
+- If the selected provider fails, pi-tube does not fall back to another one: the error stands, and on a rate limit or outage the hint names the other configured providers.
+- Instagram private/auth-gated URLs fail with `SOURCE_AUTH_REQUIRED` (exit 5); a cookies file (`cookies.file`) gives access.
 - For release quality gates, run `bun test` and `bun run verify:fixtures`.

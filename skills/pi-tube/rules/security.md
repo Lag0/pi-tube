@@ -23,8 +23,8 @@ description: |
 - Never print API keys in logs or output.
 - Prefer `pi-tube auth login <deepgram|groq|elevenlabs>` for local personal setup.
 - Use `pi-tube auth status` to verify readiness without exposing secrets.
-- Stored keys are masked in command output and saved in `~/.pi-tube/config.json` with restricted permissions.
-- `DEEPGRAM_API_KEY`, `GROQ_API_KEY`, and `ELEVENLABS_API_KEY` remain automatic fallback sources.
+- Keys are never printed, not even masked; stored keys live in `~/.pi-tube/config.json` (mode 600).
+- `DEEPGRAM_API_KEY`, `GROQ_API_KEY`, and `ELEVENLABS_API_KEY` win over a stored key; `pi-tube providers` shows where each key comes from.
 
 ## Validation
 

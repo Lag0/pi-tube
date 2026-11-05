@@ -86,7 +86,7 @@ Defaults:
 
 - video with audio is downloaded by default
 - `--audio` downloads audio-only as mp3
-- files are saved to `./downloads` unless `--output <dir>` is provided
+- files are saved to `~/.pi-tube/downloads` unless `--output <dir>` is provided
 - successful runs print `[DOWNLOAD_FILE]` and `[DOWNLOAD_FILE_URI]`
 - requires `yt-dlp` on PATH; use `pi-tube setup yt-dlp` for guidance
 
@@ -128,7 +128,7 @@ Prefer `auth` and `defaults` for human workflows.
 
 ## Agent Workflows
 
-- Timestamp blocks are disabled by default; use `transcribe --timestamps` when needed.
+- Transcripts always keep their timestamps: timed segments in the JSON and timestamp blocks in the Markdown.
 - `transcribe --json` emits a deterministic schema-versioned contract from the same canonical artifact model.
 - YouTube sources carry extra source metadata for downstream reasoning: `published_at` (ISO date), `description` (full text), and `description_links` (ordered unique HTTP(S) links parsed from the description). JSON exposes them under `source` with deterministic `null`/empty-array defaults; Markdown renders a `## Source Metadata` section before `## Summary` only when at least one field is present.
 - Temporary media downloads for YouTube/Instagram transcription use `~/.pi-tube/tmp` and are deleted after each run.
