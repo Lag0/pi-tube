@@ -5,13 +5,22 @@ import { describe, expect, test } from "vitest";
 
 const WORKFLOWS = path.resolve(".github", "workflows");
 
+// `uses: owner/repo[/path]@<40-hex SHA>`, optionally followed by a `# vX.Y.Z` comment.
+const PINNED_USES = /uses:\s*[\w.-]+\/[\w.-]+(\/[\w./-]+)?@[0-9a-f]{40}(\s|$)/;
+
+interface BashRun {
+  readonly status: number;
+  readonly stdout: string;
+  readonly stderr: string;
+}
+
 const workflowFiles = (): string[] =>
   readdirSync(WORKFLOWS)
     .filter((name) => name.endsWith(".yml") || name.endsWith(".yaml"))
     .map((name) => path.join(WORKFLOWS, name));
 
-/** A marked block of publish.yml's version step, as a shell script. */
-const block = (name: string): string => {
+/** A block of publish.yml's version step between `# <name>:start` and `# <name>:end`, as a shell script. */
+const publishScriptBlock = (name: string): string => {
   const workflow = readFileSync(path.join(WORKFLOWS, "publish.yml"), "utf8");
   const start = workflow.indexOf(`# ${name}:start`);
   const end = workflow.indexOf(`# ${name}:end`);
@@ -23,17 +32,21 @@ const block = (name: string): string => {
     .join("\n");
 };
 
-const runBash = (script: string): { status: number; stdout: string } => {
+const runBash = (script: string): BashRun => {
   try {
-    return { status: 0, stdout: execFileSync("bash", ["-c", script], { encoding: "utf8", stdio: "pipe" }).trim() };
+    const stdout = execFileSync("bash", ["-c", script], { encoding: "utf8", stdio: "pipe" });
+    return { status: 0, stdout: stdout.trim(), stderr: "" };
   } catch (error) {
-    const status = typeof error === "object" && error !== null && "status" in error ? Number(error.status) : -1;
-    return { status, stdout: "" };
+    // A script killed by a signal has `status: null`: never read that as success.
+    const failed = typeof error === "object" && error !== null ? error : {};
+    const status = "status" in failed && typeof failed.status === "number" ? failed.status : -1;
+    const stderr = "stderr" in failed ? String(failed.stderr) : "";
+    return { status, stdout: "", stderr };
   }
 };
 
 const distTagFor = (version: string): string =>
-  runBash(`VERSION=${JSON.stringify(version)}\n${block("dist-tag")}\necho "$DIST_TAG"`).stdout;
+  runBash(`VERSION=${JSON.stringify(version)}\n${publishScriptBlock("dist-tag")}\necho "$DIST_TAG"`).stdout;
 
 describe("GitHub workflows", () => {
   test("every action is pinned to a full commit SHA", () => {
@@ -41,7 +54,7 @@ describe("GitHub workflows", () => {
       readFileSync(file, "utf8")
         .split("\n")
         .filter((line) => /^\s*(-\s*)?uses:/.test(line))
-        .filter((line) => !/uses:\s*[\w.-]+\/[\w.-]+(\/[\w./-]+)?@[0-9a-f]{40}(\s|$)/.test(line))
+        .filter((line) => !PINNED_USES.test(line))
         .map((line) => `${path.basename(file)}: ${line.trim()}`),
     );
 
@@ -68,14 +81,20 @@ describe("GitHub workflows", () => {
     expect(distTagFor(version)).toBe(tag);
   });
 
+  test.skipIf(process.platform === "win32")("a script killed by a signal never reads as success", () => {
+    expect(runBash("kill -KILL $$").status).not.toBe(0);
+  });
+
+  // Same Windows limit as above.
   test.skipIf(process.platform === "win32").each([
     ["v3.0.0", "3.0.0", 0],
     ["", "3.0.0", 0],
     ["v3.0.0", "3.0.1", 1],
     ["3.0.0", "3.0.0", 1],
   ])("release tag %j with version %s exits %i", (tag, version, status) => {
-    const script = `RELEASE_TAG=${JSON.stringify(tag)}\nVERSION=${JSON.stringify(version)}\n${block("tag-guard")}`;
+    const script = `RELEASE_TAG=${JSON.stringify(tag)}\nVERSION=${JSON.stringify(version)}\n${publishScriptBlock("tag-guard")}`;
+    const run = runBash(script);
 
-    expect(runBash(script).status).toBe(status);
+    expect(run.status, run.stderr).toBe(status);
   });
 });
