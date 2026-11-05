@@ -37,7 +37,7 @@ pi-tube download "https://youtube.com/watch?v=dQw4w9WgXcQ"
 
 Core:
 
-- `pi-tube transcribe <input> [--provider <deepgram|groq|elevenlabs>] [--language <code>] [--timestamps] [--json]`
+- `pi-tube transcribe <input> [--provider <deepgram|groq|elevenlabs>] [--language <code>] [--json]`
 - `pi-tube download <url> [--audio] [--output <dir>]`
 
 Authentication:
@@ -62,7 +62,7 @@ Setup:
 ```bash
 pi-tube transcribe "https://youtube.com/watch?v=dQw4w9WgXcQ"
 pi-tube transcribe "./recording.mp3" --provider elevenlabs --language pt-BR
-pi-tube transcribe "./recording.mp3" --timestamps --json
+pi-tube transcribe "./recording.mp3" --json
 ```
 
 Providers: `deepgram`, `groq` (Whisper), and `elevenlabs` (ElevenLabs Scribe speech-to-text).
@@ -86,13 +86,13 @@ Defaults:
 
 - video with audio is downloaded by default
 - `--audio` downloads audio-only as mp3
-- files are saved to `./downloads` unless `--output <dir>` is provided
+- files are saved to `~/.pi-tube/downloads` unless `--output <dir>` is provided
 - successful runs print `[DOWNLOAD_FILE]` and `[DOWNLOAD_FILE_URI]`
 - requires `yt-dlp` on PATH; use `pi-tube setup yt-dlp` for guidance
 
 ## Auth and Defaults
 
-Provider API keys are saved in `~/.pi-tube/config.json` with restricted file permissions. Command output always masks keys.
+Provider API keys are saved in `~/.pi-tube/config.json` (mode 600). Keys are never printed, not even masked.
 
 ```bash
 pi-tube auth login elevenlabs
@@ -100,7 +100,7 @@ pi-tube auth status
 pi-tube auth logout elevenlabs
 ```
 
-Environment variables remain automatic fallbacks and do not require configuration:
+Environment variables win over a stored key and need no configuration:
 
 - `DEEPGRAM_API_KEY`
 - `GROQ_API_KEY`
@@ -128,7 +128,7 @@ Prefer `auth` and `defaults` for human workflows.
 
 ## Agent Workflows
 
-- Timestamp blocks are disabled by default; use `transcribe --timestamps` when needed.
+- Transcripts always keep their timestamps: timed segments in the JSON and timestamp blocks in the Markdown.
 - `transcribe --json` emits a deterministic schema-versioned contract from the same canonical artifact model.
 - YouTube sources carry extra source metadata for downstream reasoning: `published_at` (ISO date), `description` (full text), and `description_links` (ordered unique HTTP(S) links parsed from the description). JSON exposes them under `source` with deterministic `null`/empty-array defaults; Markdown renders a `## Source Metadata` section before `## Summary` only when at least one field is present.
 - Temporary media downloads for YouTube/Instagram transcription use `~/.pi-tube/tmp` and are deleted after each run.
@@ -143,7 +143,7 @@ npm publish automation is defined in `.github/workflows/publish.yml` with proven
 ## Instagram Public-Only Policy
 
 - Supported URL classes: Instagram public post/reel/video URLs (for example `/p/...`, `/reel/...`, `/tv/...`).
-- Auth-gated Instagram inputs fail with `INSTAGRAM_AUTH_REQUIRED`.
+- Auth-gated Instagram inputs fail with `SOURCE_AUTH_REQUIRED`.
 - CLI exits non-zero on auth-required failures and prints remediation guidance to use publicly accessible URLs.
 
 ## Runtime Policy
