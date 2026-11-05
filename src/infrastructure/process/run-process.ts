@@ -52,7 +52,8 @@ export interface ProcessRequest {
   readonly maxOutputBytes?: number;
 }
 
-export type ProcessOutcome = "exited" | "timed_out" | "aborted" | "not_found" | "output_too_large";
+/** `spawn_failed`: the command exists but could not start (EACCES, EPERM, or an argument spawn refuses). */
+export type ProcessOutcome = "exited" | "timed_out" | "aborted" | "not_found" | "spawn_failed" | "output_too_large";
 
 export interface ProcessResult {
   readonly outcome: ProcessOutcome;
@@ -76,6 +77,13 @@ export const buildChildEnv = (
   return childEnv;
 };
 
+/** Options of the Windows `taskkill` call: like any child, it sees only the allowlisted env. */
+export const windowsKillOptions = (env: EnvironmentVariables) => ({
+  stdio: "ignore" as const,
+  windowsHide: true,
+  env: buildChildEnv(env, "win32"),
+});
+
 const signalGroup = (pid: number, signal: NodeJS.Signals): void => {
   try {
     process.kill(-pid, signal);
@@ -92,7 +100,7 @@ const killTree = (child: ChildProcess): ReturnType<typeof setTimeout> | undefine
   const { pid } = child;
   if (pid === undefined) return undefined;
   if (process.platform === "win32") {
-    spawnSync("taskkill", ["/pid", String(pid), "/T", "/F"], { stdio: "ignore", windowsHide: true });
+    spawnSync("taskkill", ["/pid", String(pid), "/T", "/F"], windowsKillOptions(process.env));
     return undefined;
   }
   signalGroup(pid, "SIGTERM");
@@ -111,12 +119,28 @@ export const runProcess = (request: ProcessRequest): Promise<ProcessResult> =>
     }
 
     const limit = request.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES;
-    const child = spawn(request.command, [...request.args], {
-      stdio: ["ignore", "pipe", "pipe"],
-      env: buildChildEnv(request.env),
-      detached: process.platform !== "win32",
-      windowsHide: true,
+    // Only the error code: spawn's own messages quote the argument they refused.
+    const spawnFailed = (error: unknown): ProcessResult => ({
+      outcome: "spawn_failed",
+      exitCode: null,
+      stdout: "",
+      stderr:
+        typeof error === "object" && error !== null && "code" in error && typeof error.code === "string"
+          ? error.code
+          : "spawn failed",
     });
+    let child: ChildProcess;
+    try {
+      child = spawn(request.command, [...request.args], {
+        stdio: ["ignore", "pipe", "pipe"],
+        env: buildChildEnv(request.env),
+        detached: process.platform !== "win32",
+        windowsHide: true,
+      });
+    } catch (error) {
+      resolve(spawnFailed(error));
+      return;
+    }
     const chunks = { stdout: [] as Buffer[], stderr: [] as Buffer[] };
     const sizes = { stdout: 0, stderr: 0 };
     let stoppedWith: ProcessOutcome | undefined;
@@ -161,6 +185,7 @@ export const runProcess = (request: ProcessRequest): Promise<ProcessResult> =>
       spawnFailure = error;
       // A failed spawn may never emit "close".
       if (error.code === "ENOENT") settle({ outcome: "not_found", exitCode: null, stdout: "", stderr: "" });
+      else if (error.code === "EACCES" || error.code === "EPERM") settle(spawnFailed(error));
     });
     child.on("exit", () => {
       disarm();

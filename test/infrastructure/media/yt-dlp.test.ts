@@ -152,6 +152,32 @@ describe("interpretYtDlpRun", () => {
     expect(result.success ? "" : result.error.message).toContain("https://vimeo.com/1");
   });
 
+  test("a yt-dlp that cannot be executed is YTDLP_NOT_FOUND (a dependency, exit 3)", () => {
+    const result = interpretYtDlpRun(
+      { outcome: "spawn_failed", exitCode: null, stdout: "", stderr: "EACCES" },
+      "youtube_metadata",
+      { url: URL_, timeoutMs: 1000 },
+    );
+
+    expect(result.success ? undefined : result.error).toMatchObject({
+      code: "YTDLP_NOT_FOUND",
+      message: "`yt-dlp` was found but cannot be run (EACCES).",
+    });
+  });
+
+  test("a run spawn refuses for another reason is the purpose's extraction error", () => {
+    const result = interpretYtDlpRun(
+      { outcome: "spawn_failed", exitCode: null, stdout: "", stderr: "ERR_INVALID_ARG_VALUE" },
+      "download",
+      { url: URL_, timeoutMs: 1000 },
+    );
+
+    expect(result.success ? undefined : result.error).toMatchObject({
+      code: "DOWNLOAD_FAILED",
+      message: "Failed to download media via yt-dlp (yt-dlp could not be started: ERR_INVALID_ARG_VALUE).",
+    });
+  });
+
   test("with cookies configured the hint says they did not grant access", () => {
     const result = interpretYtDlpRun(failed(BOT), "download", { url: URL_, timeoutMs: 1000, cookies: "config" });
 

@@ -1,8 +1,13 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { buildChildEnv, KILL_GRACE_MS, runProcess } from "../../../src/infrastructure/process/run-process.ts";
+import {
+  buildChildEnv,
+  KILL_GRACE_MS,
+  runProcess,
+  windowsKillOptions,
+} from "../../../src/infrastructure/process/run-process.ts";
 
 const SCRIPTS = path.resolve("test", "fixtures-process");
 const NODE = process.execPath;
@@ -50,6 +55,32 @@ describe("runProcess", () => {
     });
 
     expect(result).toEqual({ outcome: "exited", exitCode: 3, stdout: "out", stderr: "err" });
+  });
+
+  test.skipIf(process.platform === "win32")(
+    "a command that cannot be executed is spawn_failed with its code",
+    async () => {
+      const file = path.join(workDir, "not-executable");
+      writeFileSync(file, "#!/bin/sh\necho hi\n", { mode: 0o644 });
+
+      const result = await runProcess({ command: file, args: [], env: baseEnv, timeoutMs: 10_000 });
+
+      expect(result).toEqual({ outcome: "spawn_failed", exitCode: null, stdout: "", stderr: "EACCES" });
+    },
+  );
+
+  test("an argument spawn refuses (a NUL byte) resolves spawn_failed instead of rejecting, without the value", async () => {
+    const result = await runProcess({ command: NODE, args: ["a\u0000SECRET"], env: baseEnv, timeoutMs: 10_000 });
+
+    expect(result).toMatchObject({ outcome: "spawn_failed", exitCode: null, stdout: "" });
+    expect(result.stderr).not.toContain("SECRET");
+  });
+
+  test("taskkill runs with the allowlisted env only", () => {
+    const options = windowsKillOptions({ PATH: "C:\\Windows", SYSTEMROOT: "C:\\Windows", GROQ_API_KEY: "gq-SECRET" });
+
+    expect(options).toMatchObject({ stdio: "ignore", windowsHide: true });
+    expect(options.env).toEqual({ PATH: "C:\\Windows", SYSTEMROOT: "C:\\Windows" });
   });
 
   test("a missing command is not_found", async () => {

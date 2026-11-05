@@ -73,6 +73,15 @@ export const interpretYtDlpRun = (
           hint: "Install yt-dlp (`brew install yt-dlp` or `pipx install yt-dlp`) and make sure it is on PATH, or run `pi-tube setup yt-dlp`.",
         }),
       );
+    case "spawn_failed":
+      if (result.stderr === "EACCES" || result.stderr === "EPERM") {
+        return err(
+          createError("YTDLP_NOT_FOUND", `\`yt-dlp\` was found but cannot be run (${result.stderr}).`, {
+            hint: "Make yt-dlp executable (`chmod +x` on its file) or reinstall it (`brew install yt-dlp` or `pipx install yt-dlp`).",
+          }),
+        );
+      }
+      return err(extractionError(purpose, `yt-dlp could not be started: ${result.stderr}`));
     case "aborted":
       return err(createError("CANCELLED", "Operation cancelled."));
     case "output_too_large":
