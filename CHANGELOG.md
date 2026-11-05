@@ -41,6 +41,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Error messages never show the `user:password@` of an input URL, also when yt-dlp echoes it; yt-dlp still gets the URL as given.
 - A yt-dlp that is on PATH but cannot be run (EACCES, EPERM) is `YTDLP_NOT_FOUND` (exit 3) with a `chmod +x` hint, instead of an extraction error (exit 5). A process that cannot start for another reason fails cleanly instead of crashing pi-tube, and the Windows `taskkill` that stops a process tree sees only the allowlisted environment.
 - The host check before yt-dlp stops at Ctrl-C (also mid-lookup) and gives up on a lookup after 10 seconds instead of waiting on the system resolver forever; an operation already cancelled runs no DNS lookup and makes no cookies copy.
+- A provider error never shows the API key, even when the provider's SDK echoes it from the request, and is cut at 600 characters (SDK messages carry the whole response body).
 - `DEBUG=true` in the environment is dropped when pi-tube starts: with it, groq-sdk printed every request's headers, the API key included. In `pi-tube mcp`, anything a dependency logs to the console goes to stderr, so stdout carries only MCP messages.
 - `@deepgram/sdk` is updated from 4.11.3 to 5.17.0. Cancelling a Deepgram transcription (Ctrl-C, SIGTERM or the 10-minute timeout) now aborts the HTTP request itself, as with Groq and ElevenLabs, instead of letting it finish in the background. Deepgram requests retry twice, like the other providers.
 - yt-dlp child processes no longer inherit stdin.

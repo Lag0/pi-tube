@@ -202,6 +202,17 @@ describe.each(HARNESSES)("$id provider", (harness) => {
     expect(JSON.stringify(result)).not.toContain(API_KEY);
   });
 
+  test("an SDK error that echoes the key never shows it, and a long body is cut", async () => {
+    const body = `{"error":{"message":"Invalid API Key: ${API_KEY}","detail":"${"x".repeat(5000)}"}}`;
+    const result = await harness
+      .build({ kind: "reject", error: Object.assign(new Error(`401 ${body}`), { status: 401 }) }, recorder())
+      .transcribe(urlRequest);
+
+    expect(result.success ? undefined : result.error.code).toBe("PROVIDER_AUTH");
+    expect(JSON.stringify(result)).not.toContain(API_KEY);
+    expect(result.success ? 0 : result.error.message.length).toBeLessThanOrEqual(601);
+  });
+
   test("a response without text is PROVIDER_INVALID_RESPONSE", async () => {
     const result = await harness.build({ kind: "resolve", payload: {} }, recorder()).transcribe(urlRequest);
 

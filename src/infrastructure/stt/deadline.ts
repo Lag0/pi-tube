@@ -111,9 +111,20 @@ const loadAudio = async (audio: AudioInput): Promise<Result<LoadedAudio>> => {
   }
 };
 
+/** Longest provider error message pi-tube shows: SDK messages carry the whole response body. */
+const MAX_PROVIDER_MESSAGE_CHARS = 600;
+
+/** Takes the request's API key out of a provider error (SDKs echo request details) and bounds its length. */
+const redactProviderError = (error: PiTubeError, apiKey: string): PiTubeError => {
+  const redacted = apiKey.length > 0 ? error.message.split(apiKey).join("***") : error.message;
+  const message =
+    redacted.length > MAX_PROVIDER_MESSAGE_CHARS ? `${redacted.slice(0, MAX_PROVIDER_MESSAGE_CHARS)}…` : redacted;
+  return message === error.message ? error : { ...error, message };
+};
+
 /**
  * The flow every cloud provider shares: cancellation check, audio loading, the SDK call under a deadline,
- * then `interpret` turning the SDK response into a transcript or an error.
+ * then `interpret` turning the SDK response into a transcript or an error. A provider error never shows the key.
  */
 export const runProviderCall = async <T>(input: {
   readonly provider: ProviderId;
@@ -131,7 +142,8 @@ export const runProviderCall = async <T>(input: {
     signal: input.options?.signal,
     timeoutMs: input.timeoutMs,
   });
-  if (!outcome.ok) return err(deadlineError(input.provider, outcome, input.timeoutMs));
+  if (!outcome.ok)
+    return err(redactProviderError(deadlineError(input.provider, outcome, input.timeoutMs), input.request.apiKey));
   const parsed = input.interpret(outcome.value);
   if (!parsed.success) return parsed;
   return ok({
