@@ -54,9 +54,10 @@ export const beginAudit = (deps: AuditTrailDeps, operation: AuditOperation, inpu
     },
     finish: async (result, options) => {
       const cost = costOf(noted);
-      // A log that throws instead of returning an error must not turn a finished (maybe paid) operation into a crash.
-      const appended = await deps.audit
-        .append({
+      // A log that throws instead of returning an error (before or after returning a promise, or while the record is
+      // built) must not turn a finished, maybe paid, operation into a crash.
+      const append = async (): Promise<Result<void>> =>
+        deps.audit.append({
           operationId,
           startedAt: startedAt.toISOString(),
           operation,
@@ -72,8 +73,8 @@ export const beginAudit = (deps: AuditTrailDeps, operation: AuditOperation, inpu
           result: result.success ? "ok" : "error",
           ...(result.success ? {} : { errorCode: result.error.code }),
           versions: deps.versions,
-        })
-        .catch((caught: unknown) => err(toPiTubeError(caught)));
+        });
+      const appended = await append().catch((caught: unknown) => err(toPiTubeError(caught)));
       if (!appended.success) options?.onProgress?.({ label: "Audit log not written", detail: appended.error.code });
       return result;
     },

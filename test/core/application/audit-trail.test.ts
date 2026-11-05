@@ -84,6 +84,22 @@ describe("beginAudit", () => {
     expect(events).toEqual([{ label: "Audit log not written", detail: "UNEXPECTED" }]);
   });
 
+  test("an append that throws before returning a promise is reported the same way", async () => {
+    const events: ProgressEvent[] = [];
+    const throwing = {
+      ...createInMemoryAuditLog(),
+      append: (): Promise<never> => {
+        throw new Error("not even a promise");
+      },
+    };
+    const trail = beginAudit(auditDepsFor(throwing), "transcribe", "x");
+
+    const result = await trail.finish(ok("saved"), { onProgress: (event) => events.push(event) });
+
+    expect(result).toEqual(ok("saved"));
+    expect(events).toEqual([{ label: "Audit log not written", detail: "UNEXPECTED" }]);
+  });
+
   test("audited records a throw in the body as UNEXPECTED and rethrows it", async () => {
     const log = createInMemoryAuditLog();
     const boom = new SyntaxError("Unexpected token");
