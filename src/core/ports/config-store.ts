@@ -5,5 +5,5 @@ import type { Result } from "../domain/result.ts";
 export interface ConfigStore {
   readonly location: string;
   read(): Promise<Result<PiTubeConfig>>;
-  update(change: (current: PiTubeConfig) => Result<PiTubeConfig>): Promise<Result<PiTubeConfig>>;
+  update(change: (current: PiTubeConfig) => Result<PiTubeConfig>, signal?: AbortSignal): Promise<Result<PiTubeConfig>>;
 }

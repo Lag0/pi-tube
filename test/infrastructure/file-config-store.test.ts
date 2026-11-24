@@ -1,10 +1,17 @@
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdir, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { DEFAULT_CONFIG, type PiTubeConfig } from "../../src/core/domain/config.ts";
-import { ok } from "../../src/core/domain/result.ts";
+import { createError } from "../../src/core/domain/errors.ts";
+import { err, ok } from "../../src/core/domain/result.ts";
 import { createFileConfigStore } from "../../src/infrastructure/config/file-config-store.ts";
+
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const fs = await importOriginal<typeof import("node:fs/promises")>();
+  return { ...fs, mkdir: vi.fn(fs.mkdir), writeFile: vi.fn(fs.writeFile) };
+});
 
 const isWindows = process.platform === "win32";
 const isRoot = typeof process.getuid === "function" && process.getuid() === 0;
@@ -189,4 +196,65 @@ describe("file config store", () => {
     chmodSync(path.dirname(configFile), 0o700);
     expect(write.success ? undefined : write.error.code).toBe("CONFIG_IO_FAILED");
   });
+});
+
+test.each(["invalid", "valid"])("lock permission failure with %s config", async (kind) => {
+  const content = kind === "invalid" ? "{" : JSON.stringify(SAMPLE);
+  writeRaw(content);
+  vi.mocked(mkdir)
+    .mockResolvedValueOnce(undefined)
+    .mockRejectedValueOnce(Object.assign(new Error(), { code: "EACCES" }));
+  const change = vi.fn(() => ok(DEFAULT_CONFIG));
+  expect(await createFileConfigStore(configFile).update(change)).toMatchObject({
+    error: { code: kind === "invalid" ? "CONFIG_INVALID" : "CONFIG_IO_FAILED" },
+  });
+  expect(change).not.toHaveBeenCalled();
+  expect(readFileSync(configFile, "utf8")).toBe(content);
+});
+
+test("cancellation during contention preserves the other writer's lock", async () => {
+  writeRaw("{}");
+  mkdirSync(`${configFile}.lock`);
+  const controller = new AbortController();
+  vi.mocked(mkdir)
+    .mockResolvedValueOnce(undefined)
+    .mockImplementationOnce(async () => {
+      controller.abort();
+      throw Object.assign(new Error(), { code: "EEXIST" });
+    });
+  expect(await createFileConfigStore(configFile).update(() => ok(SAMPLE), controller.signal)).toMatchObject({
+    error: { code: "CANCELLED" },
+  });
+  expect(existsSync(`${configFile}.lock`)).toBe(true);
+  expect(readFileSync(configFile, "utf8")).toBe("{}");
+});
+
+test("cancellation after temporary write prevents publication", async () => {
+  writeRaw("{}");
+  const controller = new AbortController();
+  vi.mocked(writeFile).mockImplementationOnce(async (file, data, options) => {
+    const fs = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+    await fs.writeFile(file, data, options);
+    controller.abort();
+  });
+  expect(await createFileConfigStore(configFile).update(() => ok(SAMPLE), controller.signal)).toMatchObject({
+    error: { code: "CANCELLED" },
+  });
+  expect(readFileSync(configFile, "utf8")).toBe("{}");
+  expect(existsSync(`${configFile}.lock`)).toBe(false);
+});
+
+test.each([true, false])("release failure preserves mutation outcome: published=%s", async (publish) => {
+  writeRaw("{}");
+  const warn = vi.spyOn(process, "emitWarning").mockImplementation(() => {});
+  const outcome = publish ? ok(SAMPLE) : err(createError("CONFIG_INVALID", "Invalid change."));
+  expect(
+    await createFileConfigStore(configFile).update(() => {
+      writeFileSync(path.join(`${configFile}.lock`, "marker"), "");
+      return outcome;
+    }),
+  ).toEqual(outcome);
+  expect(JSON.parse(readFileSync(configFile, "utf8"))).toEqual(publish ? SAMPLE : {});
+  expect(warn).toHaveBeenCalledWith(expect.stringContaining(`${configFile}.lock`));
+  expect(warn.mock.calls.flat().join(" ")).not.toMatch(/gq-key|retry/i);
 });

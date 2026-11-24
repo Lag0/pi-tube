@@ -13,16 +13,17 @@ const setEnv = ["config", "set", "providers.groq.api_key_env", "TEST_KEY"];
 const logout = ["auth", "logout", "groq"];
 const login = ["auth", "login", "groq", "--stdin"];
 
-async function overlap(a: string[], b: string[]) {
+async function overlap(a: string[], b: string[], executable = "bun") {
   const home = mkdtempSync(path.join(os.tmpdir(), "pi-tube-overlap-"));
   const file = path.join(home, "config.json");
   writeFileSync(file, JSON.stringify({ future: true, providers: { groq: { extra: 1, api_key: original } } }));
   const run = (role: string, args: string[]) => {
     const child = spawn(
-      "bun",
+      executable,
       ["--no-env-file", "--preload", "./test/helpers/config-overlap-preload.cjs", "bin/pi-tube.ts", ...args],
       {
         timeout: 45000,
+        killSignal: "SIGKILL",
         env: {
           PATH: process.env.PATH,
           SystemRoot: process.env.SystemRoot,
@@ -40,17 +41,30 @@ async function overlap(a: string[], b: string[]) {
     child.stderr.on("data", (chunk) => {
       output += chunk;
     });
-    const done = new Promise<number | null>((resolve, reject) => {
-      child.on("error", reject);
-      child.on("close", resolve);
+    let ended: Error | undefined;
+    const done = new Promise<number | null>((resolve) => {
+      child.once("error", (error) => {
+        ended = error;
+      });
+      child.stdin.on("error", (error) => {
+        ended ??= error;
+      });
+      child.once("close", (code) => {
+        ended ??= new Error(`Writer ${role} exited before handshake (${code}).`);
+        resolve(code);
+      });
     });
     child.stdin.end(args === login ? `${replacement}\n` : undefined);
-    return { child, done, output: () => output };
+    return { child, done, ended: () => ended, output: () => output };
   };
   const children: ReturnType<typeof run>[] = [];
   const until = async (predicate: () => boolean) => {
     const end = Date.now() + 20000;
     while (!predicate()) {
+      for (const writer of children) {
+        const error = writer.ended();
+        if (error) throw error;
+      }
       if (Date.now() > end) throw new Error("Writer handshake timed out");
       await delay(10);
     }
@@ -60,7 +74,8 @@ async function overlap(a: string[], b: string[]) {
     await until(() => existsSync(`${file}.paused`));
     const second = run("B", b);
     children.push(second);
-    await until(() => second.child.exitCode !== null || existsSync(`${file}.contended`));
+    // Without serialization, B may publish and exit before A resumes: let the persisted-state assertions catch it.
+    await until(() => second.child.exitCode === 0 || existsSync(`${file}.contended`));
     writeFileSync(`${file}.release`, "");
     for (const writer of children) {
       expect(await writer.done).toBe(0);
@@ -72,8 +87,13 @@ async function overlap(a: string[], b: string[]) {
     expect(config.providers.groq.extra).toBe(1);
     return config;
   } finally {
-    for (const writer of children) writer.child.kill();
-    await Promise.allSettled(children.map((writer) => writer.done));
+    for (const writer of children) writer.child.kill("SIGKILL");
+    await Promise.race([
+      Promise.all(children.map((writer) => writer.done)),
+      delay(5000, undefined, { ref: false }).then(() => {
+        throw new Error("Writer cleanup timed out");
+      }),
+    ]);
     rmSync(home, { recursive: true, force: true });
   }
 }
@@ -97,3 +117,15 @@ test("overlapping login and env binding match one complete serial order", async 
     { extra: 1, api_key: replacement, api_key_env: "TEST_KEY" },
   ]).toContainEqual(config.providers.groq);
 }, 60000);
+
+test("reports a missing writer executable during startup", async () => {
+  await expect(overlap(language, provider, "no-such-config-test-executable")).rejects.toThrow(/ENOENT/);
+}, 10000);
+
+test.each([["--version"], language])(
+  "reports early exit before a handshake: %s",
+  async (...args) => {
+    await expect(overlap(args, ["--unknown-test-option"])).rejects.toThrow(/exited before/);
+  },
+  10000,
+);

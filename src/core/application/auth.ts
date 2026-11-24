@@ -50,7 +50,7 @@ const updateProvider = async (
     const stillReady = ensureNotAborted(options?.signal);
     if (!stillReady.success) return stillReady;
     return ok({ ...current, providers: { ...current.providers, [descriptor.data.id]: entry } });
-  });
+  }, options?.signal);
   return updated.success ? ok({ descriptor: descriptor.data, config: updated.data }) : updated;
 };
 

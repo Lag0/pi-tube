@@ -62,7 +62,7 @@ export const createSetConfigValue =
       if (!next.success) return next;
       const stillReady = ensureNotAborted(options?.signal);
       return stillReady.success ? next : stillReady;
-    });
+    }, options?.signal);
     if (!updated.success) return updated;
 
     const key = input.key.trim();
