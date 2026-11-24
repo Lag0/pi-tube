@@ -59,6 +59,7 @@ import {
   publicationRecord,
   readPublication,
   withPublication,
+  withPublicationTemp,
 } from "./publication.ts";
 import {
   matchesManagedMarkdown,
@@ -312,7 +313,7 @@ export const createFileLibraryStore = (deps: {
   const newestCopy = async (dir: string, transcriptId: string): Promise<string> => {
     let best = { copy: 1, file: path.join(dir, `${transcriptId}.json`) };
     for (const name of await listDir(dir)) {
-      const match = /^(.+?)-(\d+)\.json(?:\.publication)?$/.exec(name);
+      const match = /^(.+?)-(\d+)\.json(?:\.publication|\.publishing)?$/.exec(name);
       if (match?.[1] !== transcriptId || match[2] === undefined) continue;
       const copy = Number(match[2]);
       if (copy > best.copy) best = { copy, file: path.join(dir, `${transcriptId}-${match[2]}.json`) };
@@ -369,8 +370,7 @@ export const createFileLibraryStore = (deps: {
       return await withPublication(target, deadline, async (enrolled) => {
         if (await present(target)) return ok(false as const);
         const temp = `${target}.${process.pid}.${randomUUID()}.tmp`;
-        await writeFile(temp, content, { encoding: "utf8", mode: 0o600, flag: "wx" });
-        try {
+        return withPublicationTemp(temp, content, async () => {
           if (!enrolled) {
             const receipt = await receiptFor(temp, content);
             try {
@@ -404,9 +404,7 @@ export const createFileLibraryStore = (deps: {
             );
           }
           return ok({});
-        } finally {
-          await rm(temp, { force: true }).catch(() => undefined);
-        }
+        });
       });
     } catch (error) {
       return err(ioError("write", target, error));
@@ -463,6 +461,8 @@ export const createFileLibraryStore = (deps: {
   });
 
   const markerFor = (key: TranscriptKey) => path.join(deps.libraryDir, `.transcribing-${transcriptIdOf(key)}`);
+  const publicationObserved = async (file: string) =>
+    (await present(file)) || (await present(publicationRecord(file))) || (await present(`${file}.publishing`));
   const lookup = async (
     key: TranscriptKey,
     options?: LibraryLookupOptions,
@@ -472,7 +472,7 @@ export const createFileLibraryStore = (deps: {
     try {
       const file = await newestCopy(dir, transcriptIdOf(key));
       // Only a candidate observed before checking the paid writer may bypass admission.
-      const observed = !beforeClaim || (await present(file)) || (await present(publicationRecord(file)));
+      const observed = !beforeClaim || (await publicationObserved(file));
       if (beforeClaim && (await present(markerFor(key)))) {
         return withTranscriptionClaim(markerFor(key), options, async () => {
           const result = await lookup(key, options);
@@ -483,7 +483,7 @@ export const createFileLibraryStore = (deps: {
       if (!exact.success || exact.data || key.language === undefined) return exact;
       const autoKey = { ...key, language: undefined };
       const autoFile = await newestCopy(dir, transcriptIdOf(autoKey));
-      if (!(await present(autoFile)) && !(await present(publicationRecord(autoFile)))) return ok(undefined);
+      if (!(await publicationObserved(autoFile))) return ok(undefined);
       // Only explicit keys wait on auto, and only to read an observed candidate after publication.
       const readAuto = () => readTranscript(autoFile, true, options?.onCacheHit, key.language);
       return (await present(markerFor(autoKey)))

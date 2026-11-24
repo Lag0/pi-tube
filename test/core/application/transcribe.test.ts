@@ -1,4 +1,4 @@
-import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { copyFile, link } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -9,7 +9,11 @@ import type { PiTubeConfig } from "../../../src/core/domain/config.ts";
 import { createError } from "../../../src/core/domain/errors.ts";
 import { err } from "../../../src/core/domain/result.ts";
 import { renderMarkdown } from "../../../src/core/domain/transcript/render-markdown.ts";
-import { createFileLibraryStore } from "../../../src/infrastructure/library/file-library-store.ts";
+import {
+  createFileLibraryStore,
+  sourceDirName,
+  transcriptIdOf,
+} from "../../../src/infrastructure/library/file-library-store.ts";
 import { PROVIDER_DESCRIPTORS } from "../../../src/infrastructure/stt/registry.ts";
 import { createFakeMediaFetcher } from "../../helpers/fake-media.ts";
 import { createFakeSttProvider, TRANSCRIPT_HELLO } from "../../helpers/fake-stt.ts";
@@ -1059,6 +1063,35 @@ describe("audit", () => {
       { result: "error", errorCode: "STORAGE_IO_FAILED", cacheHit: true, cost: { estimate: 0 } },
       { result: "ok", cacheHit: true, cost: { estimate: 0 } },
     ]);
+  });
+
+  test("a reserved JSON claim never admits an ordinary paid request", async () => {
+    const { deepgram, deps } = auditSetup();
+    const key = await deps.library.sourceKeyOf({
+      kind: "direct_url",
+      originalInput: INPUT,
+      normalizedUrl: INPUT,
+      mediaUrl: INPUT,
+      extension: "wav",
+    });
+    if (!key.success) throw Error("missing source key");
+    const sourceKey = key.data;
+    const dir = path.join(outputDir, sourceDirName(sourceKey));
+    mkdirSync(dir, { recursive: true });
+    const id = transcriptIdOf({ sourceKey, provider: "deepgram", model: deepgram.model });
+    const claim = path.join(dir, `${id}.json.publishing`);
+    writeFileSync(claim, "foreign");
+    const request = createTranscribe(deps);
+    for (let i = 0; i < 2; i++) {
+      const result = await run(request);
+      expect(deepgram.requests).toHaveLength(0);
+      expect(result).toMatchObject({
+        success: false,
+        error: { code: "STORAGE_IO_FAILED", hint: expect.stringMatching(/retry/i) },
+      });
+    }
+    expect(deepgram.requests).toHaveLength(0);
+    expect(readFileSync(claim, "utf8")).toBe("foreign");
   });
 
   test("failed JSON certification preserves the known local copy and an ordinary retry never repays", async () => {

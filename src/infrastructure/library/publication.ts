@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { lstat, mkdir, rm, rmdir, writeFile } from "node:fs/promises";
+import { lstat, mkdir, open, rm, rmdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { errnoOf } from "../errno.ts";
@@ -15,13 +15,9 @@ async function retry(deadline: number) {
 export const publicationRecord = (target: string) => `${target}.publication`;
 
 async function generation(target: string) {
-  let bytes: Buffer;
-  try {
-    bytes = await readUnlinkedFile(publicationRecord(target));
-  } catch (error) {
-    if (errnoOf(error) === "ENOENT" || errnoOf(error) === "ENOTDIR") return undefined;
-    throw error;
-  }
+  const file = publicationRecord(target);
+  if (!(await present(file))) return undefined;
+  const bytes = await readUnlinkedFile(file);
   const record = bytes.toString();
   const [magic, name, state] = record.split("\n");
   if (
@@ -40,19 +36,22 @@ export async function readPublication<T>(
   deadline: number,
   read: (bytes: Buffer) => T | Promise<T>,
 ): Promise<T | undefined> {
+  const uncertain = Symbol();
+  // The first record may be incomplete, or its inode replaced while opening it. Neither is absence.
+  const sample = () => generation(target).catch((): typeof uncertain => uncertain);
   let readFailed = false;
   for (;;) {
-    const before = await generation(target);
-    if (!before?.startsWith("pending:")) {
+    const before = await sample();
+    if (before !== uncertain && !before?.startsWith("pending:")) {
       try {
         const value = await read(await readUnlinkedFile(target));
-        if (before === (await generation(target))) return value;
+        if (before === (await sample())) return value;
       } catch (error) {
-        if (!before && ["ENOENT", "ENOTDIR"].includes(errnoOf(error)) && (await generation(target)) === undefined)
-          return undefined;
-        // A hard link is temporarily shared with the publisher's private temp until cleanup.
-        if (readFailed && !(await present(`${target}.publishing`)) && before === (await generation(target)))
-          throw error;
+        if (!(await present(`${target}.publishing`)) && before === (await sample())) {
+          if (!before && ["ENOENT", "ENOTDIR"].includes(errnoOf(error))) {
+            if (!(await present(target))) return undefined;
+          } else if (readFailed) throw error;
+        }
         readFailed = true;
       }
     }
@@ -84,7 +83,27 @@ export async function withPublication<T>(target: string, deadline: number, write
   try {
     return await write((await generation(target)) !== undefined);
   } finally {
-    await rmdir(claim);
+    await rmdir(claim).catch((error) => cleanupWarning("publication claim", error));
+  }
+}
+
+function cleanupWarning(kind: string, error: unknown) {
+  process.emitWarning(`Could not release ${kind} (${errnoOf(error)}). Check the library after all callers stop.`);
+}
+
+export async function withPublicationTemp<T>(temp: string, content: string, use: () => Promise<T>) {
+  const handle = await open(temp, "wx", 0o600);
+  try {
+    try {
+      await handle.writeFile(content);
+    } catch (error) {
+      await handle.close().catch((cause) => cleanupWarning("publication temp handle", cause));
+      throw error;
+    }
+    await handle.close();
+    return await use();
+  } finally {
+    await rm(temp, { force: true }).catch((error) => cleanupWarning("publication temp", error));
   }
 }
 
@@ -99,12 +118,7 @@ export async function enrollCopy(
   const prefix = `pi-tube-publication-v1\n${path.basename(target)}\n`;
   const replace = async (phase: string) => {
     const tmp = `${state}.${token}.${phase}.tmp`;
-    await writeFile(tmp, `${prefix}${phase}:${token}`, { flag: "wx", mode: 0o600 });
-    try {
-      await rename(tmp, state);
-    } finally {
-      await rm(tmp, { force: true });
-    }
+    await withPublicationTemp(tmp, `${prefix}${phase}:${token}`, () => rename(tmp, state));
   };
   if (enrolled) await replace("pending");
   else await writeFile(state, `${prefix}pending:${token}`, { flag: "wx", mode: 0o600 });

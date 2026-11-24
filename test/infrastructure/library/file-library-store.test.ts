@@ -14,6 +14,7 @@ import {
   utimesSync,
   writeFileSync,
 } from "node:fs";
+import { open } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
@@ -30,6 +31,11 @@ import {
 import * as activity from "../../../src/infrastructure/library/library-activity.ts";
 
 import * as safeFiles from "../../../src/infrastructure/library/transcript-cleanup.ts";
+
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const fs = await importOriginal<typeof import("node:fs/promises")>();
+  return { ...fs, open: vi.fn(fs.open) };
+});
 
 const isWindows = process.platform === "win32";
 
@@ -285,6 +291,132 @@ describe("save and find", () => {
       }
     },
   );
+
+  test("a record replaced between inspection and open is resampled", async () => {
+    const fs = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+    const pending = Promise.withResolvers<string>();
+    const commit = Promise.withResolvers<void>();
+    const store = createFileLibraryStore({
+      libraryDir,
+      fs: {
+        link: async () => {
+          throw Error("no links");
+        },
+        copyFile: async (temp, target, flags) => {
+          await fs.copyFile(temp, target, flags);
+          if (target.endsWith(".json")) {
+            pending.resolve(`${target}.publication`);
+            await commit.promise;
+          }
+        },
+      },
+    });
+    const key = keyOf();
+    const saved = store.save({ key, source: youtube(), artifact: artifactOf(youtube()) });
+    const record = await pending.promise;
+    let replaced = false;
+    try {
+      await vi.mocked(open).withImplementation(
+        async (file, ...args) => {
+          if (file === record && !replaced) {
+            replaced = true;
+            commit.resolve();
+            await saved;
+          }
+          return fs.open(file, ...args);
+        },
+        async () => {
+          expect((await store.get(transcriptIdOf(key))).success).toBe(true);
+        },
+      );
+    } finally {
+      commit.resolve();
+      expect((await saved).success).toBe(true);
+    }
+    expect(replaced).toBe(true);
+  });
+
+  test.each([".json.", ".md.", ".committed.tmp"])("removes a partially written owned %s temp", async (kind) => {
+    const store = createFileLibraryStore({
+      libraryDir,
+      fs: {
+        link: async () => {
+          throw Error("no links");
+        },
+      },
+    });
+    const fs = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+    let temp: string | undefined;
+    await vi.mocked(open).withImplementation(
+      async (file, flags, mode) => {
+        const handle = await fs.open(file, flags, mode);
+        if (!temp && flags === "wx" && typeof file === "string" && file.endsWith(".tmp") && file.includes(kind)) {
+          temp = file;
+          await handle.writeFile("partial");
+          vi.spyOn(handle, "writeFile").mockRejectedValue(Error("write interrupted"));
+        }
+        return handle;
+      },
+      async () => {
+        expect((await store.save({ key: keyOf(), source: youtube(), artifact: artifactOf(youtube()) })).success).toBe(
+          false,
+        );
+      },
+    );
+    if (!temp) throw Error("missing partial write");
+    expect(existsSync(temp)).toBe(false);
+  });
+
+  test("a temp name collision does not remove foreign bytes", async () => {
+    const store = createFileLibraryStore({ libraryDir });
+    const fs = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+    let collision: string | undefined;
+    await vi.mocked(open).withImplementation(
+      async (file, flags, mode) => {
+        if (!collision && flags === "wx" && typeof file === "string" && file.endsWith(".tmp")) {
+          collision = file;
+          writeFileSync(file, "foreign", { flag: "wx" });
+        }
+        return fs.open(file, flags, mode);
+      },
+      async () => {
+        expect((await store.save({ key: keyOf(), source: youtube(), artifact: artifactOf(youtube()) })).success).toBe(
+          false,
+        );
+      },
+    );
+    if (!collision) throw Error("missing temp collision");
+    expect(readFileSync(collision, "utf8")).toBe("foreign");
+  });
+
+  test.each([false, true])("claim release failure preserves the copy outcome (failed: %s)", async (fail) => {
+    const warning = vi.spyOn(process, "emitWarning").mockImplementation(() => {});
+    const input = { key: keyOf(), source: youtube(), artifact: artifactOf(youtube()) };
+    const store = createFileLibraryStore({
+      libraryDir,
+      fs: {
+        link: async () => {
+          throw Error("no links");
+        },
+        copyFile: async (temp, target) => {
+          writeFileSync(target, readFileSync(temp), { flag: "wx" });
+          if (target.endsWith(".json")) {
+            writeFileSync(path.join(`${target}.publishing`, "keep"), "foreign");
+            if (fail) throw Error("uncertain copy");
+          }
+        },
+      },
+    });
+    const saved = await store.save(input);
+    expect(warning).toHaveBeenCalledWith(expect.stringContaining("publication claim"));
+    if (fail)
+      expect(saved).toMatchObject({
+        success: false,
+        error: { message: expect.stringContaining("publication is uncertain") },
+      });
+    else expect(saved.success).toBe(true);
+    expect((await store.find(input.key)).success).toBe(!fail);
+  });
 
   test.each(["record", "claim"])("a foreign %s is preserved and does not block another target", async (kind) => {
     const input = { key: keyOf(), source: youtube(), artifact: artifactOf(youtube()) };
