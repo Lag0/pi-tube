@@ -88,7 +88,7 @@ describe("library use cases", () => {
 });
 
 describe("pruneLibrary", () => {
-  test("records one audit entry whose input names the options", async () => {
+  test("records the options of applied prunes but not previews", async () => {
     const audit = createInMemoryAuditLog();
     const prune = createPruneLibrary({
       library: createFileLibraryStore({ libraryDir }),
@@ -97,10 +97,11 @@ describe("pruneLibrary", () => {
     });
 
     await prune({ includeTranscripts: false, dryRun: true });
+    await prune({ includeTranscripts: false, dryRun: false });
     await prune({ olderThanDays: 30, includeTranscripts: true, dryRun: false });
 
     expect(audit.records.map((record) => [record.operation, record.input, record.result])).toEqual([
-      ["library_prune", "older_than_days=none include_transcripts=false dry_run=true", "ok"],
+      ["library_prune", "older_than_days=none include_transcripts=false dry_run=false", "ok"],
       ["library_prune", "older_than_days=30 include_transcripts=true dry_run=false", "ok"],
     ]);
   });

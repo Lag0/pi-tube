@@ -7,6 +7,7 @@ import {
   realpathSync,
   renameSync,
   rmSync,
+  statSync,
   symlinkSync,
   utimesSync,
   writeFileSync,
@@ -15,6 +16,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { createApp } from "../../src/bootstrap.ts";
+import { DEFAULT_CONFIG } from "../../src/core/domain/config.ts";
 import type { ResolvedSource } from "../../src/core/domain/source.ts";
 import { buildOutputArtifact } from "../../src/core/domain/transcript/build-artifact.ts";
 import { createFileLibraryStore } from "../../src/infrastructure/library/file-library-store.ts";
@@ -438,6 +440,53 @@ describe("library prune", () => {
       }
     },
   );
+
+  function previewAudio(args: string[]) {
+    return spawnCli(["library", "prune", ...args], {
+      HOME: libraryDir,
+      PI_TUBE_LIBRARY_DIR: path.join(libraryDir, "library"),
+      PI_TUBE_CONFIG_PATH: path.join(libraryDir, "config.json"),
+    });
+  }
+
+  test("default audio preview leaves an empty home empty", () => {
+    expect(previewAudio([]).exitCode).toBe(0);
+    expect(readdirSync(libraryDir)).toEqual([]);
+  });
+
+  test.each(["age", "space"])("%s audio preview preserves home entries and file bytes", (mode) => {
+    for (const [name, bytes] of [
+      ["old", "older"],
+      ["new", "new"],
+    ] as const) {
+      const dir = path.join(libraryDir, "library", name);
+      mkdirSync(dir, { recursive: true });
+      const file = path.join(dir, "audio.mp3");
+      writeFileSync(file, bytes);
+      if (name === "old") utimesSync(file, new Date(0), new Date(0));
+    }
+    const auditDir = path.join(libraryDir, ".pi-tube", "audit");
+    mkdirSync(auditDir, { recursive: true });
+    writeFileSync(path.join(auditDir, "2000-01.jsonl"), "{}");
+    if (mode === "space") {
+      writeFileSync(
+        path.join(libraryDir, "config.json"),
+        JSON.stringify({ ...DEFAULT_CONFIG, library: { max_audio_bytes: 3 } }),
+      );
+    }
+    const snapshot = () =>
+      readdirSync(libraryDir, { recursive: true, encoding: "utf8" })
+        .sort()
+        .map((entry) => {
+          const file = path.join(libraryDir, entry);
+          return [entry, statSync(file).isDirectory() ? null : readFileSync(file)];
+        });
+    const before = snapshot();
+    const result = previewAudio(mode === "space" ? ["--json"] : ["--older-than", "30", "--json"]);
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual({ dry_run: true, audio_files: 1, source_dirs: 0, bytes: 5 });
+    expect(snapshot()).toEqual(before);
+  });
 
   test("transcript preview does not import or audit into an empty home", async () => {
     const home = path.join(libraryDir, "empty-home");
