@@ -27,6 +27,27 @@ import {
   sourceDirName,
   transcriptIdOf,
 } from "../../../src/infrastructure/library/file-library-store.ts";
+import * as activity from "../../../src/infrastructure/library/library-activity.ts";
+
+const publicationHooks = vi.hoisted(() => ({
+  scan: undefined as ((dir: string, when: "before" | "after") => Promise<void>) | undefined,
+  copy: undefined as ((from: string, to: string) => Promise<boolean>) | undefined,
+}));
+vi.mock("node:fs/promises", async (load) => {
+  const fs = await load<typeof import("node:fs/promises")>();
+  return {
+    ...fs,
+    readdir: async (...args: Parameters<typeof fs.readdir>) => {
+      await publicationHooks.scan?.(String(args[0]), "before");
+      const names = await fs.readdir(...args);
+      await publicationHooks.scan?.(String(args[0]), "after");
+      return names;
+    },
+    copyFile: async (...args: Parameters<typeof fs.copyFile>) => {
+      if (!(await publicationHooks.copy?.(String(args[0]), String(args[1])))) return fs.copyFile(...args);
+    },
+  };
+});
 
 const isWindows = process.platform === "win32";
 
@@ -39,6 +60,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  publicationHooks.copy = undefined;
+  publicationHooks.scan = undefined;
   rmSync(root, { recursive: true, force: true });
 });
 
@@ -100,6 +123,152 @@ describe("save and find", () => {
     writeFileSync(saved.data.paths.json, bytes);
     expect(await store.find(key)).toMatchObject({ success: false, error: { code: "STORAGE_IO_FAILED" } });
     expect(readFileSync(saved.data.paths.markdown, "utf8")).toBe("old renderer output");
+  });
+
+  test("a new JSON generation cannot inherit an earlier generation's rendering", async () => {
+    const store = createFileLibraryStore({ libraryDir });
+    const input = { key: keyOf(), source: youtube(), artifact: artifactOf(youtube()) };
+    const first = await store.save(input);
+    if (!first.success) throw Error("save failed");
+    const { paths, transcriptId } = first.data;
+    const a = readFileSync(paths.json);
+    const md = readFileSync(paths.markdown);
+    expect(await store.get(transcriptId)).toMatchObject({ success: true, data: { transcriptId } });
+    expect(readFileSync(paths.json)).toEqual(a);
+    renameSync(paths.json, path.join(root, "A.json"));
+    input.artifact.transcript.full_text = "generation B";
+    const failure = {
+      success: false,
+      error: { code: "STORAGE_IO_FAILED", message: expect.stringContaining(paths.json) },
+    };
+    expect(await store.save(input)).toMatchObject(failure);
+    const b = readFileSync(paths.json);
+    expect(JSON.parse(b.toString())).toMatchObject({
+      transcript_id: transcriptId,
+      transcript: { full_text: "generation B" },
+    });
+    expect(await store.find(input.key)).toMatchObject(failure);
+    expect(await store.get(transcriptId)).toMatchObject(failure);
+    expect(readFileSync(paths.markdown)).toEqual(md);
+    expect(readFileSync(paths.json)).toEqual(b);
+    expect(readFileSync(path.join(root, "A.json"))).toEqual(a);
+  });
+
+  test("a hard-linked metadata receipt cannot endorse an older rendering", async () => {
+    const store = createFileLibraryStore({ libraryDir });
+    vi.spyOn(renderer, "renderMarkdown").mockReturnValueOnce("older");
+    const saved = await store.save({ key: keyOf(), source: youtube(), artifact: artifactOf(youtube()) });
+    if (!saved.success) throw Error("save failed");
+    linkSync(path.join(path.dirname(saved.data.paths.json), "source.json"), path.join(root, "outside"));
+    expect(await store.get(saved.data.transcriptId)).toMatchObject({ success: false });
+  });
+
+  test.each(["get", "save"])(
+    "competing %s completes repair before the producer publishes Markdown",
+    async (operation) => {
+      const input = { key: keyOf(), source: youtube(), artifact: artifactOf(youtube()) };
+      const other = createFileLibraryStore({ libraryDir });
+      const enter = Promise.withResolvers<void>();
+      const release = Promise.withResolvers<void>();
+      const producer = createFileLibraryStore({
+        libraryDir,
+        fs: {
+          link: async (temp, target) => {
+            if (target.endsWith(".md")) {
+              enter.resolve();
+              await release.promise;
+            }
+            linkSync(temp, target);
+          },
+        },
+      }).save(input);
+      await enter.promise;
+      try {
+        expect(await (operation === "get" ? other.get(transcriptIdOf(input.key)) : other.save(input))).toMatchObject({
+          success: true,
+        });
+      } finally {
+        release.resolve();
+      }
+      const saved = await producer;
+      expect(saved.success).toBe(true);
+      if (!saved.success) return;
+      const meta = JSON.parse(readFileSync(path.join(path.dirname(saved.data.paths.json), "source.json"), "utf8"));
+      expect(meta.cleanup.files[path.basename(saved.data.paths.markdown)]).toBeUndefined();
+    },
+  );
+
+  test.each([
+    ["hardlink", ".md", "get"],
+    ["exclusive-copy", ".md", "get"],
+    ["exclusive-copy", ".json", "save"],
+  ] as const)("%s: %s is incomplete when a competing %s observes it", async (method, extension, operation) => {
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const input = { key: keyOf(), source: youtube(), artifact: artifactOf(youtube()) };
+    const noLink = () => {
+      throw Object.assign(new Error("no links"), { code: "EPERM" });
+    };
+    const fs = {
+      link: async (temp: string, target: string) => {
+        if (method === "exclusive-copy") noLink();
+        linkSync(temp, target);
+        if (target.endsWith(extension)) {
+          entered.resolve();
+          await release.promise;
+        }
+      },
+    };
+    publicationHooks.copy = async (temp, target) => {
+      if (!target.endsWith(extension) || existsSync(target)) return false;
+      writeFileSync(target, "{", { flag: "wx" });
+      entered.resolve();
+      await release.promise;
+      writeFileSync(target, readFileSync(temp));
+      return true;
+    };
+    const store = createFileLibraryStore({ libraryDir, fs });
+    const producer = store.save(input);
+    await entered.promise;
+    // The hard link disappears just before enumeration; a partial copy still has a visible temp.
+    const sawConflict = vi.fn();
+    publicationHooks.scan = async (dir, when) => {
+      if (when !== (method === "hardlink" ? "before" : "after")) return;
+      if (dir !== path.join(libraryDir, sourceDirName(input.key.sourceKey))) return;
+      sawConflict();
+      release.resolve();
+      await producer;
+    };
+    try {
+      const peer = await (operation === "get" ? store.get(transcriptIdOf(input.key)) : store.save(input));
+      expect(peer).toMatchObject({ success: true, data: { transcriptId: transcriptIdOf(input.key) } });
+      expect(sawConflict).toHaveBeenCalled();
+    } finally {
+      release.resolve();
+      await producer;
+    }
+    expect(await producer).toMatchObject({ success: true });
+  });
+
+  test("a stale publication temp neither endorses a linked destination nor waits indefinitely", async () => {
+    const store = createFileLibraryStore({ libraryDir });
+    const saved = await store.save({ key: keyOf(), source: youtube(), artifact: artifactOf(youtube()) });
+    if (!saved.success) throw Error("save failed");
+    const md = saved.data.paths.markdown;
+    const stale = `${md}.123.00000000-0000-4000-8000-000000000000.tmp`;
+    linkSync(md, stale);
+    expect(await store.get(saved.data.transcriptId)).toMatchObject({ success: false });
+    expect(existsSync(stale)).toBe(true);
+  }, 8000);
+
+  test("unavailable metadata locking does not prevent publication", async () => {
+    vi.spyOn(activity, "withSourceWriter").mockRejectedValueOnce(Error("unavailable"));
+    const store = createFileLibraryStore({ libraryDir });
+    const saved = await store.save({ key: keyOf(), source: youtube(), artifact: artifactOf(youtube()) });
+    expect(saved.success).toBe(true);
+    if (!saved.success) return;
+    expect(existsSync(path.join(path.dirname(saved.data.paths.json), "source.json"))).toBe(false);
+    expect(await store.get(saved.data.transcriptId)).toMatchObject({ success: true });
   });
 
   test.each(["directory", "hardlink", ...(isWindows ? [] : ["symlink"])])(

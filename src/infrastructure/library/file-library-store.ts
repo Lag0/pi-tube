@@ -17,6 +17,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import path from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { createError, type PiTubeError, transcriptionWaitError } from "../../core/domain/errors.ts";
 import { sameLanguage } from "../../core/domain/language.ts";
 import {
@@ -53,7 +54,13 @@ import { errnoOf } from "../errno.ts";
 
 import { withTranscriptionClaim } from "./coordinate-transcription.ts";
 import { withSourceWriter } from "./library-activity.ts";
-import { matchesManagedMarkdown, pruneTranscripts, receiptFor, sourceWithReceipts } from "./transcript-cleanup.ts";
+import {
+  matchesManagedMarkdown,
+  pruneTranscripts,
+  readUnlinkedFile,
+  receiptFor,
+  sourceWithReceipts,
+} from "./transcript-cleanup.ts";
 
 const MAX_FRESH_COPIES = 999;
 const SOURCE_FILE = "source.json";
@@ -65,6 +72,45 @@ const sha256 = (text: string): string => createHash("sha256").update(text).diges
 
 const ioError = (action: "read" | "write", target: string, error: unknown): PiTubeError =>
   createError("STORAGE_IO_FAILED", `Cannot ${action} \`${target}\` (${errnoOf(error)}).`, { hint: HINT });
+
+/** A sibling temp is only a retry hint: after it disappears the destination must still validate. */
+async function waitForPublications(target: string): Promise<boolean> {
+  const dir = path.dirname(target);
+  const prefix = `${path.basename(target)}.`;
+  const suffix = /^\d+\.[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.tmp$/;
+  const pending = new Set(
+    (await readdir(dir)).filter((name) => name.startsWith(prefix) && suffix.test(name.slice(prefix.length))),
+  );
+  if (!pending.size) return false;
+  const deadline = performance.now() + 2000;
+  while (pending.size) {
+    for (const name of pending) {
+      try {
+        await lstat(path.join(dir, name));
+      } catch (error) {
+        if (errnoOf(error) !== "ENOENT") throw error;
+        pending.delete(name);
+      }
+    }
+    if (!pending.size || performance.now() >= deadline) break;
+    await delay(10);
+  }
+  return true;
+}
+
+async function availableMarkdown(
+  markdown: string,
+  expected: string,
+  olderRendering?: (bytes: Buffer) => Promise<boolean>,
+): Promise<boolean> {
+  const matches = async () => {
+    const bytes = await readUnlinkedFile(markdown);
+    return bytes.equals(Buffer.from(expected)) || (await olderRendering?.(bytes)) === true;
+  };
+  if (await matches().catch(() => false)) return true;
+  await waitForPublications(markdown);
+  return matches();
+}
 
 /** The first 20 hex characters of the SHA-256 of `transcriptKeyText(key)`. */
 export const transcriptIdOf = (key: TranscriptKey): string => sha256(transcriptKeyText(key)).slice(0, 20);
@@ -228,11 +274,23 @@ export const createFileLibraryStore = (deps: {
       const code = errnoOf(error);
       return code === "ENOENT" || code === "ENOTDIR" ? ok(undefined) : err(ioError("read", file, error));
     }
-    const artifact = parseStoredArtifact(text);
+    let artifact = parseStoredArtifact(text);
+    let publishing = false;
+    if (!artifact.success) {
+      try {
+        publishing = await waitForPublications(file);
+        text = await readFile(file, "utf8");
+        artifact = parseStoredArtifact(text);
+      } catch (error) {
+        return err(ioError("read", file, error));
+      }
+    }
     if (!artifact.success) {
       return err(
         createError("STORAGE_IO_FAILED", `${artifact.error.message.replace(/\.$/, "")}: \`${file}\`.`, {
-          hint: `Delete \`${file}\`, or run the command again with \`--force\` to transcribe anew.`,
+          hint: publishing
+            ? "Retry the same request normally after publication finishes."
+            : `Delete \`${file}\`, or run the command again with \`--force\` to transcribe anew.`,
         }),
       );
     }
@@ -243,11 +301,6 @@ export const createFileLibraryStore = (deps: {
     if (repair) {
       onCacheHit?.();
       const expected = renderMarkdown(artifact.data);
-      const available = async (info: Awaited<ReturnType<typeof lstat>>) => {
-        if (!info.isFile() || info.nlink !== 1) return false;
-        const bytes = await readFile(markdown);
-        return bytes.equals(Buffer.from(expected)) || matchesManagedMarkdown(file, text, markdown, bytes);
-      };
       try {
         const info = await lstat(markdown).catch((error) => {
           if (errnoOf(error) === "ENOENT") return undefined;
@@ -256,8 +309,11 @@ export const createFileLibraryStore = (deps: {
         if (!info) {
           const written = await publish(markdown, expected);
           if (!written.success) return incomplete(file, markdown);
-          if (!written.data && !(await available(await lstat(markdown)))) return incomplete(file, markdown);
-        } else if (!(await available(info))) return incomplete(file, markdown);
+          if (!written.data && !(await availableMarkdown(markdown, expected))) return incomplete(file, markdown);
+        } else if (
+          !(await availableMarkdown(markdown, expected, (bytes) => matchesManagedMarkdown(file, text, markdown, bytes)))
+        )
+          return incomplete(file, markdown);
       } catch {
         return incomplete(file, markdown);
       }
@@ -289,12 +345,14 @@ export const createFileLibraryStore = (deps: {
     source: ResolvedSource,
     created: boolean,
     files: Record<string, string>,
+    markdownName: string,
+    jsonName: string,
   ): Promise<Result<void>> => {
     const file = path.join(dir, SOURCE_FILE);
     let existing: Record<string, unknown> = {};
     let previous: string | undefined;
     try {
-      previous = await readFile(file, "utf8");
+      previous = (await readUnlinkedFile(file)).toString("utf8");
       const parsed: unknown = JSON.parse(previous);
       if (isRecord(parsed)) existing = parsed;
     } catch (error) {
@@ -304,7 +362,10 @@ export const createFileLibraryStore = (deps: {
     const temp = `${file}.${process.pid}.${randomUUID()}.tmp`;
     try {
       await writeFile(temp, "", { mode: 0o600, flag: "wx" });
-      await writeFile(temp, await sourceWithReceipts(dir, temp, content, previous, created, files));
+      await writeFile(
+        temp,
+        await sourceWithReceipts(dir, temp, content, previous, created, files, markdownName, jsonName),
+      );
       await rename(temp, file);
       return ok(undefined);
     } catch (error) {
@@ -496,11 +557,25 @@ export const createFileLibraryStore = (deps: {
           if (claimed.data.receipt) files[path.basename(jsonPath)] = claimed.data.receipt;
           const markdownReceipt = published.success && typeof published.data === "object" && published.data.receipt;
           if (markdownReceipt) files[path.basename(markdownPath)] = markdownReceipt;
-          await withSourceWriter(dir, () => writeSourceFile(dir, key.sourceKey, source, created, files));
+          await withSourceWriter(dir, () =>
+            writeSourceFile(
+              dir,
+              key.sourceKey,
+              source,
+              created,
+              files,
+              path.basename(markdownPath),
+              path.basename(jsonPath),
+            ),
+          );
         } catch {
           // Cleanup evidence is best-effort: missing evidence preserves files, never loses a paid transcript.
         }
-        if (!published.success || !published.data) return incomplete(jsonPath, markdownPath);
+        if (
+          !published.success ||
+          (!published.data && !(await availableMarkdown(markdownPath, markdown).catch(() => false)))
+        )
+          return incomplete(jsonPath, markdownPath);
         return ok({
           transcriptId,
           sourceKey: key.sourceKey,
