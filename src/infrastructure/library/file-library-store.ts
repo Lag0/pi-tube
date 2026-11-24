@@ -362,7 +362,8 @@ export const createFileLibraryStore = (deps: {
     );
   const lookup = async (
     key: TranscriptKey,
-    beforeClaim?: OperationOptions,
+    options?: OperationOptions,
+    beforeClaim = false,
   ): Promise<Result<StoredTranscript | undefined>> => {
     const dir = dirOf(key.sourceKey);
     try {
@@ -370,18 +371,23 @@ export const createFileLibraryStore = (deps: {
       // If the immutable pathname existed BEFORE we observed no writer, it is safe to read and repair.
       const present = !beforeClaim || (await exists(file));
       if (beforeClaim && (await exists(markerFor(key)))) {
-        return withTranscriptionClaim(markerFor(key), beforeClaim, async () => {
-          const result = await lookup(key);
+        return withTranscriptionClaim(markerFor(key), options, async () => {
+          const result = await lookup(key, options);
           return result.success && !result.data ? err(transcriptionWaitError()) : result;
         });
       }
       const exact = present ? await readTranscript(file, true) : ok(undefined);
       if (!exact.success || exact.data || key.language === undefined) return exact;
-      // A language-specific producer must not wait on a different key while holding its own claim.
       const autoKey = { ...key, language: undefined };
       const autoFile = await newestCopy(dir, transcriptIdOf(autoKey));
-      if (!(await exists(autoFile)) || (await exists(markerFor(autoKey)))) return ok(undefined);
-      const auto = await readTranscript(autoFile, true);
+      if (!(await exists(autoFile))) return ok(undefined);
+      // Only explicit keys wait on auto, and only to read an observed candidate after publication.
+      const auto = (await exists(markerFor(autoKey)))
+        ? await withTranscriptionClaim(markerFor(autoKey), options, async () => {
+            const candidate = await readTranscript(autoFile, true);
+            return candidate.success && !candidate.data ? err(transcriptionWaitError()) : candidate;
+          })
+        : await readTranscript(autoFile, true);
       if (!auto.success) return auto;
       return ok(
         sameLanguage(key.language, auto.data?.artifact.transcription.detected_language) ? auto.data : undefined,
@@ -417,8 +423,8 @@ export const createFileLibraryStore = (deps: {
     },
 
     withTranscriptionClaim: (key, options, admitted) => withTranscriptionClaim(markerFor(key), options, admitted),
-    find: (key) => lookup(key),
-    findBeforeClaim: (key, options) => lookup(key, options ?? {}),
+    find: lookup,
+    findBeforeClaim: (key, options) => lookup(key, options, true),
 
     save: async ({ key, source, artifact, fresh = false }) => {
       const dir = dirOf(key.sourceKey);

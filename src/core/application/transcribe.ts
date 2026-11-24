@@ -277,7 +277,7 @@ const runTranscribe =
     return deps.library.withTranscriptionClaim(key, options, async (producer) => {
       const ready = ensureNotAborted(options?.signal);
       if (!ready.success) return ready;
-      const cached = await deps.library.find(key);
+      const cached = await deps.library.find(key, options);
       if (!cached.success) return cached;
       if (cached.data) return ok(hit(cached.data));
       if (!producer) return err(transcriptionWaitError());

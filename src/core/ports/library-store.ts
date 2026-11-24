@@ -73,7 +73,7 @@ export interface LibraryStore {
   /** Speculative URL lookup before resolve; waits for an observed producer without taking over. */
   findBeforeClaim(key: TranscriptKey, options?: OperationOptions): Promise<Result<StoredTranscript | undefined>>;
   /** Cache lookup: the exact key, or, for a requested language, an `auto` transcript that detected it. */
-  find(key: TranscriptKey): Promise<Result<StoredTranscript | undefined>>;
+  find(key: TranscriptKey, options?: OperationOptions): Promise<Result<StoredTranscript | undefined>>;
   /**
    * Stamps the transcript id and source key on `artifact`, then writes source.json (merged), `<id>.json` and
    * `<date>-<title>-<id8>.md`. An existing transcript is returned as is; with `fresh`, the next free `<id>-<n>` is
