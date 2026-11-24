@@ -1,16 +1,31 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  renameSync,
+  rmSync,
+  symlinkSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { createApp } from "../../src/bootstrap.ts";
 import type { ResolvedSource } from "../../src/core/domain/source.ts";
 import { buildOutputArtifact } from "../../src/core/domain/transcript/build-artifact.ts";
 import { createFileLibraryStore } from "../../src/infrastructure/library/file-library-store.ts";
 import { runCliInProcess } from "../helpers/cli-harness.ts";
+import { spawnCli } from "../helpers/spawn-cli.ts";
+import { fakeProviders, PROVIDER_KEYS } from "../helpers/transcribe-fakes.ts";
 
 let libraryDir: string;
 
 beforeEach(() => {
-  libraryDir = mkdtempSync(path.join(os.tmpdir(), "pi-tube-library-cli-"));
+  libraryDir = realpathSync(mkdtempSync(path.join(os.tmpdir(), "pi-tube-library-cli-")));
 });
 
 afterEach(() => {
@@ -175,6 +190,284 @@ describe("library search", () => {
 });
 
 describe("library prune", () => {
+  test("old personal files do not become a source to prune", async () => {
+    const dir = path.join(libraryDir, "my-interviews");
+    mkdirSync(dir);
+    const note = path.join(dir, "notes.md");
+    writeFileSync(note, "keep me");
+    utimesSync(note, new Date(0), new Date(0));
+    const args = ["prune", "--include-transcripts", "--older-than", "30", "--json"];
+    for (const flags of [args, [...args, "--yes"]]) {
+      const result = await library(flags);
+      expect(result.exitCode).toBe(0);
+      expect(JSON.parse(result.stdout)).toMatchObject({ source_dirs: 0, bytes: 0 });
+      expect(readFileSync(note, "utf8")).toBe("keep me");
+    }
+    expect(existsSync(libraryDir)).toBe(true);
+  });
+
+  test("prunes managed transcripts individually and preserves a user's corrected Markdown", async () => {
+    const [id] = await seed([page("aaaaaaaaaaa", "Original interview")]);
+    const { markdown_path: markdown, json_path: json } = JSON.parse(
+      (await library(["show", id ?? "", "--json"])).stdout,
+    );
+    const dir = path.dirname(json);
+    const note = path.join(dir, "my-notes.md");
+    writeFileSync(note, "personal notes");
+    for (const entry of readdirSync(dir)) utimesSync(path.join(dir, entry), new Date(0), new Date(0));
+    const args = ["prune", "--include-transcripts", "--older-than", "30", "--json"];
+    const preview = await library(args);
+    expect(JSON.parse(preview.stdout)).toMatchObject({ source_dirs: 0, preserved: expect.any(Number) });
+    expect(existsSync(json)).toBe(true);
+    writeFileSync(markdown, "my corrections");
+    utimesSync(markdown, new Date(0), new Date(0));
+    const applied = await library([...args, "--yes"]);
+    expect(applied.exitCode).toBe(0);
+    expect(existsSync(json)).toBe(process.platform !== "win32");
+    if (process.platform !== "win32")
+      expect(JSON.parse(applied.stdout)).toMatchObject({ unsupported: true, bytes: 0, transcript_files: 0 });
+    expect(readFileSync(markdown, "utf8")).toBe("my corrections");
+    expect(readFileSync(note, "utf8")).toBe("personal notes");
+  });
+
+  test("concurrent saves for one source keep the receipts for both transcripts", async () => {
+    const source = page("aaaaaaaaaaa", "Concurrent");
+    const [[id]] = await Promise.all([seed([source], ["groq"]), seed([source], ["deepgram"])]);
+    const dir = path.dirname(JSON.parse((await library(["show", id ?? "", "--json"])).stdout).json_path);
+    for (const name of readdirSync(dir)) utimesSync(path.join(dir, name), new Date(0), new Date(0));
+    const report = JSON.parse(
+      (await library(["prune", "--older-than", "30", "--include-transcripts", "--json"])).stdout,
+    );
+    expect(report.transcript_files).toBe(process.platform === "win32" ? 4 : 0);
+  });
+
+  test.runIf(process.platform === "win32")(
+    "the verified entry cannot be renamed or overwritten while pinned",
+    async () => {
+      const file = path.join(libraryDir, "artifact");
+      writeFileSync(file, "original");
+      const { pin } = await import("../../src/infrastructure/library/windows-handle.ts");
+      const handle = pin(file, "file");
+      try {
+        expect(() => renameSync(file, `${file}.renamed`)).toThrow();
+        expect(() => writeFileSync(file, "changed")).toThrow();
+        expect(readFileSync(file, "utf8")).toBe("original");
+      } finally {
+        handle.close();
+      }
+      renameSync(file, `${file}.renamed`);
+    },
+  );
+
+  test.runIf(process.platform === "win32")(
+    "a library admission failure is audited for transcription and applied audio prune",
+    async () => {
+      const app = createApp(
+        {
+          adapter: "cli",
+          env: { HOME: libraryDir, PI_TUBE_LIBRARY_DIR: libraryDir },
+          cwd: libraryDir,
+          homedir: () => libraryDir,
+        },
+        { stt: fakeProviders() },
+      );
+      const { pin } = await import("../../src/infrastructure/library/windows-handle.ts");
+      const handle = pin(libraryDir, "prune-root");
+      try {
+        expect((await app.transcribe({ input: "test.mp3", format: "json" })).success).toBe(false);
+        expect((await app.pruneLibrary({ includeTranscripts: false, dryRun: false })).success).toBe(false);
+      } finally {
+        handle.close();
+      }
+      const audit = await app.queryAudit({ offset: 0, limit: 10, errorsOnly: true });
+      expect(audit.success && audit.data.records.map((r) => r.operation).sort()).toEqual([
+        "library_prune",
+        "transcribe",
+      ]);
+    },
+  );
+
+  test("listing a missing library does not create it", async () => {
+    const missing = path.join(libraryDir, "missing");
+    const result = await runCliInProcess(["library", "list", "--json"], { env: { PI_TUBE_LIBRARY_DIR: missing } });
+    expect(result.exitCode).toBe(0);
+    expect(existsSync(missing)).toBe(false);
+  });
+
+  test("CLI prune skips a library while an MCP transcription is using it", async () => {
+    const [id] = await seed([page("aaaaaaaaaaa", "Existing")]);
+    const shown = JSON.parse((await library(["show", id ?? "", "--json"])).stdout);
+    for (const file of readdirSync(path.dirname(shown.json_path)))
+      utimesSync(path.join(path.dirname(shown.json_path), file), new Date(0), new Date(0));
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const stt = fakeProviders();
+    const app = createApp(
+      {
+        adapter: "mcp",
+        env: { ...PROVIDER_KEYS, HOME: libraryDir, PI_TUBE_LIBRARY_DIR: libraryDir },
+        cwd: libraryDir,
+        homedir: () => libraryDir,
+      },
+      {
+        stt: {
+          ...stt,
+          groq: {
+            ...stt.groq,
+            transcribe: async (...args) => {
+              entered.resolve();
+              await release.promise;
+              return stt.groq.transcribe(...args);
+            },
+          },
+        },
+      },
+    );
+    const call = app.transcribe({ input: "https://example.invalid/test.mp3", provider: "groq", format: "json" });
+    try {
+      await entered.promise;
+      const result = spawnCli(["library", "prune", "--older-than", "30", "--include-transcripts", "--yes", "--json"], {
+        PI_TUBE_LIBRARY_DIR: libraryDir,
+      });
+      expect(result.exitCode).toBe(0);
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        bytes: 0,
+        source_dirs: 0,
+        ...(process.platform === "win32" ? { busy: true } : { unsupported: true }),
+      });
+      expect(existsSync(shown.json_path)).toBe(true);
+    } finally {
+      release.resolve();
+      await call;
+    }
+  });
+
+  test("never prunes through a directory junction in the configured library path", async () => {
+    const [id] = await seed([page("aaaaaaaaaaa", "Outside")]);
+    const { json_path: json } = JSON.parse((await library(["show", id ?? "", "--json"])).stdout);
+    for (const file of readdirSync(path.dirname(json)))
+      utimesSync(path.join(path.dirname(json), file), new Date(0), new Date(0));
+    const aliasDir = mkdtempSync(path.join(os.tmpdir(), "pi-tube-junction-"));
+    try {
+      symlinkSync(path.dirname(libraryDir), path.join(aliasDir, "link"), "junction");
+      const alias = path.join(aliasDir, "link", path.basename(libraryDir));
+      for (const flag of [[], ["--yes"]]) {
+        const result = await runCliInProcess(
+          ["library", "prune", "--older-than", "30", "--include-transcripts", "--json", ...flag],
+          { env: { PI_TUBE_LIBRARY_DIR: alias } },
+        );
+        expect(JSON.parse(result.stdout)).toMatchObject({ bytes: 0, source_dirs: 0 });
+        expect(existsSync(json)).toBe(true);
+      }
+    } finally {
+      rmSync(aliasDir, { recursive: true, force: true });
+    }
+  });
+
+  test("replacing a receipted file after preview preserves the replacement, even with identical contents", async () => {
+    const [id] = await seed([page("aaaaaaaaaaa", "Replacement")]);
+    const { json_path: file } = JSON.parse((await library(["show", id ?? "", "--json"])).stdout);
+    utimesSync(file, new Date(0), new Date(0));
+    const args = ["prune", "--include-transcripts", "--older-than", "30", "--json"];
+    expect(JSON.parse((await library(args)).stdout).transcript_files).toBe(process.platform === "win32" ? 1 : 0);
+    const contents = readFileSync(file);
+    renameSync(file, `${file}.original`);
+    writeFileSync(file, contents);
+    utimesSync(file, new Date(0), new Date(0));
+    expect(JSON.parse((await library([...args, "--yes"])).stdout)).toMatchObject({
+      bytes: 0,
+      transcript_files: 0,
+      failed: 0,
+    });
+    expect(readFileSync(file)).toEqual(contents);
+  });
+
+  test("a legacy source cannot prove the identity of a byte-identical replacement", async () => {
+    const [id] = await seed([page("aaaaaaaaaaa", "Legacy")]);
+    const { json_path: json, markdown_path: md } = JSON.parse((await library(["show", id ?? "", "--json"])).stdout);
+    const dir = path.dirname(json);
+    const sourceFile = path.join(dir, "source.json");
+    const legacyMeta = { schema_version: 1, kind: "youtube", tier: "tested", source_key: "youtube:aaaaaaaaaaa" };
+    writeFileSync(sourceFile, JSON.stringify(legacyMeta));
+    const preview = await library(["prune", "--include-transcripts", "--older-than", "30", "--json"]);
+    expect(JSON.parse(preview.stdout).transcript_files).toBe(0);
+    renameSync(md, `${md}.original`);
+    writeFileSync(md, readFileSync(`${md}.original`));
+    for (const name of readdirSync(dir)) utimesSync(path.join(dir, name), new Date(0), new Date(0));
+    const result = await library(["prune", "--include-transcripts", "--older-than", "30", "--yes", "--json"]);
+    expect(JSON.parse(result.stdout)).toMatchObject({ transcript_files: 0, source_dirs: 0, failed: 0 });
+    expect(existsSync(md)).toBe(true);
+    expect(existsSync(json)).toBe(true);
+    expect(existsSync(sourceFile)).toBe(true);
+    // Newly published files in that same legacy folder have independent receipts; its old siblings still do not.
+    await seed([page("aaaaaaaaaaa", "Legacy")], ["deepgram"]);
+    for (const name of readdirSync(dir)) utimesSync(path.join(dir, name), new Date(0), new Date(0));
+    const mixed = await library(["prune", "--include-transcripts", "--older-than", "30", "--yes", "--json"]);
+    expect(JSON.parse(mixed.stdout).transcript_files).toBe(process.platform === "win32" ? 2 : 0);
+    expect(readFileSync(md)).toEqual(readFileSync(`${md}.original`));
+    expect(existsSync(json)).toBe(true);
+  });
+
+  test.runIf(process.platform === "win32")(
+    "reports partial cleanup separately from safely preserved entries",
+    async () => {
+      const ids = await seed([page("aaaaaaaaaaa", "A"), page("bbbbbbbbbbb", "B")]);
+      const dirs = [];
+      for (const id of ids) {
+        const dir = path.dirname(JSON.parse((await library(["show", id, "--json"])).stdout).json_path);
+        for (const name of readdirSync(dir)) utimesSync(path.join(dir, name), new Date(0), new Date(0));
+        dirs.push(dir);
+      }
+      const [writable, locked] = dirs;
+      const native = await import("../../src/infrastructure/library/windows-handle.ts");
+      const original = native.pin;
+      const mock = vi.spyOn(native, "pin").mockImplementation((file, kind) => {
+        if (file === locked) throw Object.assign(new Error("injected read failure"), { code: "EIO" });
+        return original(file, kind);
+      });
+      try {
+        const result = await library(["prune", "--include-transcripts", "--older-than", "30", "--yes", "--json"]);
+        const report = JSON.parse(result.stdout);
+        expect(result.exitCode).toBe(6);
+        expect(report).toMatchObject({ source_dirs: 1, transcript_files: 2 });
+        expect(report.failed).toBeGreaterThan(0);
+        expect(existsSync(writable)).toBe(false);
+        expect(existsSync(locked)).toBe(true);
+      } finally {
+        mock.mockRestore();
+      }
+    },
+  );
+
+  test("transcript preview does not import or audit into an empty home", async () => {
+    const home = path.join(libraryDir, "empty-home");
+    mkdirSync(home);
+    const result = await runCliInProcess(
+      ["library", "prune", "--include-transcripts", "--older-than", "30", "--json"],
+      { env: { HOME: home, PI_TUBE_LIBRARY_DIR: path.join(home, "library") } },
+    );
+    expect(result.exitCode).toBe(0);
+    expect(readdirSync(home)).toEqual([]);
+  });
+
+  test("an empty directory supplied by the user is kept even after its managed artifacts are gone", async () => {
+    const source = page("aaaaaaaaaaa", "First");
+    const [id] = await seed([source]);
+    const dir = path.dirname(JSON.parse((await library(["show", id ?? "", "--json"])).stdout).json_path);
+    // Simulate a fresh pre-existing target directory without depending on the directory naming scheme.
+    rmSync(dir, { recursive: true });
+    mkdirSync(dir);
+    await seed([source]);
+    for (const name of readdirSync(dir)) utimesSync(path.join(dir, name), new Date(0), new Date(0));
+    const result = await library(["prune", "--include-transcripts", "--older-than", "30", "--yes", "--json"]);
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      source_dirs: 0,
+      transcript_files: process.platform === "win32" ? 2 : 0,
+      failed: 0,
+    });
+    expect(readdirSync(dir)).toHaveLength(process.platform === "win32" ? 0 : 3);
+  });
+
   test("without --yes it only reports, and says how to delete", async () => {
     await seed([page("aaaaaaaaaaa", "Aula de Ação Penal")]);
 

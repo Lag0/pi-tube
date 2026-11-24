@@ -38,15 +38,20 @@ export interface StoredSource {
 /** What `prune` removed, or would remove when `dryRun`. */
 export interface PruneReport {
   readonly audioFiles: number;
+  readonly transcriptFiles?: number;
+  readonly preserved?: number;
+  readonly busy?: boolean;
+  readonly unsupported?: boolean;
+  readonly failed?: number;
   readonly sourceDirs: number;
   readonly bytes: number;
   readonly dryRun: boolean;
 }
 
-/** What `prune` removes: audio (all of it, or older than `olderThanDays`, or past `maxAudioBytes`), or whole sources. */
+/** What `prune` removes: audio (all of it, or older than `olderThanDays`, or past `maxAudioBytes`), or verified transcript artifacts. */
 export interface PruneRequest {
   readonly olderThanDays?: number;
-  /** Removes whole source directories, transcripts included, older than `olderThanDays` (required then). */
+  /** Includes verified transcript artifacts older than `olderThanDays` (required then). */
   readonly includeTranscripts: boolean;
   readonly dryRun: boolean;
   readonly maxAudioBytes?: number;

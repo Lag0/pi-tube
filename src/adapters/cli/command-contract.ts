@@ -201,10 +201,13 @@ const LIBRARY_HELP_DOCUMENT: HelpDocument = {
     },
     { term: "--since <YYYY-MM-DD>", description: "list, search: only transcripts made on or after this UTC day." },
     { term: "--until <YYYY-MM-DD>", description: "list, search: only transcripts made on or before this UTC day." },
-    { term: "--older-than <days>", description: "prune: only audio, or sources, older than this many days." },
+    {
+      term: "--older-than <days>",
+      description: "prune: only audio files or verified transcript artifacts older than this many days.",
+    },
     {
       term: "--include-transcripts",
-      description: "prune: delete whole sources, transcripts included (needs --older-than).",
+      description: "prune: remove verified unchanged transcript artifacts (needs --older-than).",
     },
     { term: "--yes", description: "prune: delete; without it, prune only reports what it would delete." },
     { term: "--json", description: "Print the result as JSON on stdout." },

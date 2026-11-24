@@ -44,6 +44,9 @@ import { renderMarkdown } from "../../core/domain/transcript/render-markdown.ts"
 import type { LibraryEntry, LibraryStore, StoredSource, StoredTranscript } from "../../core/ports/library-store.ts";
 import { errnoOf } from "../errno.ts";
 
+import { withSourceWriter } from "./library-activity.ts";
+import { pruneTranscripts, receiptFor, sourceWithReceipts } from "./transcript-cleanup.ts";
+
 const MAX_FRESH_COPIES = 999;
 const SOURCE_FILE = "source.json";
 const TRANSCRIPT_ID = /^[0-9a-f]{20}(-\d+)?$/;
@@ -242,19 +245,28 @@ export const createFileLibraryStore = (deps: {
   };
 
   /** Merges the source description into source.json atomically (temp file + rename), keeping other fields. */
-  const writeSourceFile = async (dir: string, sourceKey: SourceKey, source: ResolvedSource): Promise<Result<void>> => {
+  const writeSourceFile = async (
+    dir: string,
+    sourceKey: SourceKey,
+    source: ResolvedSource,
+    created: boolean,
+    files: Record<string, string>,
+  ): Promise<Result<void>> => {
     const file = path.join(dir, SOURCE_FILE);
     let existing: Record<string, unknown> = {};
+    let previous: string | undefined;
     try {
-      const parsed: unknown = JSON.parse(await readFile(file, "utf8"));
+      previous = await readFile(file, "utf8");
+      const parsed: unknown = JSON.parse(previous);
       if (isRecord(parsed)) existing = parsed;
-    } catch {
-      // A missing or unreadable source.json is rewritten from the source.
+    } catch (error) {
+      if (errnoOf(error) !== "ENOENT") return err(ioError("read", file, error));
     }
     const content = { ...existing, ...describeForLibrary(sourceKey, source), updated_at: now().toISOString() };
     const temp = `${file}.${process.pid}.${randomUUID()}.tmp`;
     try {
-      await writeFile(temp, `${JSON.stringify(content, null, 2)}\n`, { encoding: "utf8", mode: 0o600, flag: "wx" });
+      await writeFile(temp, "", { mode: 0o600, flag: "wx" });
+      await writeFile(temp, await sourceWithReceipts(dir, temp, content, previous, created, files));
       await rename(temp, file);
       return ok(undefined);
     } catch (error) {
@@ -267,17 +279,20 @@ export const createFileLibraryStore = (deps: {
    * Publishes `content` at `target` only if nothing is there: a complete temp file, hard-linked in place. On a file
    * system without hard links (exFAT, FAT, some network shares), an exclusive copy keeps the no-overwrite rule.
    */
-  async function publish(target: string, content: string): Promise<Result<boolean>> {
+  async function publish(target: string, content: string): Promise<Result<false | { receipt?: string }>> {
     const temp = `${target}.${process.pid}.${randomUUID()}.tmp`;
     try {
       await writeFile(temp, content, { encoding: "utf8", mode: 0o600, flag: "wx" });
       try {
+        const receipt = await receiptFor(temp, content);
         await linkFile(temp, target);
+        return ok({ receipt });
       } catch (error) {
         if (errnoOf(error) === "EEXIST") return ok(false);
         await copyFile(temp, target, constants.COPYFILE_EXCL);
       }
-      return ok(true);
+      // An exclusive copy publishes safely, but does not carry the identity of the verified temp file.
+      return ok({});
     } catch (error) {
       return errnoOf(error) === "EEXIST" ? ok(false) : err(ioError("write", target, error));
     } finally {
@@ -373,17 +388,21 @@ export const createFileLibraryStore = (deps: {
 
     save: async ({ key, source, artifact, fresh = false }) => {
       const dir = dirOf(key.sourceKey);
+      let created = false;
       try {
-        await mkdir(dir, { recursive: true, mode: 0o700 });
+        await mkdir(deps.libraryDir, { recursive: true, mode: 0o700 });
+        await mkdir(dir, { mode: 0o700 });
+        created = true;
       } catch (error) {
-        return err(ioError("write", dir, error));
+        if (errnoOf(error) !== "EEXIST") return err(ioError("write", dir, error));
       }
       const baseId = transcriptIdOf(key);
       for (let copy = 1; copy <= MAX_FRESH_COPIES; copy += 1) {
         const transcriptId = copy === 1 ? baseId : `${baseId}-${copy}`;
         const stamped = stamp(artifact, transcriptId, key.sourceKey);
         const jsonPath = path.join(dir, `${transcriptId}.json`);
-        const claimed = await publish(jsonPath, renderJson(stamped));
+        const json = renderJson(stamped);
+        const claimed = await publish(jsonPath, json);
         if (!claimed.success) return claimed;
         if (!claimed.data) {
           if (fresh) continue;
@@ -395,8 +414,17 @@ export const createFileLibraryStore = (deps: {
         // The paid JSON is saved; the Markdown is derived (and repaired on read), and source.json is best-effort,
         // so neither can lose the transcript.
         const markdownPath = path.join(dir, markdownFileName(stamped, transcriptId));
-        await publish(markdownPath, renderMarkdown(stamped));
-        await writeSourceFile(dir, key.sourceKey, source);
+        const markdown = renderMarkdown(stamped);
+        const published = await publish(markdownPath, markdown);
+        try {
+          const files: Record<string, string> = {};
+          if (claimed.data.receipt) files[path.basename(jsonPath)] = claimed.data.receipt;
+          const markdownReceipt = published.success && typeof published.data === "object" && published.data.receipt;
+          if (markdownReceipt) files[path.basename(markdownPath)] = markdownReceipt;
+          await withSourceWriter(dir, () => writeSourceFile(dir, key.sourceKey, source, created, files));
+        } catch {
+          // Cleanup evidence is best-effort: missing evidence preserves files, never loses a paid transcript.
+        }
         return ok({
           transcriptId,
           sourceKey: key.sourceKey,
@@ -475,18 +503,16 @@ export const createFileLibraryStore = (deps: {
 
     prune: async ({ olderThanDays, includeTranscripts, dryRun, maxAudioBytes }) => {
       const cutoff = olderThanDays === undefined ? undefined : now().getTime() - olderThanDays * DAY_MS;
-      const removedDirs: Array<{ readonly dir: string; readonly bytes: number }> = [];
-      if (includeTranscripts && cutoff !== undefined) {
-        for (const name of await listDir(deps.libraryDir)) {
-          const dir = path.join(deps.libraryDir, name);
-          const files = await filesOf(dir);
-          if (files.length > 0 && files.every((file) => file.mtimeMs < cutoff)) {
-            removedDirs.push({ dir, bytes: files.reduce((sum, file) => sum + file.bytes, 0) });
-          }
+      if (includeTranscripts) {
+        if (cutoff === undefined)
+          return err(createError("INPUT_INVALID", "Transcript pruning requires an age cutoff."));
+        try {
+          return ok(await pruneTranscripts(deps.libraryDir, cutoff, dryRun));
+        } catch (error) {
+          return err(ioError("read", deps.libraryDir, error));
         }
       }
-      const removed = new Set(removedDirs.map((entry) => entry.dir));
-      const audio = (await audioFiles()).filter((file) => !removed.has(file.dir));
+      const audio = await audioFiles();
       const byAge =
         cutoff !== undefined ? audio.filter((file) => file.mtimeMs < cutoff) : maxAudioBytes === undefined ? audio : [];
       const aged = new Set(byAge.map((file) => file.path));
@@ -500,7 +526,6 @@ export const createFileLibraryStore = (deps: {
       const dropped = [...byAge, ...bySize];
       if (!dryRun) {
         try {
-          for (const entry of removedDirs) await rm(entry.dir, { recursive: true, force: true });
           for (const file of dropped) await rm(file.path, { force: true });
         } catch (error) {
           return err(ioError("write", deps.libraryDir, error));
@@ -508,8 +533,8 @@ export const createFileLibraryStore = (deps: {
       }
       return ok({
         audioFiles: dropped.length,
-        sourceDirs: removedDirs.length,
-        bytes: [...dropped, ...removedDirs].reduce((sum, entry) => sum + entry.bytes, 0),
+        sourceDirs: 0,
+        bytes: dropped.reduce((sum, entry) => sum + entry.bytes, 0),
         dryRun,
       });
     },

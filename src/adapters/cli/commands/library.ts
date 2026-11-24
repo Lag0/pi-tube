@@ -166,17 +166,32 @@ export const runLibrary = async (deps: CliDeps, command: LibraryCommand): Promis
               dry_run: report.dryRun,
               audio_files: report.audioFiles,
               source_dirs: report.sourceDirs,
+              transcript_files: report.transcriptFiles,
+              preserved: report.preserved,
+              busy: report.busy,
+              unsupported: report.unsupported,
+              failed: report.failed,
               bytes: report.bytes,
             },
             null,
             2,
           ),
         );
-        return 0;
+        return report.failed ? 6 : 0;
       }
-      const summary = `[LIBRARY_PRUNE] dry_run=${report.dryRun} audio_files=${report.audioFiles} source_dirs=${report.sourceDirs} bytes=${report.bytes}`;
-      deps.io.writeOut(report.dryRun ? `${summary}\nRun again with --yes to delete.` : summary);
-      return 0;
+      const details =
+        report.preserved === undefined
+          ? ""
+          : ` transcript_files=${report.transcriptFiles} preserved=${report.preserved} failed=${report.failed}`;
+      const summary = `[LIBRARY_PRUNE] dry_run=${report.dryRun} audio_files=${report.audioFiles} source_dirs=${report.sourceDirs} bytes=${report.bytes}${details}${report.busy ? " busy=true (skipped)" : ""}`;
+      deps.io.writeOut(
+        report.unsupported
+          ? `${summary}\nSkipped: safe transcript removal is unavailable on this platform.`
+          : report.dryRun && !report.busy
+            ? `${summary}\nRun again with --yes to delete.`
+            : summary,
+      );
+      return report.failed ? 6 : 0;
     }
     case "import": {
       if (command.args.length > 0) throw usageError("`library import` takes no arguments.");
