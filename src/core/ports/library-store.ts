@@ -70,6 +70,8 @@ export interface LibraryStore {
     options: OperationOptions | undefined,
     admitted: (producer: boolean) => Promise<Result<T>>,
   ): Promise<Result<T>>;
+  /** Speculative URL lookup before resolve; waits for an observed producer without taking over. */
+  findBeforeClaim(key: TranscriptKey, options?: OperationOptions): Promise<Result<StoredTranscript | undefined>>;
   /** Cache lookup: the exact key, or, for a requested language, an `auto` transcript that detected it. */
   find(key: TranscriptKey): Promise<Result<StoredTranscript | undefined>>;
   /**

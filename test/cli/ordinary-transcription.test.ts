@@ -81,12 +81,12 @@ test.each([
     release.resolve();
     const result = await owner;
     if (stuck) expect(warn).toHaveBeenCalledWith(expect.stringContaining(claim));
+    if (stuck) vi.spyOn(performance, "now").mockReturnValue(Number.MAX_SAFE_INTEGER);
     if (fails) {
       expect(result).toMatchObject({
         success: false,
         error: { code: "PROVIDER_FAILED", message: "Ambiguous response" },
       });
-      if (stuck) vi.spyOn(performance, "now").mockReturnValue(Number.MAX_SAFE_INTEGER);
       expect(await waiter).toMatchObject({
         success: false,
         error: { code: "STORAGE_IO_FAILED", hint: expect.stringContaining("provider usage") },
@@ -98,7 +98,7 @@ test.each([
         data: { transcriptId: result.success && result.data.transcriptId, cacheHit: true, cost: { estimate: 0 } },
       });
     }
-    if (stuck) expect(readdirSync(claim)).toEqual(["block-release"]);
+    if (stuck) expect(readdirSync(claim)).toEqual(fails ? ["block-release"] : ["block-release", "completed"]);
     expect(calls).toBe(2);
   } finally {
     release.resolve();

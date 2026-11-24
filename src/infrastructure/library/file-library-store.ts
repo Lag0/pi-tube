@@ -16,7 +16,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import path from "node:path";
-import { createError, type PiTubeError } from "../../core/domain/errors.ts";
+import { createError, type PiTubeError, transcriptionWaitError } from "../../core/domain/errors.ts";
 import { sameLanguage } from "../../core/domain/language.ts";
 import {
   keyUrlOf,
@@ -25,6 +25,7 @@ import {
   type TranscriptKey,
   transcriptKeyText,
 } from "../../core/domain/library.ts";
+import type { OperationOptions } from "../../core/domain/operation.ts";
 import { err, ok, type Result } from "../../core/domain/result.ts";
 import {
   type Chapter,
@@ -350,6 +351,45 @@ export const createFileLibraryStore = (deps: {
     source: { ...artifact.source, source_key: sourceKey },
   });
 
+  const markerFor = (key: TranscriptKey) => path.join(deps.libraryDir, `.transcribing-${transcriptIdOf(key)}`);
+  const exists = (file: string) =>
+    stat(file).then(
+      () => true,
+      (error) => {
+        if (errnoOf(error) === "ENOENT" || errnoOf(error) === "ENOTDIR") return false;
+        throw error;
+      },
+    );
+  const lookup = async (
+    key: TranscriptKey,
+    beforeClaim?: OperationOptions,
+  ): Promise<Result<StoredTranscript | undefined>> => {
+    const dir = dirOf(key.sourceKey);
+    try {
+      const file = await newestCopy(dir, transcriptIdOf(key));
+      // If the immutable pathname existed BEFORE we observed no writer, it is safe to read and repair.
+      const present = !beforeClaim || (await exists(file));
+      if (beforeClaim && (await exists(markerFor(key)))) {
+        return withTranscriptionClaim(markerFor(key), beforeClaim, async () => {
+          const result = await lookup(key);
+          return result.success && !result.data ? err(transcriptionWaitError()) : result;
+        });
+      }
+      const exact = present ? await readTranscript(file, true) : ok(undefined);
+      if (!exact.success || exact.data || key.language === undefined) return exact;
+      // A language-specific producer must not wait on a different key while holding its own claim.
+      const autoKey = { ...key, language: undefined };
+      const autoFile = await newestCopy(dir, transcriptIdOf(autoKey));
+      if (!(await exists(autoFile)) || (await exists(markerFor(autoKey)))) return ok(undefined);
+      const auto = await readTranscript(autoFile, true);
+      if (!auto.success) return auto;
+      return ok(
+        sameLanguage(key.language, auto.data?.artifact.transcription.detected_language) ? auto.data : undefined,
+      );
+    } catch (error) {
+      return err(ioError("read", dir, error));
+    }
+  };
   return {
     prepare: async () => {
       try {
@@ -376,26 +416,9 @@ export const createFileLibraryStore = (deps: {
       }
     },
 
-    withTranscriptionClaim: (key, options, admitted) => {
-      const id = transcriptIdOf(key);
-      return withTranscriptionClaim(
-        path.join(deps.libraryDir, `.transcribing-${id}`),
-        path.join(dirOf(key.sourceKey), `${id}.json`),
-        options,
-        admitted,
-      );
-    },
-
-    find: async (key) => {
-      const dir = dirOf(key.sourceKey);
-      const exact = await readTranscript(await newestCopy(dir, transcriptIdOf(key)), true);
-      if (!exact.success || exact.data || key.language === undefined) return exact;
-      const auto = await readTranscript(await newestCopy(dir, transcriptIdOf({ ...key, language: undefined })), true);
-      if (!auto.success) return auto;
-      return ok(
-        sameLanguage(key.language, auto.data?.artifact.transcription.detected_language) ? auto.data : undefined,
-      );
-    },
+    withTranscriptionClaim: (key, options, admitted) => withTranscriptionClaim(markerFor(key), options, admitted),
+    find: (key) => lookup(key),
+    findBeforeClaim: (key, options) => lookup(key, options ?? {}),
 
     save: async ({ key, source, artifact, fresh = false }) => {
       const dir = dirOf(key.sourceKey);

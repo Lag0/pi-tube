@@ -1,6 +1,6 @@
 import { type AuditCost, estimateCost, PRICE_TABLE_DATE } from "../domain/audit.ts";
 import type { EnvironmentVariables } from "../domain/config.ts";
-import { createError, type PiTubeError } from "../domain/errors.ts";
+import { createError, type PiTubeError, transcriptionWaitError } from "../domain/errors.ts";
 import { normalizeLanguageTag } from "../domain/language.ts";
 import { resolveLibrarySettings, sourceKeyFromInput, type TranscriptKey } from "../domain/library.ts";
 import {
@@ -188,7 +188,7 @@ const runTranscribe =
     const inputKey = sourceKeyFromInput(input.input);
     if (inputKey !== undefined) trail.note({ sourceKey: inputKey });
     if (inputKey !== undefined && !input.force) {
-      const early = await deps.library.find(keyFor(inputKey));
+      const early = await deps.library.findBeforeClaim(keyFor(inputKey), options);
       if (!early.success) return early;
       if (early.data) return ok(hit(early.data));
     }
@@ -213,11 +213,6 @@ const runTranscribe =
     if (!sourceKey.success) return sourceKey;
     trail.note({ sourceKey: sourceKey.data });
     const key = keyFor(sourceKey.data);
-    if (!input.force) {
-      const cached = await deps.library.find(key);
-      if (!cached.success) return cached;
-      if (cached.data) return ok(hit(cached.data));
-    }
     const produce = async (): Promise<Result<TranscribeOutput>> => {
       if (apiKey === undefined) return err(providerNotConfigured(selected.data.descriptor));
       // A best-effort page has no key before the resolve, but its kept audio is reused after it.
@@ -285,16 +280,7 @@ const runTranscribe =
       const cached = await deps.library.find(key);
       if (!cached.success) return cached;
       if (cached.data) return ok(hit(cached.data));
-      if (!producer)
-        return err(
-          createError(
-            "STORAGE_IO_FAILED",
-            "No saved transcript was available after waiting. No retry was dispatched.",
-            {
-              hint: "The producer may still be running. Check the library and provider usage before starting another transcription.",
-            },
-          ),
-        );
+      if (!producer) return err(transcriptionWaitError());
       return produce();
     });
   };
