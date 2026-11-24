@@ -1,6 +1,7 @@
 import {
   chmodSync,
   existsSync,
+  linkSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -9,16 +10,18 @@ import {
   renameSync,
   rmSync,
   statSync,
+  symlinkSync,
   utimesSync,
   writeFileSync,
 } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import type { TranscriptKey } from "../../../src/core/domain/library.ts";
 import type { ResolvedSource } from "../../../src/core/domain/source.ts";
 import { buildOutputArtifact } from "../../../src/core/domain/transcript/build-artifact.ts";
 import { renderJson } from "../../../src/core/domain/transcript/render-json.ts";
+import * as renderer from "../../../src/core/domain/transcript/render-markdown.ts";
 import {
   createFileLibraryStore,
   sourceDirName,
@@ -76,6 +79,79 @@ describe("source directories", () => {
 });
 
 describe("save and find", () => {
+  test("an older managed rendering remains available only while both published files are intact", async () => {
+    const store = createFileLibraryStore({ libraryDir });
+    const key = keyOf();
+    const source = youtube();
+    const oldRenderer = vi.spyOn(renderer, "renderMarkdown").mockReturnValueOnce("old renderer output");
+    const saved = await store.save({ key, source, artifact: artifactOf(source) });
+    oldRenderer.mockRestore();
+    if (!saved.success) throw Error("save failed");
+    expect(await store.find(key)).toMatchObject({ success: true, data: { transcriptId: saved.data.transcriptId } });
+    // Two canonical IDs can share the abbreviated filename. A receipt isn't evidence for which ID published it.
+    const ambiguous = path.join(
+      path.dirname(saved.data.paths.json),
+      `${saved.data.transcriptId.slice(0, 8)}000000000000.json`,
+    );
+    writeFileSync(ambiguous, readFileSync(saved.data.paths.json));
+    expect(await store.find(key)).toMatchObject({ success: false, error: { code: "STORAGE_IO_FAILED" } });
+    rmSync(ambiguous);
+    const bytes = readFileSync(saved.data.paths.json, "utf8").replaceAll("hello", "modified transcript");
+    writeFileSync(saved.data.paths.json, bytes);
+    expect(await store.find(key)).toMatchObject({ success: false, error: { code: "STORAGE_IO_FAILED" } });
+    expect(readFileSync(saved.data.paths.markdown, "utf8")).toBe("old renderer output");
+  });
+
+  test.each(["directory", "hardlink", ...(isWindows ? [] : ["symlink"])])(
+    "rejects a %s at the Markdown path",
+    async (kind) => {
+      const store = createFileLibraryStore({ libraryDir });
+      const source = youtube();
+      const saved = await store.save({ key: keyOf(), source, artifact: artifactOf(source) });
+      if (!saved.success) throw Error("save failed");
+      const markdown = saved.data.paths.markdown;
+      const other = path.join(root, "outside");
+      const bytes = readFileSync(markdown);
+      renameSync(markdown, other);
+      if (kind === "directory") mkdirSync(markdown);
+      else if (kind === "hardlink") linkSync(other, markdown);
+      else symlinkSync(other, markdown);
+      expect(await store.get(saved.data.transcriptId)).toMatchObject({
+        success: false,
+        error: { code: "STORAGE_IO_FAILED" },
+      });
+      expect(readFileSync(other)).toEqual(bytes);
+    },
+  );
+
+  test("a Markdown collision on save or repair preserves both files without claiming success", async () => {
+    let markdown = "";
+    const store = createFileLibraryStore({
+      libraryDir,
+      fs: {
+        link: async (temp, target) => {
+          if (target.endsWith(".md")) {
+            markdown = target;
+            writeFileSync(target, "sentinel", { flag: "wx" });
+          }
+          linkSync(temp, target);
+        },
+      },
+    });
+    const source = youtube();
+    const key = keyOf();
+    const id = transcriptIdOf(key);
+    const saved = path.join(libraryDir, sourceDirName(key.sourceKey), `${id}.json`);
+    const failure = { success: false, error: { code: "STORAGE_IO_FAILED", message: expect.stringContaining(saved) } };
+    expect(await store.save({ key, source, artifact: artifactOf(source) })).toMatchObject(failure);
+    const bytes = readFileSync(saved);
+    expect(readFileSync(markdown, "utf8")).toBe("sentinel");
+    rmSync(markdown);
+    expect(await store.get(id)).toMatchObject(failure);
+    expect(readFileSync(markdown, "utf8")).toBe("sentinel");
+    expect(readFileSync(saved)).toEqual(bytes);
+  });
+
   test("writes source.json, the JSON and the Markdown privately and finds them again", async () => {
     const store = createFileLibraryStore({ libraryDir });
 

@@ -5,6 +5,7 @@ import {
   chmod,
   copyFile,
   link,
+  lstat,
   mkdir,
   readdir,
   readFile,
@@ -25,7 +26,6 @@ import {
   type TranscriptKey,
   transcriptKeyText,
 } from "../../core/domain/library.ts";
-import type { OperationOptions } from "../../core/domain/operation.ts";
 import { err, ok, type Result } from "../../core/domain/result.ts";
 import {
   type Chapter,
@@ -42,12 +42,18 @@ import { markdownFileName } from "../../core/domain/transcript/file-name.ts";
 import { parseStoredArtifact } from "../../core/domain/transcript/parse-stored.ts";
 import { renderJson } from "../../core/domain/transcript/render-json.ts";
 import { renderMarkdown } from "../../core/domain/transcript/render-markdown.ts";
-import type { LibraryEntry, LibraryStore, StoredSource, StoredTranscript } from "../../core/ports/library-store.ts";
+import type {
+  LibraryEntry,
+  LibraryLookupOptions,
+  LibraryStore,
+  StoredSource,
+  StoredTranscript,
+} from "../../core/ports/library-store.ts";
 import { errnoOf } from "../errno.ts";
 
 import { withTranscriptionClaim } from "./coordinate-transcription.ts";
 import { withSourceWriter } from "./library-activity.ts";
-import { pruneTranscripts, receiptFor, sourceWithReceipts } from "./transcript-cleanup.ts";
+import { matchesManagedMarkdown, pruneTranscripts, receiptFor, sourceWithReceipts } from "./transcript-cleanup.ts";
 
 const MAX_FRESH_COPIES = 999;
 const SOURCE_FILE = "source.json";
@@ -194,11 +200,27 @@ export const createFileLibraryStore = (deps: {
   const renameFile = deps.fs?.rename ?? rename;
   const dirOf = (sourceKey: SourceKey): string => path.join(deps.libraryDir, sourceDirName(sourceKey));
 
+  const incomplete = (file: string, markdown: string) =>
+    err(
+      createError(
+        "STORAGE_IO_FAILED",
+        `Transcript ${path.basename(file, ".json")} is saved at \`${file}\`, but Markdown could not be published at \`${markdown}\`.`,
+        {
+          hint: "Check the Markdown destination for a conflicting file or write restrictions, then retry the same request normally.",
+        },
+      ),
+    );
+
   /**
    * Reads a saved transcript. With `repair`, a Markdown file that is missing (a crash between the two writes, or a
    * concurrent save still writing it) is rendered again from the JSON, which is the canonical copy.
    */
-  const readTranscript = async (file: string, repair = false): Promise<Result<StoredTranscript | undefined>> => {
+  const readTranscript = async (
+    file: string,
+    repair = false,
+    onCacheHit?: () => void,
+    language?: string,
+  ): Promise<Result<StoredTranscript | undefined>> => {
     let text: string;
     try {
       text = await readFile(file, "utf8");
@@ -214,16 +236,30 @@ export const createFileLibraryStore = (deps: {
         }),
       );
     }
+    if (language !== undefined && !sameLanguage(language, artifact.data.transcription.detected_language))
+      return ok(undefined);
     const transcriptId = path.basename(file, ".json");
     const markdown = path.join(path.dirname(file), markdownFileName(artifact.data, transcriptId));
     if (repair) {
-      const exists = await stat(markdown).then(
-        () => true,
-        () => false,
-      );
-      if (!exists) {
-        const written = await publish(markdown, renderMarkdown(artifact.data));
-        if (!written.success) return written;
+      onCacheHit?.();
+      const expected = renderMarkdown(artifact.data);
+      const available = async (info: Awaited<ReturnType<typeof lstat>>) => {
+        if (!info.isFile() || info.nlink !== 1) return false;
+        const bytes = await readFile(markdown);
+        return bytes.equals(Buffer.from(expected)) || matchesManagedMarkdown(file, text, markdown, bytes);
+      };
+      try {
+        const info = await lstat(markdown).catch((error) => {
+          if (errnoOf(error) === "ENOENT") return undefined;
+          throw error;
+        });
+        if (!info) {
+          const written = await publish(markdown, expected);
+          if (!written.success) return incomplete(file, markdown);
+          if (!written.data && !(await available(await lstat(markdown)))) return incomplete(file, markdown);
+        } else if (!(await available(info))) return incomplete(file, markdown);
+      } catch {
+        return incomplete(file, markdown);
       }
     }
     return ok({
@@ -362,7 +398,7 @@ export const createFileLibraryStore = (deps: {
     );
   const lookup = async (
     key: TranscriptKey,
-    options?: OperationOptions,
+    options?: LibraryLookupOptions,
     beforeClaim = false,
   ): Promise<Result<StoredTranscript | undefined>> => {
     const dir = dirOf(key.sourceKey);
@@ -376,22 +412,21 @@ export const createFileLibraryStore = (deps: {
           return result.success && !result.data ? err(transcriptionWaitError()) : result;
         });
       }
-      const exact = present ? await readTranscript(file, true) : ok(undefined);
+      const exact = present ? await readTranscript(file, true, options?.onCacheHit) : ok(undefined);
       if (!exact.success || exact.data || key.language === undefined) return exact;
       const autoKey = { ...key, language: undefined };
       const autoFile = await newestCopy(dir, transcriptIdOf(autoKey));
       if (!(await exists(autoFile))) return ok(undefined);
       // Only explicit keys wait on auto, and only to read an observed candidate after publication.
-      const auto = (await exists(markerFor(autoKey)))
+      const readAuto = () => readTranscript(autoFile, true, options?.onCacheHit, key.language);
+      return (await exists(markerFor(autoKey)))
         ? await withTranscriptionClaim(markerFor(autoKey), options, async () => {
-            const candidate = await readTranscript(autoFile, true);
-            return candidate.success && !candidate.data ? err(transcriptionWaitError()) : candidate;
+            const candidate = await readAuto();
+            return candidate.success && !candidate.data && !(await exists(autoFile))
+              ? err(transcriptionWaitError())
+              : candidate;
           })
-        : await readTranscript(autoFile, true);
-      if (!auto.success) return auto;
-      return ok(
-        sameLanguage(key.language, auto.data?.artifact.transcription.detected_language) ? auto.data : undefined,
-      );
+        : await readAuto();
     } catch (error) {
       return err(ioError("read", dir, error));
     }
@@ -465,6 +500,7 @@ export const createFileLibraryStore = (deps: {
         } catch {
           // Cleanup evidence is best-effort: missing evidence preserves files, never loses a paid transcript.
         }
+        if (!published.success || !published.data) return incomplete(jsonPath, markdownPath);
         return ok({
           transcriptId,
           sourceKey: key.sourceKey,

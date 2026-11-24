@@ -44,6 +44,27 @@ async function receiptOf(raw: string, dir: string, file: string): Promise<Receip
     return undefined;
   return r as Receipt;
 }
+/** For an older rendering, verify both files and rule out another JSON sharing the abbreviated Markdown id. */
+export async function matchesManagedMarkdown(
+  json: string,
+  text: string,
+  markdown: string,
+  bytes: Buffer,
+): Promise<boolean> {
+  const dir = path.dirname(json);
+  const metadata = path.join(dir, "source.json");
+  const receipt = await receiptOf(await readFile(metadata, "utf8"), dir, metadata);
+  if (
+    !receipt ||
+    receipt.files[path.basename(json)] !== (await receiptFor(json, text)) ||
+    receipt.files[path.basename(markdown)] !== `${identity(await inspect(markdown))}:${hash(bytes)}`
+  )
+    return false;
+  const name = path.basename(json);
+  return !(await readdir(dir)).some(
+    (other) => other !== name && other.slice(0, 8) === name.slice(0, 8) && other.slice(20) === name.slice(20),
+  );
+}
 export async function sourceWithReceipts(
   dir: string,
   temp: string,

@@ -998,6 +998,68 @@ describe("audit", () => {
     expect(audit.records[0]?.cost).toBeUndefined();
   });
 
+  test("Markdown publication and repair failures keep the same paid JSON", async () => {
+    const { audit, deepgram, deps } = auditSetup();
+    let fault = true;
+    let json = "";
+    let markdown = "";
+    const library = createFileLibraryStore({
+      libraryDir: outputDir,
+      fs: {
+        link: async (temp, target) => {
+          if (target.endsWith(".json")) json = target;
+          if (target.endsWith(".md")) {
+            markdown = target;
+            if (fault) {
+              expect(JSON.parse(readFileSync(json, "utf8")).transcript.full_text).toBe(TRANSCRIPT_HELLO.text);
+              rmSync(temp); // Neither the hard link nor its exclusive copy fallback can publish Markdown.
+            }
+          }
+          await link(temp, target);
+        },
+      },
+    });
+    const first = await run(createTranscribe({ ...deps, library }));
+    const bytes = readFileSync(json, "utf8");
+    const id = path.basename(json, ".json");
+    expect(JSON.parse(bytes)).toMatchObject({ transcript_id: id, transcript: { full_text: TRANSCRIPT_HELLO.text } });
+    const failure = {
+      success: false,
+      error: {
+        code: "STORAGE_IO_FAILED",
+        message: expect.stringContaining(json),
+        hint: expect.stringMatching(/retry/i),
+      },
+    };
+    expect(first).toMatchObject(failure);
+    const retry = createTranscribe({ ...deps, library, env: {} });
+    expect(await run(retry, { provider: "deepgram" })).toMatchObject(failure);
+    expect(readdirSync(path.dirname(json))).not.toContain(path.basename(markdown));
+    expect(readFileSync(json, "utf8")).toBe(bytes);
+    fault = false;
+    const repaired = await run(retry, { provider: "deepgram" });
+    expect(repaired).toMatchObject({
+      success: true,
+      data: { transcriptId: id, cacheHit: true, paths: { json, markdown }, cost: { estimate: 0 } },
+    });
+    expect(readFileSync(markdown, "utf8")).toBe(renderMarkdown(JSON.parse(bytes)));
+    expect(readFileSync(json, "utf8")).toBe(bytes);
+    expect(deepgram.requests).toHaveLength(1);
+    expect(audit.records).toMatchObject([
+      {
+        result: "error",
+        errorCode: "STORAGE_IO_FAILED",
+        cacheHit: false,
+        provider: "deepgram",
+        model: "nova-3",
+        audioSeconds: 19,
+        cost: { estimate: 0.001362 },
+      },
+      { result: "error", errorCode: "STORAGE_IO_FAILED", cacheHit: true, cost: { estimate: 0 } },
+      { result: "ok", cacheHit: true, cost: { estimate: 0 } },
+    ]);
+  });
+
   test("a paid transcription whose save fails still records the cost", async () => {
     const { audit, deps } = auditSetup();
     const library = { ...deps.library, save: async () => err(createError("STORAGE_IO_FAILED", "Disk full.")) };
