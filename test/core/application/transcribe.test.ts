@@ -1,5 +1,5 @@
 import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { link } from "node:fs/promises";
+import { copyFile, link } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
@@ -1006,14 +1006,15 @@ describe("audit", () => {
     const library = createFileLibraryStore({
       libraryDir: outputDir,
       fs: {
+        copyFile: async (temp, target, flags) => {
+          if (fault && target.endsWith(".md")) throw Error("Markdown copy failed");
+          await copyFile(temp, target, flags);
+        },
         link: async (temp, target) => {
           if (target.endsWith(".json")) json = target;
           if (target.endsWith(".md")) {
             markdown = target;
-            if (fault) {
-              expect(JSON.parse(readFileSync(json, "utf8")).transcript.full_text).toBe(TRANSCRIPT_HELLO.text);
-              rmSync(temp); // Neither the hard link nor its exclusive copy fallback can publish Markdown.
-            }
+            throw Error("no links");
           }
           await link(temp, target);
         },
@@ -1058,6 +1059,43 @@ describe("audit", () => {
       { result: "error", errorCode: "STORAGE_IO_FAILED", cacheHit: true, cost: { estimate: 0 } },
       { result: "ok", cacheHit: true, cost: { estimate: 0 } },
     ]);
+  });
+
+  test("failed JSON certification preserves the known local copy and an ordinary retry never repays", async () => {
+    const { audit, deepgram, deps } = auditSetup();
+    let json = "";
+    const library = createFileLibraryStore({
+      libraryDir: outputDir,
+      fs: {
+        link: async (_, target) => {
+          json = target;
+          throw Error("no links");
+        },
+        rename: async () => {
+          throw Error("cannot certify");
+        },
+      },
+    });
+    const request = createTranscribe({ ...deps, library });
+    expect(await run(request)).toMatchObject({
+      success: false,
+      error: {
+        code: "STORAGE_IO_FAILED",
+        message: expect.stringMatching(/local copy.*could not be certified/),
+        hint: expect.stringMatching(/preserve/i),
+      },
+    });
+    const bytes = readFileSync(json, "utf8");
+    expect(JSON.parse(bytes).transcript.full_text).toBe(TRANSCRIPT_HELLO.text);
+    expect(await run(request)).toMatchObject({
+      success: false,
+      error: { code: "STORAGE_IO_FAILED", message: expect.stringContaining(json) },
+    });
+    expect(readFileSync(json, "utf8")).toBe(bytes);
+    expect(readFileSync(`${json}.publication`, "utf8")).toContain("pending:");
+    expect(deepgram.requests).toHaveLength(1);
+    expect(audit.records[0]?.cost?.estimate).toBe(0.001362);
+    expect(audit.records[1]?.cost?.estimate ?? 0).toBe(0);
   });
 
   test("a paid transcription whose save fails still records the cost", async () => {

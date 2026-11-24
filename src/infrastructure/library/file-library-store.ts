@@ -17,7 +17,6 @@ import {
   writeFile,
 } from "node:fs/promises";
 import path from "node:path";
-import { setTimeout as delay } from "node:timers/promises";
 import { createError, type PiTubeError, transcriptionWaitError } from "../../core/domain/errors.ts";
 import { sameLanguage } from "../../core/domain/language.ts";
 import {
@@ -51,9 +50,16 @@ import type {
   StoredTranscript,
 } from "../../core/ports/library-store.ts";
 import { errnoOf } from "../errno.ts";
-
 import { withTranscriptionClaim } from "./coordinate-transcription.ts";
 import { withSourceWriter } from "./library-activity.ts";
+import {
+  enrollCopy,
+  present,
+  publicationDeadline,
+  publicationRecord,
+  readPublication,
+  withPublication,
+} from "./publication.ts";
 import {
   matchesManagedMarkdown,
   pruneTranscripts,
@@ -73,42 +79,19 @@ const sha256 = (text: string): string => createHash("sha256").update(text).diges
 const ioError = (action: "read" | "write", target: string, error: unknown): PiTubeError =>
   createError("STORAGE_IO_FAILED", `Cannot ${action} \`${target}\` (${errnoOf(error)}).`, { hint: HINT });
 
-/** A sibling temp is only a retry hint: after it disappears the destination must still validate. */
-async function waitForPublications(target: string, deadline: number): Promise<"none" | "settled" | "timeout"> {
-  const dir = path.dirname(target);
-  const prefix = `${path.basename(target)}.`;
-  const suffix = /^\d+\.[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.tmp$/;
-  const pending = new Set(
-    (await readdir(dir)).filter((name) => name.startsWith(prefix) && suffix.test(name.slice(prefix.length))),
-  );
-  if (!pending.size) return "none";
-  while (pending.size) {
-    for (const name of pending) {
-      try {
-        await lstat(path.join(dir, name));
-      } catch (error) {
-        if (errnoOf(error) !== "ENOENT") throw error;
-        pending.delete(name);
-      }
-    }
-    if (pending.size) {
-      const remaining = deadline - performance.now();
-      if (remaining <= 0) return "timeout";
-      await delay(Math.min(10, remaining));
-    }
-  }
-  return "settled";
-}
-
 async function availableMarkdown(
   markdown: string,
   expected: string,
   deadline: number,
   olderRendering?: (bytes: Buffer) => Promise<boolean>,
 ): Promise<boolean> {
-  if ((await waitForPublications(markdown, deadline)) === "timeout") return false;
-  const bytes = await readUnlinkedFile(markdown);
-  return bytes.equals(Buffer.from(expected)) || (await olderRendering?.(bytes)) === true;
+  return (
+    (await readPublication(
+      markdown,
+      deadline,
+      async (bytes) => bytes.equals(Buffer.from(expected)) || (await olderRendering?.(bytes)) === true,
+    )) === true
+  );
 }
 
 /** The first 20 hex characters of the SHA-256 of `transcriptKeyText(key)`. */
@@ -231,6 +214,7 @@ const pageSourceOf = (saved: Record<string, unknown>): ResolvedSource | undefine
  */
 /** File operations the store needs that differ between file systems; tests replace them to simulate one. */
 export interface LibraryFileSystem {
+  readonly copyFile?: (temp: string, target: string, flags: number) => Promise<void>;
   readonly link?: (existing: string, target: string) => Promise<void>;
   readonly rename?: (from: string, to: string) => Promise<void>;
 }
@@ -245,11 +229,11 @@ export const createFileLibraryStore = (deps: {
   const renameFile = deps.fs?.rename ?? rename;
   const dirOf = (sourceKey: SourceKey): string => path.join(deps.libraryDir, sourceDirName(sourceKey));
 
-  const incomplete = (file: string, markdown: string) =>
+  const incomplete = (file: string, markdown: string, cause?: PiTubeError) =>
     err(
       createError(
         "STORAGE_IO_FAILED",
-        `Transcript ${path.basename(file, ".json")} is saved at \`${file}\`, but Markdown could not be published at \`${markdown}\`.`,
+        `Transcript ${path.basename(file, ".json")} is saved at \`${file}\`, but Markdown could not be published at \`${markdown}\`.${cause ? ` ${cause.message}` : ""}`,
         {
           hint: "Check the Markdown destination for a conflicting file or write restrictions, then retry the same request normally.",
         },
@@ -265,35 +249,27 @@ export const createFileLibraryStore = (deps: {
     repair = false,
     onCacheHit?: () => void,
     language?: string,
+    deadline = publicationDeadline(),
   ): Promise<Result<StoredTranscript | undefined>> => {
-    const deadline = performance.now() + 2000;
+    let verified: { text: string; artifact: ReturnType<typeof parseStoredArtifact> } | undefined;
     try {
-      await lstat(file);
-    } catch (error) {
-      const code = errnoOf(error);
-      return code === "ENOENT" || code === "ENOTDIR" ? ok(undefined) : err(ioError("read", file, error));
+      verified = await readPublication(file, deadline, (bytes) => {
+        const text = bytes.toString("utf8");
+        return { text, artifact: parseStoredArtifact(text) };
+      });
+    } catch {
+      return err(
+        createError("STORAGE_IO_FAILED", `Cannot certify publication of \`${file}\`.`, {
+          hint: "Check the publication state and destination, then retry the same request normally.",
+        }),
+      );
     }
-    let text: string;
-    let publishing: boolean;
-    const retryHint = "Retry the same request normally after publication finishes.";
-    try {
-      const state = await waitForPublications(file, deadline);
-      if (state === "timeout")
-        return err(
-          createError("STORAGE_IO_FAILED", `Publication of \`${file}\` is still pending.`, { hint: retryHint }),
-        );
-      publishing = state === "settled";
-      text = await readFile(file, "utf8");
-    } catch (error) {
-      return err(ioError("read", file, error));
-    }
-    const artifact = parseStoredArtifact(text);
+    if (!verified) return ok(undefined);
+    const { text, artifact } = verified;
     if (!artifact.success) {
       return err(
         createError("STORAGE_IO_FAILED", `${artifact.error.message.replace(/\.$/, "")}: \`${file}\`.`, {
-          hint: publishing
-            ? retryHint
-            : `Delete \`${file}\`, or run the command again with \`--force\` to transcribe anew.`,
+          hint: `Delete \`${file}\`, or run the command again with \`--force\` to transcribe anew.`,
         }),
       );
     }
@@ -310,8 +286,8 @@ export const createFileLibraryStore = (deps: {
           throw error;
         });
         if (!info) {
-          const written = await publish(markdown, expected);
-          if (!written.success) return incomplete(file, markdown);
+          const written = await publish(markdown, expected, deadline);
+          if (!written.success) return incomplete(file, markdown, written.error);
           if (!written.data && !(await availableMarkdown(markdown, expected, deadline)))
             return incomplete(file, markdown);
         } else if (
@@ -336,10 +312,10 @@ export const createFileLibraryStore = (deps: {
   const newestCopy = async (dir: string, transcriptId: string): Promise<string> => {
     let best = { copy: 1, file: path.join(dir, `${transcriptId}.json`) };
     for (const name of await listDir(dir)) {
-      const match = /^(.+?)(?:-(\d+))?\.json$/.exec(name);
+      const match = /^(.+?)-(\d+)\.json(?:\.publication)?$/.exec(name);
       if (match?.[1] !== transcriptId || match[2] === undefined) continue;
       const copy = Number(match[2]);
-      if (copy > best.copy) best = { copy, file: path.join(dir, name) };
+      if (copy > best.copy) best = { copy, file: path.join(dir, `${transcriptId}-${match[2]}.json`) };
     }
     return best.file;
   };
@@ -384,24 +360,56 @@ export const createFileLibraryStore = (deps: {
    * Publishes `content` at `target` only if nothing is there: a complete temp file, hard-linked in place. On a file
    * system without hard links (exFAT, FAT, some network shares), an exclusive copy keeps the no-overwrite rule.
    */
-  async function publish(target: string, content: string): Promise<Result<false | { receipt?: string }>> {
-    const temp = `${target}.${process.pid}.${randomUUID()}.tmp`;
+  async function publish(
+    target: string,
+    content: string,
+    deadline = publicationDeadline(),
+  ): Promise<Result<false | { receipt?: string }>> {
     try {
-      await writeFile(temp, content, { encoding: "utf8", mode: 0o600, flag: "wx" });
-      try {
-        const receipt = await receiptFor(temp, content);
-        await linkFile(temp, target);
-        return ok({ receipt });
-      } catch (error) {
-        if (errnoOf(error) === "EEXIST") return ok(false);
-        await copyFile(temp, target, constants.COPYFILE_EXCL);
-      }
-      // An exclusive copy publishes safely, but does not carry the identity of the verified temp file.
-      return ok({});
+      return await withPublication(target, deadline, async (enrolled) => {
+        if (await present(target)) return ok(false as const);
+        const temp = `${target}.${process.pid}.${randomUUID()}.tmp`;
+        await writeFile(temp, content, { encoding: "utf8", mode: 0o600, flag: "wx" });
+        try {
+          if (!enrolled) {
+            const receipt = await receiptFor(temp, content);
+            try {
+              await linkFile(temp, target);
+              return ok({ receipt });
+            } catch (error) {
+              if (errnoOf(error) === "EEXIST") return ok(false as const);
+            }
+          }
+          const commit = await enrollCopy(target, enrolled, renameFile);
+          try {
+            await (deps.fs?.copyFile ?? copyFile)(temp, target, constants.COPYFILE_EXCL);
+          } catch (error) {
+            return err(
+              createError(
+                "STORAGE_IO_FAILED",
+                `Exclusive copy of \`${target}\` failed (${errnoOf(error)}); publication is uncertain.`,
+                { hint: "Preserve any local bytes and publication record, then retry the same request normally." },
+              ),
+            );
+          }
+          try {
+            await commit();
+          } catch {
+            return err(
+              createError(
+                "STORAGE_IO_FAILED",
+                `A local copy was written at \`${target}\`, but its publication could not be certified.`,
+                { hint: "Preserve the local copy and publication record; retry the same request normally." },
+              ),
+            );
+          }
+          return ok({});
+        } finally {
+          await rm(temp, { force: true }).catch(() => undefined);
+        }
+      });
     } catch (error) {
-      return errnoOf(error) === "EEXIST" ? ok(false) : err(ioError("write", target, error));
-    } finally {
-      await rm(temp, { force: true }).catch(() => undefined);
+      return err(ioError("write", target, error));
     }
   }
 
@@ -455,14 +463,6 @@ export const createFileLibraryStore = (deps: {
   });
 
   const markerFor = (key: TranscriptKey) => path.join(deps.libraryDir, `.transcribing-${transcriptIdOf(key)}`);
-  const exists = (file: string) =>
-    stat(file).then(
-      () => true,
-      (error) => {
-        if (errnoOf(error) === "ENOENT" || errnoOf(error) === "ENOTDIR") return false;
-        throw error;
-      },
-    );
   const lookup = async (
     key: TranscriptKey,
     options?: LibraryLookupOptions,
@@ -471,25 +471,25 @@ export const createFileLibraryStore = (deps: {
     const dir = dirOf(key.sourceKey);
     try {
       const file = await newestCopy(dir, transcriptIdOf(key));
-      // If the immutable pathname existed BEFORE we observed no writer, it is safe to read and repair.
-      const present = !beforeClaim || (await exists(file));
-      if (beforeClaim && (await exists(markerFor(key)))) {
+      // Only a candidate observed before checking the paid writer may bypass admission.
+      const observed = !beforeClaim || (await present(file)) || (await present(publicationRecord(file)));
+      if (beforeClaim && (await present(markerFor(key)))) {
         return withTranscriptionClaim(markerFor(key), options, async () => {
           const result = await lookup(key, options);
           return result.success && !result.data ? err(transcriptionWaitError()) : result;
         });
       }
-      const exact = present ? await readTranscript(file, true, options?.onCacheHit) : ok(undefined);
+      const exact = observed ? await readTranscript(file, true, options?.onCacheHit) : ok(undefined);
       if (!exact.success || exact.data || key.language === undefined) return exact;
       const autoKey = { ...key, language: undefined };
       const autoFile = await newestCopy(dir, transcriptIdOf(autoKey));
-      if (!(await exists(autoFile))) return ok(undefined);
+      if (!(await present(autoFile)) && !(await present(publicationRecord(autoFile)))) return ok(undefined);
       // Only explicit keys wait on auto, and only to read an observed candidate after publication.
       const readAuto = () => readTranscript(autoFile, true, options?.onCacheHit, key.language);
-      return (await exists(markerFor(autoKey)))
+      return (await present(markerFor(autoKey)))
         ? await withTranscriptionClaim(markerFor(autoKey), options, async () => {
             const candidate = await readAuto();
-            return candidate.success && !candidate.data && !(await exists(autoFile))
+            return candidate.success && !candidate.data && !(await present(autoFile))
               ? err(transcriptionWaitError())
               : candidate;
           })
@@ -538,17 +538,18 @@ export const createFileLibraryStore = (deps: {
       } catch (error) {
         if (errnoOf(error) !== "EEXIST") return err(ioError("write", dir, error));
       }
+      const deadline = publicationDeadline();
       const baseId = transcriptIdOf(key);
       for (let copy = 1; copy <= MAX_FRESH_COPIES; copy += 1) {
         const transcriptId = copy === 1 ? baseId : `${baseId}-${copy}`;
         const stamped = stamp(artifact, transcriptId, key.sourceKey);
         const jsonPath = path.join(dir, `${transcriptId}.json`);
         const json = renderJson(stamped);
-        const claimed = await publish(jsonPath, json);
+        const claimed = await publish(jsonPath, json, deadline);
         if (!claimed.success) return claimed;
         if (!claimed.data) {
           if (fresh) continue;
-          const existing = await readTranscript(jsonPath, true);
+          const existing = await readTranscript(jsonPath, true, undefined, undefined, deadline);
           if (!existing.success) return existing;
           if (existing.data) return ok(existing.data);
           continue;
@@ -557,7 +558,7 @@ export const createFileLibraryStore = (deps: {
         // so neither can lose the transcript.
         const markdownPath = path.join(dir, markdownFileName(stamped, transcriptId));
         const markdown = renderMarkdown(stamped);
-        const published = await publish(markdownPath, markdown);
+        const published = await publish(markdownPath, markdown, deadline);
         try {
           const files: Record<string, string> = {};
           if (claimed.data.receipt) files[path.basename(jsonPath)] = claimed.data.receipt;
@@ -577,11 +578,8 @@ export const createFileLibraryStore = (deps: {
         } catch {
           // Cleanup evidence is best-effort: missing evidence preserves files, never loses a paid transcript.
         }
-        if (
-          !published.success ||
-          (!published.data &&
-            !(await availableMarkdown(markdownPath, markdown, performance.now() + 2000).catch(() => false)))
-        )
+        if (!published.success) return incomplete(jsonPath, markdownPath, published.error);
+        if (!published.data && !(await availableMarkdown(markdownPath, markdown, deadline).catch(() => false)))
           return incomplete(jsonPath, markdownPath);
         return ok({
           transcriptId,

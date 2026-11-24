@@ -29,25 +29,7 @@ import {
 } from "../../../src/infrastructure/library/file-library-store.ts";
 import * as activity from "../../../src/infrastructure/library/library-activity.ts";
 
-const publicationHooks = vi.hoisted(() => ({
-  scan: undefined as ((dir: string, when: "before" | "after") => Promise<void>) | undefined,
-  copy: undefined as ((from: string, to: string) => Promise<boolean>) | undefined,
-}));
-vi.mock("node:fs/promises", async (load) => {
-  const fs = await load<typeof import("node:fs/promises")>();
-  return {
-    ...fs,
-    readdir: async (...args: Parameters<typeof fs.readdir>) => {
-      await publicationHooks.scan?.(String(args[0]), "before");
-      const names = await fs.readdir(...args);
-      await publicationHooks.scan?.(String(args[0]), "after");
-      return names;
-    },
-    copyFile: async (...args: Parameters<typeof fs.copyFile>) => {
-      if (!(await publicationHooks.copy?.(String(args[0]), String(args[1])))) return fs.copyFile(...args);
-    },
-  };
-});
+import * as safeFiles from "../../../src/infrastructure/library/transcript-cleanup.ts";
 
 const isWindows = process.platform === "win32";
 
@@ -60,8 +42,6 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  publicationHooks.copy = undefined;
-  publicationHooks.scan = undefined;
   rmSync(root, { recursive: true, force: true });
 });
 
@@ -163,147 +143,229 @@ describe("save and find", () => {
     expect(await store.get(saved.data.transcriptId)).toMatchObject({ success: false });
   });
 
-  test.each(["get", "save"])(
-    "competing %s completes repair before the producer publishes Markdown",
-    async (operation) => {
-      const input = { key: keyOf(), source: youtube(), artifact: artifactOf(youtube()) };
-      const other = createFileLibraryStore({ libraryDir });
-      const enter = Promise.withResolvers<void>();
-      const release = Promise.withResolvers<void>();
-      const producer = createFileLibraryStore({
-        libraryDir,
-        fs: {
-          link: async (temp, target) => {
-            if (target.endsWith(".md")) {
-              enter.resolve();
-              await release.promise;
-            }
-            linkSync(temp, target);
-          },
-        },
-      }).save(input);
-      await enter.promise;
-      try {
-        expect(await (operation === "get" ? other.get(transcriptIdOf(input.key)) : other.save(input))).toMatchObject({
-          success: true,
-        });
-      } finally {
-        release.resolve();
-      }
-      const saved = await producer;
-      expect(saved.success).toBe(true);
-      if (!saved.success) return;
-      const meta = JSON.parse(readFileSync(path.join(path.dirname(saved.data.paths.json), "source.json"), "utf8"));
-      expect(meta.cleanup.files[path.basename(saved.data.paths.markdown)]).toBeUndefined();
-    },
-  );
-
-  test.each([
-    ["hardlink", ".md", "get"],
-    ["exclusive-copy", ".md", "get"],
-    ["exclusive-copy", ".json", "save"],
-  ] as const)("%s: %s is incomplete when a competing %s observes it", async (method, extension, operation) => {
-    const entered = Promise.withResolvers<void>();
-    const release = Promise.withResolvers<void>();
+  test.each(["get", "save"])("competing %s joins the serialized Markdown publication", async (operation) => {
     const input = { key: keyOf(), source: youtube(), artifact: artifactOf(youtube()) };
-    const noLink = () => {
-      throw Object.assign(new Error("no links"), { code: "EPERM" });
-    };
-    const fs = {
-      link: async (temp: string, target: string) => {
-        if (method === "exclusive-copy") noLink();
-        linkSync(temp, target);
-        if (target.endsWith(extension)) {
-          entered.resolve();
-          await release.promise;
-        }
+    const other = createFileLibraryStore({ libraryDir });
+    const enter = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const producer = createFileLibraryStore({
+      libraryDir,
+      fs: {
+        link: async (temp, target) => {
+          if (target.endsWith(".md")) {
+            enter.resolve();
+            await release.promise;
+          }
+          linkSync(temp, target);
+        },
       },
-    };
-    publicationHooks.copy = async (temp, target) => {
-      if (!target.endsWith(extension) || existsSync(target)) return false;
-      writeFileSync(target, "{", { flag: "wx" });
-      entered.resolve();
-      await release.promise;
-      writeFileSync(target, readFileSync(temp));
-      return true;
-    };
-    const store = createFileLibraryStore({ libraryDir, fs });
-    const producer = store.save(input);
-    await entered.promise;
-    // The hard link disappears just before enumeration; a partial copy still has a visible temp.
-    const sawConflict = vi.fn();
-    let scannedJson = false;
-    publicationHooks.scan = async (dir, when) => {
-      if (when !== (method === "hardlink" ? "before" : "after")) return;
-      if (dir !== path.join(libraryDir, sourceDirName(input.key.sourceKey))) return;
-      if (extension === ".md" && !scannedJson) {
-        scannedJson = true;
-        return;
-      }
-      sawConflict();
-      release.resolve();
-      await producer;
-    };
-    try {
-      const peer = await (operation === "get" ? store.get(transcriptIdOf(input.key)) : store.save(input));
-      expect(peer).toMatchObject({ success: true, data: { transcriptId: transcriptIdOf(input.key) } });
-      expect(sawConflict).toHaveBeenCalled();
-    } finally {
-      release.resolve();
-      await producer;
-    }
-    expect(await producer).toMatchObject({ success: true });
+    }).save(input);
+    await enter.promise;
+    const peer = operation === "get" ? other.get(transcriptIdOf(input.key)) : other.save(input);
+    release.resolve();
+    expect(await peer).toMatchObject({ success: true });
+    const saved = await producer;
+    expect(saved.success).toBe(true);
+    if (!saved.success) return;
+    const meta = JSON.parse(readFileSync(path.join(path.dirname(saved.data.paths.json), "source.json"), "utf8"));
+    expect(meta.cleanup.files[path.basename(saved.data.paths.markdown)]).toBeDefined();
   });
 
-  test.each([".md", ".json"])(
-    "complete %s bytes are not committed while exclusive copy can fail",
-    async (ext) => {
-      const beforeMarkdown = Promise.withResolvers<void>();
-      const copying = Promise.withResolvers<void>();
-      const release = Promise.withResolvers<void>();
+  describe.each([".json", ".md"])("publication generations for %s", (ext) => {
+    test.each(["commit", "remove", "residual"])("reader of A cannot certify B: %s", async (outcome) => {
       const input = { key: keyOf(), source: youtube(), artifact: artifactOf(youtube()) };
-      const id = transcriptIdOf(input.key);
-      let firstMarkdown = true;
+      const a = Promise.withResolvers<void>(),
+        b = Promise.withResolvers<void>();
+      const failA = Promise.withResolvers<void>(),
+        settleB = Promise.withResolvers<void>();
+      const observed = Promise.withResolvers<void>();
+      let attempts = 0;
+      let bytes: Buffer | undefined;
+      const copyFile = async (temp: string, target: string) => {
+        expect(target.endsWith(ext)).toBe(true);
+        const content = readFileSync(temp);
+        writeFileSync(target, content, { flag: "wx" });
+        if (++attempts === 1) {
+          bytes = content;
+          a.resolve();
+          await failA.promise;
+          rmSync(target);
+          throw Error("A failed");
+        }
+        expect(content).toEqual(bytes);
+        b.resolve();
+        await settleB.promise;
+        if (outcome === "commit") return;
+        if (outcome === "remove") rmSync(target);
+        throw Error("B failed");
+      };
       const store = createFileLibraryStore({
         libraryDir,
         fs: {
+          copyFile,
           link: async (temp, target) => {
-            if (!target.endsWith(ext)) return linkSync(temp, target);
-            if (ext === ".md" && firstMarkdown) {
-              firstMarkdown = false;
-              beforeMarkdown.resolve();
-              await copying.promise;
-              return linkSync(temp, target);
-            }
-            throw Object.assign(new Error("no links"), { code: "EPERM" });
+            if (target.endsWith(ext)) throw Object.assign(Error("no links"), { code: "EPERM" });
+            linkSync(temp, target);
           },
         },
       });
-      publicationHooks.copy = async (temp, target) => {
-        if (!target.endsWith(ext) || existsSync(target)) return false;
-        writeFileSync(target, readFileSync(temp), { flag: "wx" });
-        copying.resolve();
-        await release.promise;
-        rmSync(target);
-        throw Object.assign(new Error("copy failed"), { code: "EIO" });
-      };
-      const producer = store.save(input);
-      // On Markdown, get wins the repair copy while the original producer is about to publish.
-      const copier = ext === ".md" ? beforeMarkdown.promise.then(() => store.get(id)) : producer;
-      await copying.promise;
-      try {
-        const competitors = await Promise.all([ext === ".md" ? producer : store.save(input), store.get(id)]);
-        for (const result of competitors) {
-          expect(result).toMatchObject({ success: false, error: { code: "STORAGE_IO_FAILED" } });
-          if (!result.success) expect(result.error.hint).not.toContain("--force");
+      const first = store.save(input);
+      await a.promise;
+      const retriedB = Promise.withResolvers<void>();
+      let tokenA: string | undefined;
+      let observationsOfB = 0;
+      const safeRead = safeFiles.readUnlinkedFile;
+      const spy = vi.spyOn(safeFiles, "readUnlinkedFile").mockImplementation(async (file) => {
+        const value = await safeRead(file);
+        if (file.endsWith(`${ext}.publication`) && value.toString().includes("pending:")) {
+          if (tokenA === undefined) {
+            tokenA = value.toString();
+            observed.resolve();
+            await b.promise;
+          } else if (value.toString() !== tokenA && ++observationsOfB === 2) retriedB.resolve();
         }
+        return value;
+      });
+      const reader = store.get(transcriptIdOf(input.key));
+      await observed.promise;
+      failA.resolve();
+      expect((await first).success).toBe(false);
+      const second = store.save(input);
+      await b.promise;
+      try {
+        expect(await Promise.race([reader.then(() => "returned"), retriedB.promise.then(() => "pending")])).toBe(
+          "pending",
+        );
       } finally {
-        release.resolve();
-        expect(await copier).toMatchObject({ success: false });
+        settleB.resolve();
+        const result = await second;
+        spy.mockRestore();
+        expect(result.success).toBe(outcome === "commit");
+      }
+      expect((await reader).success).toBe(outcome === "commit");
+    });
+  });
+
+  test.each(["json", "markdown"] as const)(
+    "a generation change during the actual %s read invalidates the captured bytes",
+    async (kind) => {
+      const input = { key: keyOf(), source: youtube(), artifact: artifactOf(youtube()) };
+      const legacy = createFileLibraryStore({ libraryDir });
+      const saved = await legacy.save(input);
+      if (!saved.success) throw Error("setup failed");
+      const target = saved.data.paths[kind];
+      const safeRead = safeFiles.readUnlinkedFile;
+      let replaced = false;
+      const peer = createFileLibraryStore({
+        libraryDir,
+        fs: {
+          link: async () => {
+            throw Error("no links");
+          },
+          copyFile: async (temp, dest) => {
+            writeFileSync(dest, readFileSync(temp), { flag: "wx" });
+            throw Error("residual");
+          },
+        },
+      });
+      const spy = vi.spyOn(safeFiles, "readUnlinkedFile").mockImplementation(async (file) => {
+        const bytes = await safeRead(file);
+        if (file === target && !replaced) {
+          replaced = true;
+          rmSync(target);
+          expect((await peer.save(input)).success).toBe(false);
+        }
+        return bytes;
+      });
+      try {
+        expect((await legacy.get(saved.data.transcriptId)).success).toBe(false);
+        expect(replaced).toBe(true);
+      } finally {
+        spy.mockRestore();
       }
     },
-    8000,
   );
+
+  test.each(["record", "claim"])("a foreign %s is preserved and does not block another target", async (kind) => {
+    const input = { key: keyOf(), source: youtube(), artifact: artifactOf(youtube()) };
+    const dir = path.join(libraryDir, sourceDirName(input.key.sourceKey));
+    mkdirSync(dir, { recursive: true });
+    const target = path.join(dir, `${transcriptIdOf(input.key)}.json`);
+    const reserved = target + (kind === "record" ? ".publication" : ".publishing");
+    writeFileSync(reserved, "foreign");
+    const store = createFileLibraryStore({ libraryDir });
+    const blocked = store.save(input);
+    expect((await store.save({ ...input, key: keyOf("fr") })).success).toBe(true);
+    expect((await blocked).success).toBe(false);
+    expect(readFileSync(reserved, "utf8")).toBe("foreign");
+    expect(existsSync(target)).toBe(false);
+    if (kind === "record") expect((await store.find(input.key)).success).toBe(false);
+  });
+
+  test("atomic links need no persistent record and a healthy legacy hit does not take admission", async () => {
+    const entered = Promise.withResolvers<void>(),
+      release = Promise.withResolvers<void>();
+    const input = { key: keyOf(), source: youtube(), artifact: artifactOf(youtube()) };
+    const store = createFileLibraryStore({
+      libraryDir,
+      fs: {
+        link: async (temp, target) => {
+          linkSync(temp, target);
+          if (target.endsWith(".json")) {
+            entered.resolve();
+            await release.promise;
+          }
+        },
+      },
+    });
+    const producer = store.save(input);
+    await entered.promise;
+    const safeRead = safeFiles.readUnlinkedFile;
+    const spy = vi.spyOn(safeFiles, "readUnlinkedFile").mockImplementation(async (file) => {
+      try {
+        return await safeRead(file);
+      } finally {
+        if (file.endsWith(".json")) release.resolve();
+      }
+    });
+    const peer = store.get(transcriptIdOf(input.key));
+    try {
+      expect((await peer).success).toBe(true);
+    } finally {
+      release.resolve();
+      spy.mockRestore();
+    }
+    const saved = await producer;
+    if (!saved.success) throw Error("atomic save failed");
+    for (const file of Object.values(saved.data.paths)) {
+      expect(existsSync(`${file}.publication`)).toBe(false);
+      mkdirSync(`${file}.publishing`);
+    }
+    expect((await store.find(input.key)).success).toBe(true);
+    for (const file of Object.values(saved.data.paths)) expect(existsSync(`${file}.publishing`)).toBe(true);
+  });
+
+  test("fallback records are neither transcript entries nor deletable cleanup receipts", async () => {
+    const store = createFileLibraryStore({
+      libraryDir,
+      fs: {
+        link: async () => {
+          throw Error("no links");
+        },
+      },
+    });
+    const saved = await store.save({ key: keyOf(), source: youtube(), artifact: artifactOf(youtube()) });
+    if (!saved.success) throw Error("fallback save failed");
+    expect(await store.entries()).toMatchObject({ success: true, data: [{ transcriptId: saved.data.transcriptId }] });
+    for (const file of Object.values(saved.data.paths)) utimesSync(file, 0, 0);
+    expect(await store.prune({ olderThanDays: 1, includeTranscripts: true, dryRun: false })).toMatchObject({
+      success: true,
+      data: { transcriptFiles: 0 },
+    });
+    for (const file of Object.values(saved.data.paths))
+      expect(readFileSync(`${file}.publication`, "utf8")).toContain("committed:");
+    expect((await store.get(saved.data.transcriptId)).success).toBe(true);
+  });
 
   test("a stale publication temp neither endorses a linked destination nor waits indefinitely", async () => {
     const store = createFileLibraryStore({ libraryDir });
