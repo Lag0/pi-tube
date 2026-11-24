@@ -18,14 +18,18 @@ bun run pi-tube --help
 
 ## Before opening a pull request
 
-All four checks must pass locally; CI runs the same commands on Linux, macOS and Windows.
+These checks must pass locally; CI runs the same commands on Linux, macOS and Windows.
 
 ```bash
+node scripts/check-source-bun.mjs
 bun run typecheck
 bun run lint
 bun run test
 bun run verify:fixtures
+npm run smoke:installed
 ```
+
+The preflight checks that Node can spawn native Bun 1.3.3 on the source-test PATH. The separate npm smoke packs this checkout once, installs its tarball and real production dependencies into a disposable local prefix with scripts disabled, then runs npm’s launcher from outside the checkout. It checks help, version and credential-free providers (including ignoring `.env`). Installation may fetch public dependencies; npm does not use `bun.lock`. This does not test registry publication, global PATH setup, npx fetching, paid services or other runtime versions.
 
 `bun run format` applies the formatter and safe lint fixes.
 

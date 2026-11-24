@@ -7,6 +7,14 @@ function runCli(args: string[]) {
 }
 
 describe("Install and run contract", () => {
+  test.each(["README.md", "skills/pi-tube/rules/install.md"])(
+    "%s states the runtime prerequisite before npm install",
+    (file) => {
+      const instructions = readFileSync(file, "utf8").split("npm install -g")[0];
+      expect(instructions).toContain("Bun >=1.3.3 on PATH");
+    },
+  );
+
   test("README documents canonical invocation path", () => {
     const readme = readFileSync("README.md", "utf8");
 
@@ -48,6 +56,8 @@ describe("Install and run contract", () => {
     expect(pkg.scripts?.["verify:fixtures"]).toBe("bun run --bun scripts/verify-fixtures.ts");
     expect(pkg.scripts?.["publish-beta"]).toContain("npm publish");
     expect(pkg.scripts?.["publish-prod"]).toContain("npm publish");
+    expect(ciWorkflow).toContain("run: node scripts/check-source-bun.mjs");
+    expect(ciWorkflow).toContain("run: npm run smoke:installed");
     expect(ciWorkflow).toContain("run: bun run test");
     expect(ciWorkflow).toContain("run: bun run verify:fixtures");
     expect(publishWorkflow).toContain("name: Publish to npm");
