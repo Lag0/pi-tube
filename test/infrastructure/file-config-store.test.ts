@@ -1,5 +1,5 @@
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
@@ -10,7 +10,7 @@ import { createFileConfigStore } from "../../src/infrastructure/config/file-conf
 
 vi.mock("node:fs/promises", async (importOriginal) => {
   const fs = await importOriginal<typeof import("node:fs/promises")>();
-  return { ...fs, mkdir: vi.fn(fs.mkdir), writeFile: vi.fn(fs.writeFile) };
+  return { ...fs, mkdir: vi.fn(fs.mkdir), rm: vi.fn(fs.rm), writeFile: vi.fn(fs.writeFile) };
 });
 
 const isWindows = process.platform === "win32";
@@ -229,20 +229,33 @@ test("cancellation during contention preserves the other writer's lock", async (
   expect(readFileSync(configFile, "utf8")).toBe("{}");
 });
 
-test("cancellation after temporary write prevents publication", async () => {
-  writeRaw("{}");
-  const controller = new AbortController();
-  vi.mocked(writeFile).mockImplementationOnce(async (file, data, options) => {
-    const fs = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
-    await fs.writeFile(file, data, options);
-    controller.abort();
-  });
-  expect(await createFileConfigStore(configFile).update(() => ok(SAMPLE), controller.signal)).toMatchObject({
-    error: { code: "CANCELLED" },
-  });
-  expect(readFileSync(configFile, "utf8")).toBe("{}");
-  expect(existsSync(`${configFile}.lock`)).toBe(false);
-});
+test.each([0, 1, 2])(
+  "cancellation after temporary write prevents publication: %i cleanup failures",
+  async (failures) => {
+    const warn = vi.spyOn(process, "emitWarning").mockImplementation(() => {});
+    for (let i = 0; i < failures; i++) vi.mocked(rm).mockRejectedValueOnce(new Error("private-cleanup-error"));
+    let tempFile = "";
+    writeRaw("{}");
+    const controller = new AbortController();
+    vi.mocked(writeFile).mockImplementationOnce(async (file, data, options) => {
+      const fs = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+      tempFile = String(file);
+      await fs.writeFile(file, data, options);
+      controller.abort();
+    });
+    expect(await createFileConfigStore(configFile).update(() => ok(SAMPLE), controller.signal)).toMatchObject({
+      success: false,
+      error: { code: "CANCELLED" },
+    });
+    expect(readFileSync(configFile, "utf8")).toBe("{}");
+    expect(existsSync(`${configFile}.lock`)).toBe(false);
+    expect(existsSync(tempFile)).toBe(failures === 2);
+    if (failures === 2) {
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining(tempFile));
+      expect(warn.mock.calls.flat().join(" ")).not.toMatch(/gq-key|private-cleanup-error/);
+    } else expect(warn).not.toHaveBeenCalled();
+  },
+);
 
 test.each([true, false])("release failure preserves mutation outcome: published=%s", async (publish) => {
   writeRaw("{}");

@@ -102,7 +102,13 @@ const writeAtomically = async (configFile: string, content: string, signal?: Abo
     await writeFile(tempFile, content, { encoding: "utf8", mode: 0o600, flag: "wx" });
     const ready = ensureNotAborted(signal);
     if (!ready.success) {
-      await rm(tempFile, { force: true });
+      try {
+        await rm(tempFile, { force: true });
+      } catch {
+        await rm(tempFile, { force: true }).catch(() => {
+          process.emitWarning(`Could not remove cancelled config write's temporary file. Remove ${tempFile}.`);
+        });
+      }
       return ready;
     }
     await rename(tempFile, configFile);
