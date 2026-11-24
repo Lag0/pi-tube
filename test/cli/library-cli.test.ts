@@ -21,7 +21,7 @@ import type { ResolvedSource } from "../../src/core/domain/source.ts";
 import { buildOutputArtifact } from "../../src/core/domain/transcript/build-artifact.ts";
 import { createFileLibraryStore } from "../../src/infrastructure/library/file-library-store.ts";
 import { runCliInProcess } from "../helpers/cli-harness.ts";
-import { spawnCli } from "../helpers/spawn-cli.ts";
+import { SPAWN_ROOT, spawnCli } from "../helpers/spawn-cli.ts";
 import { fakeProviders, PROVIDER_KEYS } from "../helpers/transcribe-fakes.ts";
 
 let libraryDir: string;
@@ -443,6 +443,7 @@ describe("library prune", () => {
 
   function previewAudio(args: string[]) {
     return spawnCli(["library", "prune", ...args], {
+      BUN_RUNTIME_TRANSPILER_CACHE_PATH: path.join(SPAWN_ROOT, "bun-cache"),
       HOME: libraryDir,
       PI_TUBE_LIBRARY_DIR: path.join(libraryDir, "library"),
       PI_TUBE_CONFIG_PATH: path.join(libraryDir, "config.json"),
