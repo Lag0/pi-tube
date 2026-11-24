@@ -218,63 +218,82 @@ const runTranscribe =
       if (!cached.success) return cached;
       if (cached.data) return ok(hit(cached.data));
     }
-    if (apiKey === undefined) return err(providerNotConfigured(selected.data.descriptor));
-    // A best-effort page has no key before the resolve, but its kept audio is reused after it.
-    const storedLate =
-      reusedEarly || !isSiteSource(source) ? undefined : await deps.library.storedSource(sourceKey.data);
-    if (storedLate && !storedLate.success) return storedLate;
-    const keptAudio = reusedEarly?.audioPath ?? storedLate?.data?.audioPath;
+    const produce = async (): Promise<Result<TranscribeOutput>> => {
+      if (apiKey === undefined) return err(providerNotConfigured(selected.data.descriptor));
+      // A best-effort page has no key before the resolve, but its kept audio is reused after it.
+      const storedLate =
+        reusedEarly || !isSiteSource(source) ? undefined : await deps.library.storedSource(sourceKey.data);
+      if (storedLate && !storedLate.success) return storedLate;
+      const keptAudio = reusedEarly?.audioPath ?? storedLate?.data?.audioPath;
 
-    options?.onProgress?.({ label: "Transcribing audio...", detail: `(${sourceDetail(source)})` });
-    let audio: FetchedAudio;
-    if (keptAudio !== undefined) {
-      audio = { audio: { kind: "file", path: keptAudio }, release: async () => {} };
-    } else {
-      const fetched = await deps.media.fetchAudio(source, settings.data, options);
-      if (!fetched.success) return fetched;
-      audio = await keepFetchedAudio(fetched.data, source, sourceKey.data);
-    }
+      options?.onProgress?.({ label: "Transcribing audio...", detail: `(${sourceDetail(source)})` });
+      let audio: FetchedAudio;
+      if (keptAudio !== undefined) {
+        audio = { audio: { kind: "file", path: keptAudio }, release: async () => {} };
+      } else {
+        const fetched = await deps.media.fetchAudio(source, settings.data, options);
+        if (!fetched.success) return fetched;
+        audio = await keepFetchedAudio(fetched.data, source, sourceKey.data);
+      }
 
-    let transcript: Awaited<ReturnType<SttProvider["transcribe"]>>;
-    try {
-      transcript = await provider.transcribe(
-        { audio: audio.audio, apiKey, ...(language ? { language } : {}) },
-        options,
+      let transcript: Awaited<ReturnType<SttProvider["transcribe"]>>;
+      try {
+        transcript = await provider.transcribe(
+          { audio: audio.audio, apiKey, ...(language ? { language } : {}) },
+          options,
+        );
+      } finally {
+        await audio.release();
+      }
+      if (!transcript.success) return err(withAlternatives(transcript.error, providerId, deps, config.data));
+      // Noted before the save: the provider has billed this audio even if the save fails.
+      const audioSeconds = audioSecondsOf(transcript.data, source);
+      trail.note({ cacheHit: false, ...(audioSeconds === undefined ? {} : { audioSeconds }) });
+      const cost = audioSeconds === undefined ? undefined : estimateCost(providerId, provider.model, audioSeconds);
+
+      const artifact = buildOutputArtifact(
+        {
+          source,
+          provider: providerId,
+          model: provider.model,
+          transcript: transcript.data.text,
+          requestedLanguage: language,
+          // Each provider reports the detected language in its own form; the library stores ISO 639-1.
+          detectedLanguage: normalizeLanguageTag(transcript.data.detectedLanguage),
+          segments: [...transcript.data.segments],
+        },
+        // The library keeps one canonical transcript per key, always with its timed segments.
+        { generatedAt: deps.now().toISOString(), includeTimestamps: true },
       );
-    } finally {
-      await audio.release();
-    }
-    if (!transcript.success) return err(withAlternatives(transcript.error, providerId, deps, config.data));
-    // Noted before the save: the provider has billed this audio even if the save fails.
-    const audioSeconds = audioSecondsOf(transcript.data, source);
-    trail.note({ cacheHit: false, ...(audioSeconds === undefined ? {} : { audioSeconds }) });
-    const cost = audioSeconds === undefined ? undefined : estimateCost(providerId, provider.model, audioSeconds);
-
-    const artifact = buildOutputArtifact(
-      {
-        source,
-        provider: providerId,
-        model: provider.model,
-        transcript: transcript.data.text,
-        requestedLanguage: language,
-        // Each provider reports the detected language in its own form; the library stores ISO 639-1.
-        detectedLanguage: normalizeLanguageTag(transcript.data.detectedLanguage),
-        segments: [...transcript.data.segments],
-      },
-      // The library keeps one canonical transcript per key, always with its timed segments.
-      { generatedAt: deps.now().toISOString(), includeTimestamps: true },
-    );
-    options?.onProgress?.({ label: "Saving output..." });
-    const saved = await deps.library.save({ key, source, artifact, fresh: input.force === true });
-    if (!saved.success) return saved;
-    return ok({
-      transcriptId: saved.data.transcriptId,
-      cacheHit: false,
-      paths: saved.data.paths,
-      format: input.format,
-      artifact: saved.data.artifact,
-      ...(audioSeconds === undefined ? {} : { audioSeconds }),
-      ...(cost === undefined ? {} : { cost }),
+      options?.onProgress?.({ label: "Saving output..." });
+      const saved = await deps.library.save({ key, source, artifact, fresh: input.force === true });
+      if (!saved.success) return saved;
+      return ok({
+        transcriptId: saved.data.transcriptId,
+        cacheHit: false,
+        paths: saved.data.paths,
+        format: input.format,
+        artifact: saved.data.artifact,
+        ...(audioSeconds === undefined ? {} : { audioSeconds }),
+        ...(cost === undefined ? {} : { cost }),
+      });
+    };
+    if (input.force) return produce();
+    return deps.library.withTranscriptionClaim(key, options, async (producer) => {
+      const ready = ensureNotAborted(options?.signal);
+      if (!ready.success) return ready;
+      const cached = await deps.library.find(key);
+      if (!cached.success) return cached;
+      if (cached.data) return ok(hit(cached.data));
+      if (!producer)
+        return err(
+          createError(
+            "STORAGE_IO_FAILED",
+            "Concurrent transcription ended without a saved transcript. No retry was dispatched.",
+            { hint: "Check the library and provider usage before starting another transcription." },
+          ),
+        );
+      return produce();
     });
   };
 

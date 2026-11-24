@@ -44,6 +44,7 @@ import { renderMarkdown } from "../../core/domain/transcript/render-markdown.ts"
 import type { LibraryEntry, LibraryStore, StoredSource, StoredTranscript } from "../../core/ports/library-store.ts";
 import { errnoOf } from "../errno.ts";
 
+import { withTranscriptionClaim } from "./coordinate-transcription.ts";
 import { withSourceWriter } from "./library-activity.ts";
 import { pruneTranscripts, receiptFor, sourceWithReceipts } from "./transcript-cleanup.ts";
 
@@ -374,6 +375,9 @@ export const createFileLibraryStore = (deps: {
         return err(ioError("read", source.absolutePath, error));
       }
     },
+
+    withTranscriptionClaim: (key, options, admitted) =>
+      withTranscriptionClaim(deps.libraryDir, transcriptIdOf(key), options, admitted),
 
     find: async (key) => {
       const dir = dirOf(key.sourceKey);

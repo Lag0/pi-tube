@@ -74,6 +74,12 @@ Successful runs write deterministic Markdown or JSON artifacts and print:
 [OUTPUT_FILE_URI] file:///path/to/artifact.md
 ```
 
+### Concurrent transcriptions
+
+Ordinary CLI and MCP calls sharing a local library coordinate by final source key, provider, model and normalized requested language. One caller transcribes; concurrent callers wait for the saved transcript and report a zero-cost cache hit. Other keys run independently. Cancelling a waiter does not cancel the producer. `--force` still requests a new paid version and skips this coordination.
+
+If a producer exits without saving, a waiter that observed its claim does not retry the provider. A crash can leave a `.transcribing-<transcript-id>` directory in the library and later misses waiting: cancel the wait, stop all callers using that library, check the library and provider usage, then remove only the abandoned empty claim directory before deliberately retrying. A provider can bill before a save; this is not exactly-once billing or crash recovery.
+
 ## Download Media
 
 ```bash

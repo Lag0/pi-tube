@@ -1,4 +1,5 @@
 import type { SourceKey, TranscriptKey } from "../domain/library.ts";
+import type { OperationOptions } from "../domain/operation.ts";
 import type { ProviderId } from "../domain/providers.ts";
 import type { Result } from "../domain/result.ts";
 import type { ResolvedSource, SourceKind } from "../domain/source.ts";
@@ -63,6 +64,12 @@ export interface LibraryStore {
   prepare(): Promise<Result<void>>;
   /** The source's key; a local file is hashed by content. */
   sourceKeyOf(source: ResolvedSource): Promise<Result<SourceKey>>;
+  /** On contention the callback can only reuse a saved result, never dispatch another paid call. */
+  withTranscriptionClaim<T>(
+    key: TranscriptKey,
+    options: OperationOptions | undefined,
+    admitted: (producer: boolean) => Promise<Result<T>>,
+  ): Promise<Result<T>>;
   /** Cache lookup: the exact key, or, for a requested language, an `auto` transcript that detected it. */
   find(key: TranscriptKey): Promise<Result<StoredTranscript | undefined>>;
   /**
