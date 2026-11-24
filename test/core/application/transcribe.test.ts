@@ -1,7 +1,8 @@
 import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { link } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { createDownloadMedia } from "../../../src/core/application/download-media.ts";
 import { createTranscribe, type TranscribeDeps } from "../../../src/core/application/transcribe.ts";
 import type { PiTubeConfig } from "../../../src/core/domain/config.ts";
@@ -263,6 +264,129 @@ describe("library cache", () => {
     return { stt, media, transcribe: createTranscribe({ ...deps, media: media.fetcher }) };
   };
 
+  test.each([true, false])("late waiter does not inspect a live publication (URL key: %s)", async (earlyKey) => {
+    const { deps, stt } = setup({ env: { GROQ_API_KEY: "gq" } });
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const waiting = Promise.withResolvers<void>();
+    const library = createFileLibraryStore({
+      libraryDir: outputDir,
+      fs: {
+        link: async (temp, target) => {
+          if (target.endsWith(".json")) {
+            writeFileSync(target, "{");
+            entered.resolve();
+            await release.promise;
+            rmSync(target);
+          }
+          await link(temp, target);
+        },
+      },
+    });
+    const media = createFakeMediaFetcher(earlyKey ? { source: youtube } : undefined);
+    const transcribe = createTranscribe({ ...deps, media: media.fetcher, library });
+    const input = { input: earlyKey ? YOUTUBE : INPUT, format: "json", provider: "groq" } as const;
+    const owner = transcribe(input);
+    await entered.promise;
+    const read = createTranscribe({ ...deps, env: {}, media: media.fetcher, library });
+    const waiter = read(input, {
+      onProgress: ({ label }) => {
+        if (label === "Waiting for transcription...") waiting.resolve();
+      },
+    });
+    try {
+      expect(await Promise.race([waiting.promise, waiter])).toBeUndefined();
+      if (earlyKey) {
+        release.resolve();
+        const saved = await owner;
+        expect(saved.success).toBe(true);
+        expect(await waiter).toMatchObject({
+          success: true,
+          data: {
+            cacheHit: true,
+            transcriptId: saved.success && saved.data.transcriptId,
+            cost: { estimate: 0 },
+          },
+        });
+        expect(media.calls.resolve).toHaveLength(1);
+      } else {
+        vi.spyOn(performance, "now").mockReturnValue(Number.MAX_SAFE_INTEGER);
+        expect(await waiter).toMatchObject({
+          success: false,
+          error: { hint: expect.stringContaining("provider usage") },
+        });
+      }
+    } finally {
+      release.resolve();
+      await owner;
+    }
+    expect(stt.groq.requests).toHaveLength(1);
+  });
+
+  test("a waiting reader cannot repair Markdown before the producer records its receipt", async () => {
+    const { deps, stt } = setup({ env: { GROQ_API_KEY: "gq" } });
+    const publishing = Promise.withResolvers<void>();
+    const waiting = Promise.withResolvers<void>();
+    const jsonPublished = Promise.withResolvers<void>();
+    const finish = Promise.withResolvers<void>();
+    let producerMarkdown: string | undefined;
+    const library = createFileLibraryStore({
+      libraryDir: outputDir,
+      fs: {
+        link: async (temp, target) => {
+          if (target.endsWith(".json")) {
+            publishing.resolve();
+            await waiting.promise;
+          } else if (target.endsWith(".md") && !producerMarkdown) {
+            producerMarkdown = target;
+            jsonPublished.resolve();
+            await finish.promise;
+          }
+          await link(temp, target);
+        },
+      },
+    });
+    const transcribe = createTranscribe({ ...deps, library });
+    const input = { input: INPUT, format: "json", provider: "groq" } as const;
+    const owner = transcribe(input);
+    await publishing.promise;
+    const waiter = transcribe(input, {
+      onProgress: ({ label }) => {
+        if (label === "Waiting for transcription...") waiting.resolve();
+      },
+    });
+    try {
+      await jsonPublished.promise;
+      const autoWait = Promise.withResolvers<void>();
+      const explicit = transcribe(
+        { ...input, language: "en" },
+        {
+          onProgress: ({ label }) => {
+            if (label === "Waiting for transcription...") autoWait.resolve();
+          },
+        },
+      );
+      expect(await Promise.race([autoWait.promise, explicit])).toBeUndefined();
+      vi.spyOn(performance, "now").mockReturnValue(Number.MAX_SAFE_INTEGER);
+      expect(await waiter).toMatchObject({
+        success: false,
+        error: { hint: expect.stringContaining("provider usage") },
+      });
+      expect(await explicit).toMatchObject({
+        success: false,
+        error: { hint: expect.stringContaining("provider usage") },
+      });
+      if (!producerMarkdown) throw Error("Missing producer Markdown path");
+      expect(readdirSync(path.dirname(producerMarkdown))).not.toContain(path.basename(producerMarkdown));
+    } finally {
+      finish.resolve();
+      await owner;
+    }
+    const metadata = JSON.parse(readFileSync(path.join(path.dirname(producerMarkdown), "source.json"), "utf8"));
+    expect(metadata.cleanup.files[path.basename(producerMarkdown)]).toEqual(expect.any(String));
+    expect(stt.groq.requests).toHaveLength(1);
+  });
+
   test("a second YouTube transcribe is a cache hit without resolve, audio or provider", async () => {
     const { stt, media, transcribe } = cached({ source: youtube });
 
@@ -378,6 +502,73 @@ describe("library cache", () => {
     expect(media.calls.fetchAudio).toHaveLength(1);
     expect(stt.groq.requests).toHaveLength(1);
   });
+
+  test.each(["release", "completed", "cancel"] as const)(
+    "explicit en reuses a claimed auto candidate: %s",
+    async (end) => {
+      const { deps, stt } = setup({ env: { GROQ_API_KEY: "gq" } });
+      const file = path.join(outputDir, "demo.wav");
+      writeFileSync(file, "fake audio");
+      const { fetcher } = createFakeMediaFetcher({
+        source: { kind: "local_file", originalInput: file, absolutePath: file, extension: "wav", sizeBytes: 10 },
+      });
+      const transcribe = createTranscribe({ ...deps, media: fetcher });
+      const input = { input: file, format: "json" } as const;
+      const seed = await transcribe(input);
+      if (!seed.success) throw Error(seed.error.message);
+      const entered = Promise.withResolvers<void>();
+      const release = Promise.withResolvers<void>();
+      const reader = createTranscribe({
+        ...deps,
+        media: fetcher,
+        library: {
+          ...deps.library,
+          find: async (key) => {
+            entered.resolve();
+            await release.promise;
+            return deps.library.find(key);
+          },
+        },
+      });
+      const auto = reader(input);
+      await entered.promise;
+      const waiting = Promise.withResolvers<void>();
+      const controller = new AbortController();
+      const explicit = transcribe(
+        { ...input, language: "en" },
+        {
+          signal: controller.signal,
+          onProgress: ({ label }) => {
+            if (label === "Waiting for transcription...") waiting.resolve();
+          },
+        },
+      );
+      const hit = {
+        success: true,
+        data: { cacheHit: true, transcriptId: seed.data.transcriptId, cost: { estimate: 0 } },
+      };
+      try {
+        expect(await Promise.race([waiting.promise, explicit])).toBeUndefined();
+        if (end === "completed") {
+          const claim = path.join(outputDir, `.transcribing-${seed.data.transcriptId}`);
+          writeFileSync(path.join(claim, "block-release"), "");
+        }
+        if (end === "cancel") {
+          controller.abort();
+          expect(await explicit).toMatchObject({ success: false, error: { code: "CANCELLED" } });
+        }
+        release.resolve();
+        expect(await auto).toMatchObject(hit);
+        if (end === "completed") vi.spyOn(performance, "now").mockReturnValue(Number.MAX_SAFE_INTEGER);
+        if (end !== "cancel") expect(await explicit).toMatchObject(hit);
+      } finally {
+        controller.abort();
+        release.resolve();
+        await Promise.allSettled([auto, explicit]);
+      }
+      expect(stt.groq.requests).toHaveLength(1);
+    },
+  );
 
   test("a request in en reuses an automatic transcript that detected en, but not one in pt", async () => {
     const { stt, transcribe } = cached({ source: youtube });

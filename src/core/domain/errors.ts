@@ -178,3 +178,8 @@ export const toPiTubeError = (error: unknown): PiTubeError => {
   }
   return createError("UNEXPECTED", "Unexpected failure.");
 };
+
+export const transcriptionWaitError = () =>
+  createError("STORAGE_IO_FAILED", "No completed transcription was available after waiting. No retry was dispatched.", {
+    hint: "The producer may still be running. Check the library and provider usage before starting another transcription.",
+  });
