@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 import type { App } from "../../src/bootstrap.ts";
@@ -191,6 +191,27 @@ const big = async (options: McpHarnessOptions = {}) => {
 };
 
 describe("get_transcript", () => {
+  test("reports corrupt JSON by path while listing and searching healthy neighbors", async () => {
+    const { harness: mcp, ids } = await seeded();
+    const transcriptId = ids[0] ?? "";
+    const stored = await mcp.app.getTranscript({ transcriptId });
+    if (!stored.success) throw new Error(stored.error.message);
+    const { json, markdown } = stored.data.paths;
+    const corrupt = JSON.stringify({ schema_version: "1.3.0", transcript: { full_text: "incomplete" } });
+    writeFileSync(json, corrupt);
+    rmSync(markdown);
+
+    const result = await mcp.call("get_transcript", { transcript_id: transcriptId });
+    expect(result.isError).toBe(true);
+    expect(result.json).toMatchObject({ error: { code: "STORAGE_IO_FAILED", message: expect.stringContaining(json) } });
+    const list = await mcp.call("list_transcripts");
+    expect((list.json as ListJson).transcripts.map((entry) => entry.transcript_id)).toEqual([ids[2], ids[1]]);
+    const search = await mcp.call("search_transcripts", { query: "Aula" });
+    expect((search.json as ListJson).transcripts.map((entry) => entry.transcript_id)).toEqual([ids[2]]);
+    expect(readFileSync(json, "utf8")).toBe(corrupt);
+    expect(existsSync(markdown)).toBe(false);
+  });
+
   test("the default page is 20000 characters, and pages concatenate to the whole text", async () => {
     const { harness: mcp, id } = await big();
     const texts: string[] = [];
