@@ -696,24 +696,43 @@ export const createFileLibraryStore = (deps: {
     },
 
     entries: async () => {
+      const entries: LibraryEntry[] = [];
+      const scanDiagnostics = { skipped_candidates: 0, unlisted_children: 0 };
       let dirs: string[];
       try {
         dirs = await readdir(deps.libraryDir);
       } catch (error) {
-        return errnoOf(error) === "ENOENT" ? ok([]) : err(ioError("read", deps.libraryDir, error));
+        return errnoOf(error) === "ENOENT"
+          ? ok({ entries, scanDiagnostics })
+          : err(ioError("read", deps.libraryDir, error));
       }
-      const entries: LibraryEntry[] = [];
       for (const dir of dirs) {
         const sourceDir = path.join(deps.libraryDir, dir);
-        const names = await readdir(sourceDir).catch(() => [] as string[]);
+        let names: string[];
+        try {
+          names = await readdir(sourceDir);
+        } catch (error) {
+          // Some runtimes report other errors for an ordinary file; an absent child is still unknown.
+          if (
+            errnoOf(error) !== "ENOTDIR" &&
+            !(await lstat(sourceDir).then(
+              (stat) => stat.isFile(),
+              () => false,
+            ))
+          ) {
+            scanDiagnostics.unlisted_children++;
+          }
+          continue;
+        }
         for (const name of names) {
           if (!name.endsWith(".json") || name === SOURCE_FILE) continue;
           const result = await readTranscript(path.join(sourceDir, name));
           if (result.success && result.data) entries.push(toEntry(result.data));
+          else scanDiagnostics.skipped_candidates++;
         }
       }
       entries.sort((left, right) => right.generatedAt.localeCompare(left.generatedAt));
-      return ok(entries);
+      return ok({ entries, scanDiagnostics });
     },
   };
 };

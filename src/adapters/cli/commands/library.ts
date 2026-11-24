@@ -21,6 +21,7 @@ export interface LibraryCommand {
   readonly since?: string;
   readonly until?: string;
   readonly olderThan?: string;
+  readonly scanDiagnostics?: boolean;
   readonly includeTranscripts: boolean;
   readonly yes: boolean;
   readonly json: boolean;
@@ -55,6 +56,7 @@ const pageJson = (page: LibraryPage) => {
     offset: page.offset,
     limit: page.limit,
     next_offset: next < page.total ? next : null,
+    ...(page.scanDiagnostics ? { scan_diagnostics: page.scanDiagnostics } : {}),
     entries: page.entries.map(entryJson),
   };
 };
@@ -65,9 +67,15 @@ const entryLine = (entry: LibraryEntry): string =>
 
 const writePage = (deps: CliDeps, header: string, page: LibraryPage): void => {
   deps.io.writeOut(
-    [`${header} total=${page.total} offset=${page.offset} limit=${page.limit}`, ...page.entries.map(entryLine)].join(
-      "\n",
-    ),
+    [
+      `${header} total=${page.total} offset=${page.offset} limit=${page.limit}`,
+      ...page.entries.map(entryLine),
+      ...(page.scanDiagnostics
+        ? [
+            `[SCAN_DIAGNOSTICS] skipped_candidates=${page.scanDiagnostics.skipped_candidates} unlisted_children=${page.scanDiagnostics.unlisted_children}`,
+          ]
+        : []),
+    ].join("\n"),
   );
 };
 
@@ -119,6 +127,9 @@ export const importV2Once = async (deps: CliDeps): Promise<void> => {
 
 /** `pi-tube library <list|show|search|prune|import>`: the local transcript library. */
 export const runLibrary = async (deps: CliDeps, command: LibraryCommand): Promise<number> => {
+  if (command.scanDiagnostics && command.action !== "list" && command.action !== "search") {
+    throw usageError("`--scan-diagnostics` works only with `library list` and `library search`.");
+  }
   const filter = {
     ...(command.provider === undefined ? {} : { provider: command.provider }),
     ...(command.source === undefined ? {} : { kind: command.source }),
@@ -134,6 +145,7 @@ export const runLibrary = async (deps: CliDeps, command: LibraryCommand): Promis
     limit: wholeNumber(command.limit, DEFAULT_LIMIT),
     offset: wholeNumber(command.offset, 0),
     ...filter,
+    ...(command.scanDiagnostics ? { scanDiagnostics: true } : {}),
   };
   switch (command.action) {
     case "list": {

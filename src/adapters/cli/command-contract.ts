@@ -185,15 +185,19 @@ const LIBRARY_HELP_DOCUMENT: HelpDocument = {
   summary:
     "The local library: every transcript pi-tube saved, by source, provider, model and language, and the audio kept for reuse.",
   usage: [
-    `${COMMAND_IDENTITY} library list [--limit <n>] [--offset <n>] [filters] [--json]`,
+    `${COMMAND_IDENTITY} library list [--limit <n>] [--offset <n>] [filters] [--scan-diagnostics] [--json]`,
     `${COMMAND_IDENTITY} library show <transcript_id> [--json]`,
-    `${COMMAND_IDENTITY} library search <query> [--limit <n>] [--offset <n>] [filters] [--json]`,
+    `${COMMAND_IDENTITY} library search <query> [--limit <n>] [--offset <n>] [filters] [--scan-diagnostics] [--json]`,
     `${COMMAND_IDENTITY} library prune [--older-than <days>] [--include-transcripts] [--yes] [--json]`,
     `${COMMAND_IDENTITY} library import [--json]`,
   ],
   options: [
     { term: "--limit <n>", description: "How many entries to print (default 20, at most 500)." },
     { term: "--offset <n>", description: "How many entries to skip (default 0)." },
+    {
+      term: "--scan-diagnostics",
+      description: "list, search: report observed skipped candidates and unlisted children across the whole scan.",
+    },
     { term: "--provider <id>", description: "list, search: only transcripts made with this provider." },
     {
       term: "--source <kind>",

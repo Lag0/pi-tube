@@ -67,6 +67,7 @@ interface LibraryOptions extends JsonCommandOptions {
   since?: string;
   until?: string;
   olderThan?: string;
+  scanDiagnostics?: boolean;
   includeTranscripts?: boolean;
   yes?: boolean;
 }
@@ -232,6 +233,10 @@ function createProgram(setAction: (action: CliAction) => void): Command {
     .option(
       "--older-than <days>",
       "prune: only audio files or verified transcript artifacts older than this many days.",
+    )
+    .option(
+      "--scan-diagnostics",
+      "list, search: report observed skipped candidates and unlisted children across the whole scan.",
     )
     .option("--include-transcripts", "prune: remove verified unchanged transcript artifacts (needs --older-than).")
     .option("--yes", "prune: delete; without it, prune only reports.")
@@ -428,6 +433,7 @@ export const runCli = async (argv: readonly string[], deps: CliDeps): Promise<nu
           since: action.options.since,
           until: action.options.until,
           olderThan: action.options.olderThan,
+          ...(action.options.scanDiagnostics ? { scanDiagnostics: true } : {}),
           includeTranscripts: Boolean(action.options.includeTranscripts),
           yes: Boolean(action.options.yes),
           json: Boolean(action.options.json),

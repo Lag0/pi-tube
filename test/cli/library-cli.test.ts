@@ -75,8 +75,23 @@ describe("library list", () => {
     ]);
     writeFileSync(path.join(libraryDir, sourceDirName("youtube:aaaaaaaaaaa"), "corrupt.json"), "{");
     for (const command of [["list"], ["search", "Group"]]) {
-      const result = await library([...command, "--offset", "1", "--limit", "1", "--json"]);
+      const normal = await library([...command, "--json"]);
+      expect(normal.stderr).toBe("");
+      expect(Object.keys(JSON.parse(normal.stdout))).toEqual([
+        ...(command[0] === "search" ? ["query"] : []),
+        "total",
+        "offset",
+        "limit",
+        "next_offset",
+        "entries",
+      ]);
+      expect((await library(command)).stdout).not.toContain("skipped_candidates");
+      expect((await library([...command, "--scan-diagnostics"])).stdout).toContain(
+        "skipped_candidates=1 unlisted_children=0",
+      );
+      const result = await library([...command, "--scan-diagnostics", "--offset", "1", "--limit", "1", "--json"]);
       expect(JSON.parse(result.stdout)).toMatchObject({
+        scan_diagnostics: { skipped_candidates: 1, unlisted_children: 0 },
         total: 3,
         offset: 1,
         limit: 1,
@@ -84,7 +99,12 @@ describe("library list", () => {
         entries: [{ transcript_id: middle }],
       });
     }
-    expect(JSON.parse((await library(["search", "text", "--json"])).stdout)).toMatchObject({ total: 0, entries: [] });
+    expect(JSON.parse((await library(["search", "text", "--scan-diagnostics", "--json"])).stdout)).toMatchObject({
+      total: 0,
+      entries: [],
+      next_offset: null,
+      scan_diagnostics: { skipped_candidates: 1, unlisted_children: 0 },
+    });
   });
 
   test("--json lists the newest first, with paging", async () => {
@@ -93,6 +113,10 @@ describe("library list", () => {
       page("bbbbbbbbbbb", "Reunião semanal"),
     ]);
 
+    expect(JSON.parse((await library(["list", "--scan-diagnostics", "--json"])).stdout).scan_diagnostics).toEqual({
+      skipped_candidates: 0,
+      unlisted_children: 0,
+    });
     const all = JSON.parse((await library(["list", "--json"])).stdout);
     const first = JSON.parse((await library(["list", "--limit", "1", "--json"])).stdout);
 
@@ -640,7 +664,13 @@ describe("library command", () => {
     for (const usage of ["library list", "library show <transcript_id>", "library search <query>", "library prune"]) {
       expect(result.stdout).toContain(usage);
     }
-    for (const flag of ["--provider <id>", "--source <kind>", "--since <YYYY-MM-DD>", "--until <YYYY-MM-DD>"]) {
+    for (const flag of [
+      "--scan-diagnostics",
+      "--provider <id>",
+      "--source <kind>",
+      "--since <YYYY-MM-DD>",
+      "--until <YYYY-MM-DD>",
+    ]) {
       expect(result.stdout).toContain(flag);
     }
   });

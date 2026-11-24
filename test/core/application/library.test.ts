@@ -131,7 +131,10 @@ describe("library filters", () => {
       generatedAt: "2026-10-31T10:00:00.000Z",
     }),
   ];
-  const library = () => ({ ...createFileLibraryStore({ libraryDir }), entries: async () => ok(entries) });
+  const library = () => ({
+    ...createFileLibraryStore({ libraryDir }),
+    entries: async () => ok({ entries, scanDiagnostics: { skipped_candidates: 0, unlisted_children: 0 } }),
+  });
   const ids = (result: Awaited<ReturnType<ReturnType<typeof createListTranscripts>>>) =>
     result.success ? result.data.entries.map((found) => found.transcriptId) : result.error.code;
 
