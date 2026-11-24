@@ -2,6 +2,8 @@
 
 ## Decisions
 
+- [Testing the npm-installed command](installed-command.md) — What the three-platform tarball test proves beyond running the checkout.
+
 - [Library metadata scans](library-scans.md) — What the one-read limit changed, its measured tradeoff, and why paging still scans the whole library.
 
 - [Concurrent config mutations](config-mutations.md) — Why serializing the full mutation, not just rename, protects defaults and credentials.
