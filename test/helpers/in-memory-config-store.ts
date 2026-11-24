@@ -17,11 +17,14 @@ export const createInMemoryConfigStore = (
     location: IN_MEMORY_CONFIG_LOCATION,
     writes,
     read: async () => (isError(current) ? err(current) : ok(current)),
-    write: async (config) => {
+    update: async (change) => {
       if (isError(current)) return err(current);
-      writes.push(config);
-      current = config;
-      return ok(undefined);
+      const next = change(current);
+      if (next.success) {
+        writes.push(next.data);
+        current = next.data;
+      }
+      return next;
     },
   };
 };

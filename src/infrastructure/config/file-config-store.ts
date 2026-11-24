@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { chmod, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, rename, rm, rmdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { type ConfigScalar, DEFAULT_CONFIG, type PiTubeConfig, parseConfig } from "../../core/domain/config.ts";
 import { createError } from "../../core/domain/errors.ts";
 import { err, ok, type Result } from "../../core/domain/result.ts";
@@ -95,14 +96,8 @@ const mergeConfig = (raw: RawConfig, config: PiTubeConfig): RawConfig => {
 };
 
 const writeAtomically = async (configFile: string, content: string): Promise<Result<void>> => {
-  const directory = path.dirname(configFile);
   const tempFile = `${configFile}.${process.pid}.${randomUUID()}.tmp`;
   try {
-    const created = await mkdir(directory, { recursive: true, mode: 0o700 });
-    if (created !== undefined) {
-      // Best-effort hardening: only a directory we created is tightened, and some filesystems reject chmod.
-      await chmod(directory, 0o700).catch(() => undefined);
-    }
     await writeFile(tempFile, content, { encoding: "utf8", mode: 0o600, flag: "wx" });
     await rename(tempFile, configFile);
     return ok(undefined);
@@ -120,9 +115,48 @@ export const createFileConfigStore = (configFile: string): ConfigStore => ({
     const loaded = await loadConfig(configFile);
     return loaded.success ? ok(loaded.data.config) : loaded;
   },
-  write: async (config) => {
-    const loaded = await loadConfig(configFile);
-    if (!loaded.success) return loaded;
-    return writeAtomically(configFile, `${JSON.stringify(mergeConfig(loaded.data.raw, config), null, 2)}\n`);
+  update: async (change) => {
+    const directory = path.dirname(configFile);
+    const lock = `${configFile}.lock`;
+    try {
+      const created = await mkdir(directory, { recursive: true, mode: 0o700 });
+      if (created !== undefined) {
+        // Best-effort hardening: only a directory we created is tightened, and some filesystems reject chmod.
+        await chmod(directory, 0o700).catch(() => undefined);
+      }
+      const deadline = performance.now() + 5000;
+      while (true) {
+        try {
+          await mkdir(lock, { mode: 0o700 });
+          break;
+        } catch (error) {
+          if (errnoOf(error) !== "EEXIST") throw error;
+          if (performance.now() >= deadline) {
+            return err(
+              createError(
+                "CONFIG_IO_FAILED",
+                `Config is locked. Retry, or remove ${lock} only after confirming no writer is running.`,
+              ),
+            );
+          }
+          await delay(25);
+        }
+      }
+      try {
+        const loaded = await loadConfig(configFile);
+        if (!loaded.success) return loaded;
+        const next = change(loaded.data.config);
+        if (!next.success) return next;
+        const written = await writeAtomically(
+          configFile,
+          `${JSON.stringify(mergeConfig(loaded.data.raw, next.data), null, 2)}\n`,
+        );
+        return written.success ? next : written;
+      } finally {
+        await rmdir(lock);
+      }
+    } catch (error) {
+      return ioFailed("write", configFile, error);
+    }
   },
 });
