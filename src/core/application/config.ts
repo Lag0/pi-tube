@@ -57,14 +57,13 @@ export const createSetConfigValue =
   async (input, options) => {
     const ready = ensureNotAborted(options?.signal);
     if (!ready.success) return ready;
-    const config = await deps.configStore.read();
-    if (!config.success) return config;
-    const updated = applyConfigValue(config.data, input.key, input.value, deps.providers);
+    const updated = await deps.configStore.update((current) => {
+      const next = applyConfigValue(current, input.key, input.value, deps.providers);
+      if (!next.success) return next;
+      const stillReady = ensureNotAborted(options?.signal);
+      return stillReady.success ? next : stillReady;
+    }, options?.signal);
     if (!updated.success) return updated;
-    const stillReady = ensureNotAborted(options?.signal);
-    if (!stillReady.success) return stillReady;
-    const written = await deps.configStore.write(updated.data);
-    if (!written.success) return written;
 
     const key = input.key.trim();
     return ok({

@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { chmod, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, rename, rm, rmdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { type ConfigScalar, DEFAULT_CONFIG, type PiTubeConfig, parseConfig } from "../../core/domain/config.ts";
 import { createError } from "../../core/domain/errors.ts";
+import { ensureNotAborted } from "../../core/domain/operation.ts";
 import { err, ok, type Result } from "../../core/domain/result.ts";
 import type { ConfigStore } from "../../core/ports/config-store.ts";
 import { errnoOf } from "../errno.ts";
@@ -94,16 +96,21 @@ const mergeConfig = (raw: RawConfig, config: PiTubeConfig): RawConfig => {
   };
 };
 
-const writeAtomically = async (configFile: string, content: string): Promise<Result<void>> => {
-  const directory = path.dirname(configFile);
+const writeAtomically = async (configFile: string, content: string, signal?: AbortSignal): Promise<Result<void>> => {
   const tempFile = `${configFile}.${process.pid}.${randomUUID()}.tmp`;
   try {
-    const created = await mkdir(directory, { recursive: true, mode: 0o700 });
-    if (created !== undefined) {
-      // Best-effort hardening: only a directory we created is tightened, and some filesystems reject chmod.
-      await chmod(directory, 0o700).catch(() => undefined);
-    }
     await writeFile(tempFile, content, { encoding: "utf8", mode: 0o600, flag: "wx" });
+    const ready = ensureNotAborted(signal);
+    if (!ready.success) {
+      try {
+        await rm(tempFile, { force: true });
+      } catch {
+        await rm(tempFile, { force: true }).catch(() => {
+          process.emitWarning(`Could not remove cancelled config write's temporary file. Remove ${tempFile}.`);
+        });
+      }
+      return ready;
+    }
     await rename(tempFile, configFile);
     return ok(undefined);
   } catch (error) {
@@ -120,9 +127,67 @@ export const createFileConfigStore = (configFile: string): ConfigStore => ({
     const loaded = await loadConfig(configFile);
     return loaded.success ? ok(loaded.data.config) : loaded;
   },
-  write: async (config) => {
-    const loaded = await loadConfig(configFile);
-    if (!loaded.success) return loaded;
-    return writeAtomically(configFile, `${JSON.stringify(mergeConfig(loaded.data.raw, config), null, 2)}\n`);
+  update: async (change, signal) => {
+    const directory = path.dirname(configFile);
+    const lock = `${configFile}.lock`;
+    const ready = ensureNotAborted(signal);
+    if (!ready.success) return ready;
+    try {
+      const created = await mkdir(directory, { recursive: true, mode: 0o700 });
+      if (created !== undefined) {
+        // Best-effort hardening: only a directory we created is tightened, and some filesystems reject chmod.
+        await chmod(directory, 0o700).catch(() => undefined);
+      }
+      const deadline = performance.now() + 5000;
+      while (true) {
+        const ready = ensureNotAborted(signal);
+        if (!ready.success) return ready;
+        try {
+          await mkdir(lock, { mode: 0o700 });
+          break;
+        } catch (error) {
+          const ready = ensureNotAborted(signal);
+          if (!ready.success) return ready;
+          const code = errnoOf(error);
+          if (code === "EACCES" || code === "EPERM" || code === "EROFS") {
+            // Diagnose an invalid readable file, but never mutate from an unlocked snapshot.
+            const existing = await loadConfig(configFile);
+            if (!existing.success) return existing;
+          }
+          if (code !== "EEXIST") throw error;
+          if (performance.now() >= deadline) {
+            return err(
+              createError(
+                "CONFIG_IO_FAILED",
+                `Config is locked. Retry, or remove ${lock} only after confirming no writer is running.`,
+              ),
+            );
+          }
+          await delay(25);
+        }
+      }
+      try {
+        const loaded = await loadConfig(configFile);
+        if (!loaded.success) return loaded;
+        const ready = ensureNotAborted(signal);
+        if (!ready.success) return ready;
+        const next = change(loaded.data.config);
+        if (!next.success) return next;
+        const written = await writeAtomically(
+          configFile,
+          `${JSON.stringify(mergeConfig(loaded.data.raw, next.data), null, 2)}\n`,
+          signal,
+        );
+        return written.success ? next : written;
+      } finally {
+        await rmdir(lock).catch(() => {
+          process.emitWarning(
+            `Could not release config lock. Remove ${lock} only after confirming no writer is running.`,
+          );
+        });
+      }
+    } catch (error) {
+      return ioFailed("write", configFile, error);
+    }
   },
 });

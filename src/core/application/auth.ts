@@ -46,18 +46,12 @@ const updateProvider = async (
   if (!ready.success) return ready;
   const descriptor = findProvider(deps.providers, providerInput);
   if (!descriptor.success) return descriptor;
-  const current = await deps.configStore.read();
-  if (!current.success) return current;
-
-  const config: PiTubeConfig = {
-    ...current.data,
-    providers: { ...current.data.providers, [descriptor.data.id]: entry },
-  };
-  const stillReady = ensureNotAborted(options?.signal);
-  if (!stillReady.success) return stillReady;
-  const written = await deps.configStore.write(config);
-  if (!written.success) return written;
-  return ok({ descriptor: descriptor.data, config });
+  const updated = await deps.configStore.update((current) => {
+    const stillReady = ensureNotAborted(options?.signal);
+    if (!stillReady.success) return stillReady;
+    return ok({ ...current, providers: { ...current.providers, [descriptor.data.id]: entry } });
+  }, options?.signal);
+  return updated.success ? ok({ descriptor: descriptor.data, config: updated.data }) : updated;
 };
 
 /** Stores a provider API key in the config and clears its `api_key_env`. */
