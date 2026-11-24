@@ -15,6 +15,7 @@ export interface ImportV2Input {
 
 /** Dependencies of `importV2Transcripts`. */
 export interface ImportV2Deps {
+  readonly withActivity?: (run: () => Promise<Result<ImportSummary>>) => Promise<Result<ImportSummary>>;
   readonly legacy: LegacyTranscripts;
   readonly library: LibraryStore;
 }
@@ -71,20 +72,23 @@ export const createImportV2Transcripts =
     const found = files.data.files.length + files.data.unreadable.length;
     // Nothing to import writes nothing: no library dir and no marker, so the check stays one directory read.
     if (found === 0) return ok({ ranBefore: false, found: 0, imported: 0, already: 0, skipped: [] });
-    const writable = await deps.library.prepare();
-    if (!writable.success) return writable;
-    let imported = 0;
-    let already = 0;
-    const skipped: Array<{ readonly file: string; readonly reason: string }> = files.data.unreadable.map(
-      ({ path, reason }) => ({ file: path, reason }),
-    );
-    for (const file of files.data.files) {
-      const outcome = await importOne(deps.library, file);
-      if (outcome === "imported") imported += 1;
-      else if (outcome === "already") already += 1;
-      else skipped.push({ file: file.path, reason: outcome.reason });
-    }
-    const summary: ImportSummary = { ranBefore: false, found, imported, already, skipped };
-    const marked: Result<void> = await deps.legacy.markImported(summary);
-    return marked.success ? ok(summary) : marked;
+    const importFiles = async (): Promise<Result<ImportSummary>> => {
+      const writable = await deps.library.prepare();
+      if (!writable.success) return writable;
+      let imported = 0;
+      let already = 0;
+      const skipped: Array<{ readonly file: string; readonly reason: string }> = files.data.unreadable.map(
+        ({ path, reason }) => ({ file: path, reason }),
+      );
+      for (const file of files.data.files) {
+        const outcome = await importOne(deps.library, file);
+        if (outcome === "imported") imported += 1;
+        else if (outcome === "already") already += 1;
+        else skipped.push({ file: file.path, reason: outcome.reason });
+      }
+      const summary: ImportSummary = { ranBefore: false, found, imported, already, skipped };
+      const marked: Result<void> = await deps.legacy.markImported(summary);
+      return marked.success ? ok(summary) : marked;
+    };
+    return deps.withActivity ? deps.withActivity(importFiles) : importFiles();
   };

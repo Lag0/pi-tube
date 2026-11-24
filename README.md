@@ -134,6 +134,12 @@ Prefer `auth` and `defaults` for human workflows.
 - Temporary media downloads for YouTube/Instagram transcription use `~/.pi-tube/tmp` and are deleted after each run.
 - `setup skills` installs the repository skill bundle (`skills/pi-tube`) into supported agent tooling.
 
+## Preview transcript cleanup (source checkout)
+
+Run `pi-tube library prune --include-transcripts --older-than 30 --json` to preview; add `--yes` to recheck and apply. `transcript_files`, `source_dirs` and `bytes` count planned or actual removals; `preserved` counts skipped items (an uninspected directory can count as one), and `failed` signals incomplete cleanup. `busy: true` means another library operation prevented the scan; no removal is planned or performed. Linked paths, personal files, edited artifacts and the library root are preserved. Legacy files without an independent identity receipt stay in place, even if their bytes match a regenerated transcript; new saves in the same folder remain eligible. No migration is required.
+
+On a local Windows volume supporting POSIX-style deletion (such as modern NTFS), cleanup pins plain directories and verifies and deletes each file while holding the same Windows handle. Reads coordinate without writing marker files; the OS releases handles on process exit. On other volumes, Linux and macOS, preview and apply return `unsupported: true` with zero removals: there is no enabled identity-bound deletion backend. Audio-only pruning and automatic audio retention are separate operations.
+
 ## Release Hardening
 
 Before tagging a release, run the mandatory checks in [docs/release-checklist.md](docs/release-checklist.md).

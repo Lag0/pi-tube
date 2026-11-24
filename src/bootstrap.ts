@@ -58,6 +58,7 @@ import {
 import { createFileAuditLog } from "./infrastructure/audit/file-audit-log.ts";
 import { createFileConfigStore } from "./infrastructure/config/file-config-store.ts";
 import { createFileLibraryStore } from "./infrastructure/library/file-library-store.ts";
+import { withLibraryActivity } from "./infrastructure/library/library-activity.ts";
 import { createV2Transcripts } from "./infrastructure/library/v2-transcripts.ts";
 import type { LookupHost } from "./infrastructure/media/host-guard.ts";
 import { createMediaFetcher } from "./infrastructure/media/media-fetcher.ts";
@@ -140,6 +141,21 @@ export const createApp = (environment: AppEnvironment, overrides: AppOverrides =
   const accountDeps = { configStore, env, providers: PROVIDER_DESCRIPTORS };
   const configDeps = { configStore, providers: PROVIDER_DESCRIPTORS };
 
+  const usingLibrary =
+    <I, O>(useCase: UseCase<I, O>): UseCase<I, O> =>
+    (input, options) =>
+      withLibraryActivity(paths.libraryDir, () => useCase(input, options));
+  const prune = createPruneLibrary({
+    library: {
+      ...library,
+      prune: (input) =>
+        !input.includeTranscripts && !input.dryRun
+          ? withLibraryActivity(paths.libraryDir, () => library.prune(input))
+          : library.prune(input),
+    },
+    configStore,
+    audit,
+  });
   return {
     providers: PROVIDER_DESCRIPTORS,
     listProviders: createListProviders(accountDeps),
@@ -149,6 +165,7 @@ export const createApp = (environment: AppEnvironment, overrides: AppOverrides =
     setConfigValue: createSetConfigValue(configDeps),
     listConfigValues: createListConfigValues(configDeps),
     transcribe: createTranscribe({
+      withActivity: (work) => withLibraryActivity(paths.libraryDir, work, true),
       configStore,
       env,
       providers: PROVIDER_DESCRIPTORS,
@@ -160,17 +177,23 @@ export const createApp = (environment: AppEnvironment, overrides: AppOverrides =
     }),
     downloadMedia: createDownloadMedia({ configStore, env, media, defaultOutputDir: paths.downloadsDir, audit }),
     getMediaInfo: createGetMediaInfo({ configStore, env, media, audit }),
-    listTranscripts: createListTranscripts({ library }),
-    searchTranscripts: createSearchTranscripts({ library }),
-    getTranscript: createGetTranscript({ library }),
-    readTranscript: createReadTranscript({ library, configStore }),
-    pruneLibrary: createPruneLibrary({ library, configStore, audit }),
+    listTranscripts: usingLibrary(createListTranscripts({ library })),
+    searchTranscripts: usingLibrary(createSearchTranscripts({ library })),
+    getTranscript: usingLibrary(createGetTranscript({ library })),
+    readTranscript: usingLibrary(createReadTranscript({ library, configStore })),
+    pruneLibrary: prune,
     queryAudit: createQueryAudit({ audit: auditLog }),
     auditStats: createAuditStats({ audit: auditLog }),
     importV2Transcripts: createImportV2Transcripts({
+      withActivity: (work) => withLibraryActivity(paths.libraryDir, work, true),
       legacy: createV2Transcripts({ dirs: paths.legacyDirs, libraryDir: paths.libraryDir }),
       library,
     }),
-    runDoctor: createRunDoctor({ ...accountDeps, media, library, versions }),
+    runDoctor: createRunDoctor({
+      ...accountDeps,
+      media,
+      library: { ...library, entries: () => withLibraryActivity(paths.libraryDir, () => library.entries()) },
+      versions,
+    }),
   };
 };

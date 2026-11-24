@@ -229,8 +229,11 @@ function createProgram(setAction: (action: CliAction) => void): Command {
     .option("--source <kind>", "list, search: youtube, instagram, site, direct_url or local_file.")
     .option("--since <YYYY-MM-DD>", "list, search: only transcripts made on or after this UTC day.")
     .option("--until <YYYY-MM-DD>", "list, search: only transcripts made on or before this UTC day.")
-    .option("--older-than <days>", "prune: only audio, or sources, older than this many days.")
-    .option("--include-transcripts", "prune: delete whole sources, transcripts included (needs --older-than).")
+    .option(
+      "--older-than <days>",
+      "prune: only audio files or verified transcript artifacts older than this many days.",
+    )
+    .option("--include-transcripts", "prune: remove verified unchanged transcript artifacts (needs --older-than).")
     .option("--yes", "prune: delete; without it, prune only reports.")
     .option("--json", "Print the result as JSON on stdout.")
     .action((action: string | undefined, args: string[], options: LibraryOptions) => {
@@ -414,7 +417,7 @@ export const runCli = async (argv: readonly string[], deps: CliDeps): Promise<nu
           color: action.rootOptions.color !== false,
         });
       case "library":
-        if (action.action !== "import") await importV2Once(deps);
+        if (action.action !== "import" && action.action !== "prune") await importV2Once(deps);
         return await runLibrary(deps, {
           action: action.action,
           args: action.args,

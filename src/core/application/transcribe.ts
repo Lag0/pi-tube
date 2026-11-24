@@ -9,7 +9,7 @@ import {
   resolveCredential,
   selectProvider,
 } from "../domain/providers.ts";
-import { err, ok } from "../domain/result.ts";
+import { err, ok, type Result } from "../domain/result.ts";
 import { isSiteSource, type ResolvedSource } from "../domain/source.ts";
 import { ensureFinishedMedia } from "../domain/source-policy.ts";
 import { resolveSourceSettings } from "../domain/source-settings.ts";
@@ -60,6 +60,7 @@ export interface TranscribeOutput {
 
 /** Dependencies of `transcribe`. */
 export interface TranscribeDeps {
+  readonly withActivity?: (work: () => Promise<Result<TranscribeOutput>>) => Promise<Result<TranscribeOutput>>;
   readonly configStore: ConfigStore;
   readonly env: EnvironmentVariables;
   readonly providers: readonly ProviderDescriptor[];
@@ -286,7 +287,8 @@ const runTranscribe =
 export const createTranscribe =
   (deps: TranscribeDeps): UseCase<TranscribeInput, TranscribeOutput> =>
   async (input, options) => {
-    return audited(deps.audit, "transcribe", input.input, options, (trail) =>
-      runTranscribe(deps, trail)(input, options),
-    );
+    return audited(deps.audit, "transcribe", input.input, options, (trail) => {
+      const work = () => runTranscribe(deps, trail)(input, options);
+      return deps.withActivity ? deps.withActivity(work) : work();
+    });
   };

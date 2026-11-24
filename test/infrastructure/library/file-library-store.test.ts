@@ -5,6 +5,7 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   renameSync,
   rmSync,
   statSync,
@@ -30,7 +31,7 @@ let root: string;
 let libraryDir: string;
 
 beforeEach(() => {
-  root = mkdtempSync(path.join(os.tmpdir(), "pi-tube-library-"));
+  root = realpathSync(mkdtempSync(path.join(os.tmpdir(), "pi-tube-library-")));
   libraryDir = path.join(root, "library");
 });
 
@@ -586,7 +587,7 @@ describe("audio", () => {
     expect(audioLeft().map((entry) => entry.split("/")[0]?.startsWith("youtube-bbbbbbbbbbb"))).toEqual([true]);
   });
 
-  test("prune --include-transcripts removes whole directories older than the cutoff only", async () => {
+  test("prune --include-transcripts removes an owned directory once its old artifacts are gone", async () => {
     const store = createFileLibraryStore({ libraryDir });
     const old = await seedSource(store, "aaaaaaaaaaa");
     await seedSource(store, "bbbbbbbbbbb");
@@ -594,9 +595,9 @@ describe("audio", () => {
 
     const pruned = await store.prune({ olderThanDays: 30, includeTranscripts: true, dryRun: false });
 
-    expect(pruned.success ? pruned.data.sourceDirs : undefined).toBe(1);
-    expect(existsSync(old.dir)).toBe(false);
-    expect(transcriptsLeft()).toBe(1);
+    expect(pruned.success ? pruned.data.sourceDirs : undefined).toBe(isWindows ? 1 : 0);
+    expect(existsSync(old.dir)).toBe(!isWindows);
+    expect(transcriptsLeft()).toBe(isWindows ? 1 : 2);
   });
 
   test("prune applies max_audio_bytes: the oldest audio goes until the rest fits", async () => {
