@@ -289,8 +289,10 @@ const runTranscribe =
         return err(
           createError(
             "STORAGE_IO_FAILED",
-            "Concurrent transcription ended without a saved transcript. No retry was dispatched.",
-            { hint: "Check the library and provider usage before starting another transcription." },
+            "No saved transcript was available after waiting. No retry was dispatched.",
+            {
+              hint: "The producer may still be running. Check the library and provider usage before starting another transcription.",
+            },
           ),
         );
       return produce();

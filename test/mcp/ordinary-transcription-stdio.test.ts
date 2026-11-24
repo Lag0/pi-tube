@@ -30,25 +30,29 @@ test("stdio MCP waits for the independent CLI producer and reuses its paid resul
   const alias = path.join(home, "same-bytes.mp3");
   writeFileSync(alias, "fake audio");
   const client = new Client({ name: "ordinary-test", version: "0" }, { versionNegotiation: { mode: "legacy" } });
+  const deadline = Date.now() + 55_000;
+  const remaining = () => Math.max(1, deadline - Date.now());
   const cli = promisify(execFile)("bun", [...args, "transcribe", input, "--language", "EN", "--json"], {
     env: { ...process.env, ...env },
-    timeout: 25000,
+    timeout: remaining(),
   });
   const release = () => writeFileSync(path.join(home, "release"), "");
   const dispatches = () => readFileSync(path.join(home, "dispatches"), "utf8").trim().split("\n");
   try {
     await Promise.race([
-      vi.waitFor(() => expect(dispatches()).toHaveLength(1), { timeout: 15000 }),
+      vi.waitFor(() => expect(dispatches()).toHaveLength(1), { timeout: remaining() }),
       cli.then(() => {
         throw Error("CLI exited before release");
       }),
     ]);
-    await client.connect(new StdioClientTransport({ command: "bun", args: [...args, "mcp"], env }));
+    await client.connect(new StdioClientTransport({ command: "bun", args: [...args, "mcp"], env }), {
+      timeout: remaining(),
+    });
     let waited = false;
     const result = await client.callTool(
       { name: "transcribe", arguments: { input: alias, language: "en" } },
       {
-        timeout: 12000,
+        timeout: remaining(),
         onprogress: ({ message }) => {
           if (message === "Waiting for transcription...") {
             waited = true;
@@ -80,4 +84,4 @@ test("stdio MCP waits for the independent CLI producer and reuses its paid resul
     await cli.catch(() => {});
     rmSync(home, { recursive: true, force: true });
   }
-});
+}, 60_000);

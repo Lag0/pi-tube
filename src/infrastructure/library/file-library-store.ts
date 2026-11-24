@@ -376,8 +376,15 @@ export const createFileLibraryStore = (deps: {
       }
     },
 
-    withTranscriptionClaim: (key, options, admitted) =>
-      withTranscriptionClaim(deps.libraryDir, transcriptIdOf(key), options, admitted),
+    withTranscriptionClaim: (key, options, admitted) => {
+      const id = transcriptIdOf(key);
+      return withTranscriptionClaim(
+        path.join(deps.libraryDir, `.transcribing-${id}`),
+        path.join(dirOf(key.sourceKey), `${id}.json`),
+        options,
+        admitted,
+      );
+    },
 
     find: async (key) => {
       const dir = dirOf(key.sourceKey);
