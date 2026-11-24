@@ -63,6 +63,11 @@ export interface LibraryLookupOptions extends OperationOptions {
   readonly onCacheHit?: () => void;
 }
 
+export interface ScanDiagnostics {
+  readonly skipped_candidates: number;
+  readonly unlisted_children: number;
+}
+
 /** The local transcript library. Its files are the source of truth; nothing is kept elsewhere. */
 export interface LibraryStore {
   /** Checks that the library can be written, before any paid work starts. */
@@ -91,8 +96,8 @@ export interface LibraryStore {
     readonly fresh?: boolean;
   }): Promise<Result<StoredTranscript>>;
   get(transcriptId: string): Promise<Result<StoredTranscript | undefined>>;
-  /** Every transcript, newest first; list and search paginate it in the core. */
-  entries(): Promise<Result<readonly LibraryEntry[]>>;
+  /** Valid transcripts, newest first, and omissions observed in the same scan. */
+  entries(): Promise<Result<{ readonly entries: readonly LibraryEntry[]; readonly scanDiagnostics: ScanDiagnostics }>>;
   /** The page source saved for `sourceKey`, and its kept audio; undefined for an unknown key or a non-page source. */
   storedSource(sourceKey: SourceKey): Promise<Result<StoredSource | undefined>>;
   /**

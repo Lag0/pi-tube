@@ -80,7 +80,7 @@ const setup = (
 const entriesOf = async (library: ReturnType<typeof createFileLibraryStore>) => {
   const entries = await library.entries();
   if (!entries.success) throw new Error(entries.error.message);
-  return entries.data;
+  return entries.data.entries;
 };
 
 describe("importV2Transcripts", () => {

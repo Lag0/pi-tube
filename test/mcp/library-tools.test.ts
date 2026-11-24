@@ -102,6 +102,61 @@ describe("list_transcripts", () => {
     ]);
   });
 
+  test("scan diagnostics are opt-in and only follow the matching continuation", async () => {
+    const { harness: mcp } = await seeded();
+    for (const [tool, args] of [
+      ["list_transcripts", {}],
+      ["search_transcripts", { query: "Aula" }],
+    ] as const) {
+      const base = { ...args, provider: "groq", limit: 1 };
+      const normal = (await mcp.call(tool, base)).json;
+      expect(Object.keys(normal as ListJson).sort()).toEqual(
+        [
+          ...(tool === "search_transcripts" ? ["query"] : []),
+          "total",
+          "offset",
+          "limit",
+          "next_offset",
+          "transcripts",
+          "next_actions",
+        ].sort(),
+      );
+      expect((normal as ListJson).next_actions[1]?.arguments).toEqual({ ...base, offset: 1 });
+      expect((await mcp.call(tool, { ...base, scan_diagnostics: false })).json).toEqual(normal);
+      const page = (await mcp.call(tool, { ...base, scan_diagnostics: true })).json as ListJson;
+      expect(page).toMatchObject({ scan_diagnostics: { skipped_candidates: 0, unlisted_children: 0 }, next_offset: 1 });
+      expect(page.next_actions[0]?.arguments).not.toHaveProperty("scan_diagnostics");
+      expect(page.next_actions[1]?.arguments).toEqual({ ...base, offset: 1, scan_diagnostics: true });
+    }
+  });
+
+  test("an omitted candidate is counted on a middle page and a zero-match search", async () => {
+    const { harness: mcp, ids } = await seeded();
+    const child = path.join(mcp.home, ".pi-tube", "library", "synthetic");
+    mkdirSync(child);
+    writeFileSync(path.join(child, "invalid.json"), "{");
+    const diagnostics = { skipped_candidates: 1, unlisted_children: 0 };
+    const middle = await mcp.call("list_transcripts", { offset: 1, limit: 1, scan_diagnostics: true });
+    expect(middle.json).toMatchObject({
+      total: 3,
+      next_offset: 2,
+      transcripts: [{ transcript_id: ids[1] }],
+      scan_diagnostics: diagnostics,
+    });
+    const empty = await mcp.call("search_transcripts", {
+      query: "hello",
+      response_format: "detailed",
+      scan_diagnostics: true,
+    });
+    expect(empty.json).toMatchObject({
+      total: 0,
+      next_offset: null,
+      transcripts: [],
+      next_actions: [],
+      scan_diagnostics: diagnostics,
+    });
+  });
+
   test("detailed entries add the source and transcription facts", async () => {
     const { harness: mcp } = await seeded();
 

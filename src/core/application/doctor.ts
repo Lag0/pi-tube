@@ -136,7 +136,7 @@ const libraryCheck = async (deps: DoctorDeps, config: PiTubeConfig): Promise<Doc
   const limit = maxAudioBytes === undefined ? "no limit" : `limit ${maxAudioBytes}`;
   return pass(
     "library",
-    `${entries.data.length} transcripts; ${audio.data.audioFiles} kept audio files, ${audio.data.bytes} bytes (${limit}).`,
+    `${entries.data.entries.length} transcripts; ${audio.data.audioFiles} kept audio files, ${audio.data.bytes} bytes (${limit}).`,
   );
 };
 

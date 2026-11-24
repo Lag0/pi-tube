@@ -5,7 +5,13 @@ import { err, ok, type Result } from "../domain/result.ts";
 import { SOURCE_KINDS } from "../domain/source.ts";
 import { pageTranscript, type TranscriptPage, type TranscriptReadRequest } from "../domain/transcript/read.ts";
 import type { ConfigStore } from "../ports/config-store.ts";
-import type { LibraryEntry, LibraryStore, PruneReport, StoredTranscript } from "../ports/library-store.ts";
+import type {
+  LibraryEntry,
+  LibraryStore,
+  PruneReport,
+  ScanDiagnostics,
+  StoredTranscript,
+} from "../ports/library-store.ts";
 import { checkDayRange } from "./audit.ts";
 import { type AuditTrailDeps, audited } from "./audit-trail.ts";
 import { ensureNotAborted, type UseCase } from "./operation.ts";
@@ -15,6 +21,7 @@ export const MAX_PAGE_LIMIT = 500;
 
 /** One page of library entries. */
 export interface LibraryPage {
+  readonly scanDiagnostics?: ScanDiagnostics;
   readonly total: number;
   readonly offset: number;
   readonly limit: number;
@@ -51,6 +58,7 @@ const pageOf = (entries: readonly LibraryEntry[], { limit, offset }: PageRequest
 
 /** What `library list` asks for: a page, filtered; `kind` arrives as text from the adapters. */
 export interface ListTranscriptsInput extends Omit<LibraryFilter, "kind"> {
+  readonly scanDiagnostics?: boolean;
   readonly kind?: string;
   readonly limit: number;
   readonly offset: number;
@@ -98,12 +106,13 @@ const listFiltered = async (
   if (!filter.success) return filter;
   const entries = await deps.library.entries();
   if (!entries.success) return entries;
-  return ok(
-    pageOf(
-      entries.data.filter((entry) => keep(entry) && matchesLibraryFilter(entry, filter.data)),
+  return ok({
+    ...(input.scanDiagnostics ? { scanDiagnostics: entries.data.scanDiagnostics } : {}),
+    ...pageOf(
+      entries.data.entries.filter((entry) => keep(entry) && matchesLibraryFilter(entry, filter.data)),
       input,
     ),
-  );
+  });
 };
 
 /** Lists the library, newest first, optionally by provider, source kind and day range. */

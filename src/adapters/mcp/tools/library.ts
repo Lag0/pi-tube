@@ -49,6 +49,9 @@ export const ListTranscriptsOutput = z.strictObject({
   offset: z.number(),
   limit: z.number(),
   next_offset: z.number().nullable(),
+  scan_diagnostics: z
+    .strictObject({ skipped_candidates: z.int().nonnegative(), unlisted_children: z.int().nonnegative() })
+    .optional(),
   transcripts: z.array(EntryOutput),
   next_actions: z.array(NextActionOutput),
 });
@@ -95,6 +98,12 @@ export const artifactChaptersJson = (
 const READ_REASON = "Check characters and estimated_tokens, then read with offset/limit pages or full: true.";
 
 const listInput = {
+  scan_diagnostics: z
+    .boolean()
+    .optional()
+    .describe(
+      "Report observed skipped candidates and unlisted children across the whole scan, before filtering and paging.",
+    ),
   limit: z.number().int().min(1).max(100).default(20),
   offset: z.number().int().min(0).default(0),
   provider: z.string().min(1).optional(),
@@ -131,6 +140,7 @@ const entryJson = (entry: LibraryEntry, detailed: boolean): z.infer<typeof Entry
 /** The arguments the agent set, so the next page repeats them. */
 const listArguments = (args: ListArgs): Record<string, unknown> => ({
   limit: args.limit,
+  ...(args.scan_diagnostics ? { scan_diagnostics: true } : {}),
   ...(args.provider === undefined ? {} : { provider: args.provider }),
   ...(args.source_kind === undefined ? {} : { source_kind: args.source_kind }),
   ...(args.since === undefined ? {} : { since: args.since }),
@@ -165,6 +175,7 @@ const pageJson = (
     offset: page.offset,
     limit: page.limit,
     next_offset: nextOffset,
+    ...(page.scanDiagnostics ? { scan_diagnostics: page.scanDiagnostics } : {}),
     transcripts: page.entries.map((entry) => entryJson(entry, args.response_format === "detailed")),
     next_actions: nextActions,
   };
@@ -173,6 +184,7 @@ const pageJson = (
 const filterOf = (args: ListArgs) => ({
   limit: args.limit,
   offset: args.offset,
+  ...(args.scan_diagnostics ? { scanDiagnostics: true } : {}),
   ...(args.provider === undefined ? {} : { provider: args.provider }),
   ...(args.source_kind === undefined ? {} : { kind: args.source_kind }),
   ...(args.since === undefined ? {} : { since: args.since }),

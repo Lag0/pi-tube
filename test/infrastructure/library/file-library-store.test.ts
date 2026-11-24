@@ -14,7 +14,7 @@ import {
   utimesSync,
   writeFileSync,
 } from "node:fs";
-import { open } from "node:fs/promises";
+import { open, readdir } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
@@ -35,7 +35,7 @@ import * as safeFiles from "../../../src/infrastructure/library/transcript-clean
 
 vi.mock("node:fs/promises", async (importOriginal) => {
   const fs = await importOriginal<typeof import("node:fs/promises")>();
-  return { ...fs, open: vi.fn(fs.open) };
+  return { ...fs, readdir: vi.fn(fs.readdir), open: vi.fn(fs.open) };
 });
 
 const isWindows = process.platform === "win32";
@@ -49,6 +49,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.mocked(readdir).mockReset();
   rmSync(root, { recursive: true, force: true });
 });
 
@@ -489,7 +490,10 @@ describe("save and find", () => {
     });
     const saved = await store.save({ key: keyOf(), source: youtube(), artifact: artifactOf(youtube()) });
     if (!saved.success) throw Error("fallback save failed");
-    expect(await store.entries()).toMatchObject({ success: true, data: [{ transcriptId: saved.data.transcriptId }] });
+    expect(await store.entries()).toMatchObject({
+      success: true,
+      data: { entries: [{ transcriptId: saved.data.transcriptId }] },
+    });
     for (const file of Object.values(saved.data.paths)) utimesSync(file, 0, 0);
     expect(await store.prune({ olderThanDays: 1, includeTranscripts: true, dryRun: false })).toMatchObject({
       success: true,
@@ -752,7 +756,7 @@ describe("get and entries", () => {
     const entries = await store.entries();
 
     expect(found.success ? found.data?.transcriptId : undefined).toBe(saved.data.transcriptId);
-    expect(entries.success ? entries.data.length : 0).toBe(1);
+    expect(entries.success ? entries.data.entries.length : 0).toBe(1);
   });
 
   test("get finds a transcript by id, and an unknown id is undefined", async () => {
@@ -791,18 +795,18 @@ describe("get and entries", () => {
 
     const entries = await store.entries();
 
-    expect(entries.success ? entries.data.map((entry) => entry.sourceKey) : undefined).toEqual([
+    expect(entries.success ? entries.data.entries.map((entry) => entry.sourceKey) : undefined).toEqual([
       "file:abc",
       "youtube:jNQXAC9IVRw",
     ]);
-    expect(entries.success ? entries.data[0] : undefined).toMatchObject({
+    expect(entries.success ? entries.data.entries[0] : undefined).toMatchObject({
       kind: "local_file",
       sourceName: "entrevista.mp3",
       provider: "groq",
       model: "whisper-large-v3",
       characters: 5,
     });
-    expect(entries.success ? entries.data[1] : undefined).toMatchObject({
+    expect(entries.success ? entries.data.entries[1] : undefined).toMatchObject({
       title: "Me at the zoo",
       platform: "Youtube",
     });
@@ -811,19 +815,49 @@ describe("get and entries", () => {
   test("a library that does not exist yet has no entries", async () => {
     const entries = await createFileLibraryStore({ libraryDir }).entries();
 
-    expect(entries).toEqual({ success: true, data: [] });
+    expect(entries).toEqual({
+      success: true,
+      data: { entries: [], scanDiagnostics: { skipped_candidates: 0, unlisted_children: 0 } },
+    });
+    vi.mocked(readdir).mockRejectedValueOnce(Object.assign(Error(), { code: "EACCES" }));
+    expect(await createFileLibraryStore({ libraryDir }).entries()).toMatchObject({ success: false });
   });
 
   test("entries reads one candidate at a time across source directories without repairing", async () => {
-    const candidates = ["a/1.json", "a/2.json", "b/3.json", "b/corrupt.json"].map((file) =>
-      path.join(libraryDir, file),
-    );
+    const candidates = [
+      "a/1.json",
+      "a/2.json",
+      "b/3.json",
+      "b/corrupt.json",
+      "b/absent.json",
+      "b/denied.json",
+      "b/uncertain.json",
+    ].map((file) => path.join(libraryDir, file));
     const json = renderJson(artifactOf(youtube()));
     for (const file of candidates) {
       mkdirSync(path.dirname(file), { recursive: true });
       writeFileSync(file, file.endsWith("corrupt.json") ? "{" : json);
     }
     writeFileSync(path.join(libraryDir, "a/source.json"), "{}");
+    writeFileSync(path.join(libraryDir, "ordinary"), "");
+    writeFileSync(path.join(libraryDir, "a/sidecar.publication"), "");
+    mkdirSync(path.join(libraryDir, "denied"));
+    mkdirSync(path.join(libraryDir, "vanished"));
+    const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+    const listNames: (dir: string) => Promise<string[]> = readdir;
+    vi.mocked(listNames).mockImplementation(async (dir) => {
+      const name = path.basename(String(dir));
+      if (name === "denied" || name === "vanished")
+        throw Object.assign(Error(), { code: name === "denied" ? "EACCES" : "ENOENT" });
+      if (name === "ordinary") throw Object.assign(Error(), { code: "ENOENT" });
+      return actual.readdir(dir);
+    });
+    let attempts = 0;
+    const safeRead = safeFiles.readUnlinkedFile;
+    vi.spyOn(safeFiles, "readUnlinkedFile").mockImplementation(async (file) => {
+      if (file.endsWith("1.json") && ++attempts === 1) throw Error("transient");
+      return safeRead(file);
+    });
     const visited: string[] = [];
     let active = 0;
     let peak = 0;
@@ -832,6 +866,9 @@ describe("get and entries", () => {
       visited.push(file);
       peak = Math.max(peak, ++active);
       try {
+        if (file.endsWith("absent.json")) return undefined;
+        if (file.endsWith("denied.json")) throw Object.assign(Error(), { code: "EACCES" });
+        if (file.endsWith("uncertain.json")) throw Error("Publication has not settled");
         return await read(file, deadline, decode);
       } finally {
         active--;
@@ -840,11 +877,32 @@ describe("get and entries", () => {
 
     const entries = await createFileLibraryStore({ libraryDir }).entries();
 
+    expect(entries).toMatchObject({ data: { scanDiagnostics: { skipped_candidates: 4, unlisted_children: 2 } } });
+    expect(attempts).toBe(2);
+    expect(
+      vi
+        .mocked(readdir)
+        .mock.calls.map(([dir]) => String(dir))
+        .sort(),
+    ).toEqual(
+      [libraryDir, ...["a", "b", "ordinary", "denied", "vanished"].map((name) => path.join(libraryDir, name))].sort(),
+    );
     expect(visited.sort()).toEqual(candidates.sort());
     expect(peak).toBe(1);
-    expect(entries.success && entries.data.map((entry) => entry.transcriptId).sort()).toEqual(["1", "2", "3"]);
-    expect(readdirSync(path.join(libraryDir, "a")).sort()).toEqual(["1.json", "2.json", "source.json"]);
-    expect(readdirSync(path.join(libraryDir, "b")).sort()).toEqual(["3.json", "corrupt.json"]);
+    expect(entries.success && entries.data.entries.map((entry) => entry.transcriptId).sort()).toEqual(["1", "2", "3"]);
+    expect(readdirSync(path.join(libraryDir, "a")).sort()).toEqual([
+      "1.json",
+      "2.json",
+      "sidecar.publication",
+      "source.json",
+    ]);
+    expect(readdirSync(path.join(libraryDir, "b")).sort()).toEqual([
+      "3.json",
+      "absent.json",
+      "corrupt.json",
+      "denied.json",
+      "uncertain.json",
+    ]);
   });
 });
 
