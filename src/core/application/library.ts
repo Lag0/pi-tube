@@ -193,14 +193,14 @@ const runPrune =
 
 /**
  * Removes kept audio (all of it, or older than `olderThanDays`, plus what `library.max_audio_bytes` does not fit)
- * or, with `includeTranscripts`, verified transcript artifacts older than `olderThanDays`. Transcript previews write nothing.
+ * or, with `includeTranscripts`, verified transcript artifacts older than `olderThanDays`. Prune previews write nothing.
  */
 export const createPruneLibrary =
   (
     deps: LibraryDeps & { readonly configStore: ConfigStore; readonly audit: AuditTrailDeps },
   ): UseCase<PruneInput, PruneReport> =>
   async (input, options) => {
-    if (input.includeTranscripts && input.dryRun) return runPrune(deps)(input, options);
+    if (input.dryRun) return runPrune(deps)(input, options);
     const auditInput = [
       `older_than_days=${input.olderThanDays ?? "none"}`,
       `include_transcripts=${input.includeTranscripts}`,
