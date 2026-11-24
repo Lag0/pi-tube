@@ -1,6 +1,6 @@
 import { createError, type PiTubeError } from "../../core/domain/errors.ts";
 import { err, ok, type Result } from "../../core/domain/result.ts";
-import type { Chapter, LiveStatus, MediaMetadata } from "../../core/domain/source.ts";
+import { type Chapter, isLiveStatus, type LiveStatus, type MediaMetadata } from "../../core/domain/source.ts";
 import { scrubUrlCredentials, withoutCredentials } from "../../core/domain/source-policy.ts";
 import type { ProcessResult } from "../process/run-process.ts";
 import { cookiesOriginName } from "./cookies.ts";
@@ -190,10 +190,6 @@ function extractDescriptionLinks(description: string | undefined): string[] | un
 
   return links.length > 0 ? links : undefined;
 }
-
-const LIVE_STATUSES: ReadonlySet<string> = new Set(["not_live", "is_live", "is_upcoming", "was_live", "post_live"]);
-
-const isLiveStatus = (value: unknown): value is LiveStatus => typeof value === "string" && LIVE_STATUSES.has(value);
 
 const parseLiveStatus = (info: Record<string, unknown>): LiveStatus | undefined => {
   if (info.live_status !== undefined && info.live_status !== null) {

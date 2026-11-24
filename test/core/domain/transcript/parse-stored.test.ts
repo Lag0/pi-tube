@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 import type { ResolvedSource } from "../../../../src/core/domain/source.ts";
 import { buildOutputArtifact } from "../../../../src/core/domain/transcript/build-artifact.ts";
@@ -80,17 +81,89 @@ describe("parseStoredArtifact", () => {
     expect(parsed.success ? parsed.data.transcript.full_text : undefined).toBe("hello world");
   });
 
+  test.each(["v2", "output"])("reads the %s JSON golden", (dir) => {
+    const raw = readFileSync(new URL(`../../../fixtures/${dir}/json-golden.json`, import.meta.url), "utf8");
+    expect(parseStoredArtifact(raw)).toMatchObject({ success: true, data: { source: { tier: "tested" } } });
+  });
+
+  test.each([
+    ["generated_at", 1],
+    ["source", []],
+    ["source.original_input", true],
+    ["source.kind", "other"],
+    ["source.tier", "other"],
+    ["transcription", null],
+    ["transcription.provider", {}],
+    ["summary", []],
+    ["summary.paragraph", null],
+    ["summary.key_points", "oops"],
+    ["transcript", []],
+    ["transcript.full_text", false],
+    ["schema_version", "2.0.0"],
+  ] as const)("rejects missing and invalid %s", (field, invalid) => {
+    for (const value of [undefined, invalid]) {
+      const payload = JSON.parse(renderJson(artifactOf(site)));
+      const [first, second] = field.split(".");
+      if (second) payload[first][second] = value;
+      else payload[first] = value;
+      expect(parseStoredArtifact(JSON.stringify(payload))).toMatchObject({
+        success: false,
+        error: { code: "STORAGE_IO_FAILED" },
+      });
+    }
+  });
+
+  test.each([
+    ["source", "live_status", "offline"],
+    ["source", "live_status", 1],
+    ["source", "chapters", {}],
+    [
+      "source",
+      "chapters",
+      [
+        { title: "one", start_ms: 0, end_ms: 1 },
+        { title: "two", start_ms: "1", end_ms: 2 },
+      ],
+    ],
+    ["transcript", "segments", "wrong"],
+    ["transcript", "segments", [{ start_ms: 0, end_ms: 1 }]],
+    ["summary", "key_points", ["a"]],
+    ["summary", "key_points", ["a", "b", "c", "d", "e", "f"]],
+    ["summary", "key_points", ["a", "b", "c", "d", 5]],
+  ] as const)("rejects invalid %s.%s: %j", (section, field, value) => {
+    const payload = JSON.parse(renderJson(artifactOf(site)));
+    payload[section][field] = value;
+    expect(parseStoredArtifact(JSON.stringify(payload))).toMatchObject({
+      success: false,
+      error: { code: "STORAGE_IO_FAILED" },
+    });
+  });
+
+  test.each([
+    ["1.1.0", null],
+    ["1.1.0", "legacy"],
+    ["1.2.0", undefined],
+  ])("does not default tier %s %s", (version, tier) => {
+    const payload = JSON.parse(renderJson(artifactOf(site)));
+    payload.schema_version = version;
+    payload.source.tier = tier;
+    expect(parseStoredArtifact(JSON.stringify(payload)).success).toBe(false);
+  });
+
   test("a newer 1.x transcript is read with the fields this version knows", () => {
     const payload = JSON.parse(renderJson(artifactOf(direct)));
     payload.schema_version = "1.9.0";
     payload.future_field = { x: 1 };
+    payload.source.extra = 1;
+    payload.transcription.provider = "community-stt";
 
     const parsed = parseStoredArtifact(JSON.stringify(payload));
 
-    expect(parsed.success ? parsed.data.transcript.full_text : undefined).toBe("hello world");
+    expect(parsed).toMatchObject({ success: true, data: { transcription: { provider: "community-stt" } } });
   });
 
   test.each([
+    ["[]", "Stored transcript is not valid JSON."],
     ["{", "Stored transcript is not valid JSON."],
     ['{"schema_version":"1.3.0","transcript":{}}', "Stored transcript is missing `transcript.full_text`."],
   ])("%s is STORAGE_IO_FAILED", (text, message) => {

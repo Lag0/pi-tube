@@ -13,6 +13,11 @@ export type SourceTier = "tested" | "best_effort";
 /** yt-dlp's `live_status`: `post_live` is a stream that ended but whose recording is still being processed. */
 export type LiveStatus = "not_live" | "is_live" | "is_upcoming" | "was_live" | "post_live";
 
+const LIVE_STATUSES: ReadonlySet<string> = new Set(["not_live", "is_live", "is_upcoming", "was_live", "post_live"]);
+
+export const isLiveStatus = (value: unknown): value is LiveStatus =>
+  typeof value === "string" && LIVE_STATUSES.has(value);
+
 /** A chapter of a video, in milliseconds. */
 export interface Chapter {
   readonly title: string;

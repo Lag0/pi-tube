@@ -1,6 +1,6 @@
 import { createError } from "../errors.ts";
 import { err, ok, type Result } from "../result.ts";
-import type { LiveStatus, SourceKind, SourceTier } from "../source.ts";
+import { isLiveStatus, SOURCE_KINDS } from "../source.ts";
 import type {
   OutputArtifact,
   OutputArtifactChapter,
@@ -44,24 +44,45 @@ const segmentOf = (value: unknown): OutputArtifactSegment | undefined => {
   return defined({ start_ms: start, end_ms: end, text: segmentText, chapter: num(value.chapter) });
 };
 
-const listOf = <T>(value: unknown, item: (entry: unknown) => T | undefined): T[] | undefined => {
-  if (!Array.isArray(value)) return undefined;
-  const items = value.map(item).filter((entry): entry is T => entry !== undefined);
-  return items.length > 0 ? items : undefined;
+const listOf = <T>(value: unknown, item: (entry: unknown) => T | undefined): T[] | undefined | null => {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) return null;
+  const items: T[] = [];
+  for (const entry of value) {
+    const parsed = item(entry);
+    if (parsed === undefined) return null;
+    items.push(parsed);
+  }
+  return items.length ? items : undefined;
 };
 
-const sourceOf = (value: Json): OutputArtifactSource =>
-  defined({
-    kind: text(value.kind) as SourceKind,
+const sourceOf = (value: unknown, version: string): OutputArtifactSource | undefined => {
+  if (!isRecord(value) || typeof value.original_input !== "string") return undefined;
+  const kind = SOURCE_KINDS.find((kind) => kind === value.kind);
+  const tier = value.tier === undefined && Number(version.split(".")[1]) < 2 ? "tested" : value.tier;
+  const live = value.live_status ?? undefined;
+  const chapters = listOf(value.chapters, chapterOf);
+  if (
+    !kind ||
+    (tier !== "tested" && tier !== "best_effort") ||
+    (live !== undefined && !isLiveStatus(live)) ||
+    chapters === null
+  )
+    return undefined;
+  const links = Array.isArray(value.description_links)
+    ? value.description_links.filter((link) => typeof link === "string")
+    : [];
+  return defined<OutputArtifactSource>({
+    kind,
     source_key: text(value.source_key),
-    tier: (text(value.tier) ?? "tested") as SourceTier,
+    tier,
     platform: text(value.platform),
     media_id: text(value.media_id),
     canonical_url: text(value.canonical_url),
     duration_seconds: num(value.duration_seconds),
-    live_status: text(value.live_status) as LiveStatus | undefined,
-    chapters: listOf(value.chapters, chapterOf),
-    original_input: text(value.original_input) ?? "",
+    live_status: live,
+    chapters,
+    original_input: value.original_input,
     normalized_url: text(value.normalized_url),
     media_url: text(value.media_url),
     absolute_path: text(value.absolute_path),
@@ -69,8 +90,9 @@ const sourceOf = (value: Json): OutputArtifactSource =>
     title: text(value.title),
     published_at: text(value.published_at),
     description: text(value.description),
-    description_links: listOf(value.description_links, text),
+    description_links: links.length ? links : undefined,
   });
+};
 
 /**
  * Reads a transcript the library saved (`renderJson` output, schema 1.x) back into an artifact;
@@ -91,26 +113,35 @@ export const parseStoredArtifact = (raw: string): Result<OutputArtifact> => {
   if (schemaVersion === undefined || !SCHEMA_VERSION.test(schemaVersion)) {
     return invalid(`Stored transcript has an unsupported \`schema_version\` (${schemaVersion ?? "none"}).`);
   }
-  const source = isRecord(payload.source) ? payload.source : {};
-  const transcription = isRecord(payload.transcription) ? payload.transcription : {};
-  const summary = isRecord(payload.summary) ? payload.summary : {};
-  const keyPoints = Array.isArray(summary.key_points) ? summary.key_points.map((point) => String(point)) : [];
-  const [a = "", b = "", c = "", d = "", e = ""] = keyPoints;
+  if (typeof payload.generated_at !== "string") return invalid("Stored transcript is missing `generated_at`.");
+  const source = sourceOf(payload.source, schemaVersion);
+  if (!source) return invalid("Stored transcript has an invalid `source`.");
+  const transcription = payload.transcription;
+  if (!isRecord(transcription) || typeof transcription.provider !== "string")
+    return invalid("Stored transcript is missing `transcription.provider`.");
+  const summary = payload.summary;
+  if (!isRecord(summary) || typeof summary.paragraph !== "string")
+    return invalid("Stored transcript is missing `summary.paragraph`.");
+  const points = summary.key_points;
+  if (!Array.isArray(points) || points.length !== 5 || !points.every((p) => typeof p === "string"))
+    return invalid("Stored transcript has invalid `summary.key_points`.");
+  const segments = listOf(transcript.segments, segmentOf);
+  if (segments === null) return invalid("Stored transcript has invalid `transcript.segments`.");
 
   return ok(
     defined({
       schema_version: schemaVersion as OutputSchemaVersion,
-      generated_at: text(payload.generated_at) ?? "",
+      generated_at: payload.generated_at,
       transcript_id: text(payload.transcript_id),
-      source: sourceOf(source),
+      source,
       transcription: defined({
-        provider: text(transcription.provider) ?? "unknown",
+        provider: transcription.provider,
         model: text(transcription.model),
         requested_language: text(transcription.requested_language),
         detected_language: text(transcription.detected_language),
       }),
-      summary: { paragraph: text(summary.paragraph) ?? "", key_points: [a, b, c, d, e] },
-      transcript: defined({ full_text: fullText, segments: listOf(transcript.segments, segmentOf) }),
+      summary: { paragraph: summary.paragraph, key_points: [points[0], points[1], points[2], points[3], points[4]] },
+      transcript: defined({ full_text: fullText, segments }),
     }),
   );
 };

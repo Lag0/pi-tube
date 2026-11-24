@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
@@ -49,6 +49,29 @@ describe("transcribe cache", () => {
     expect(runsAfterFirst).toBeGreaterThan(0);
     expect(runs).toHaveLength(runsAfterFirst);
     expect(groq.requests).toHaveLength(1);
+  });
+
+  test("corrupt canonical JSON is neither a cache miss nor a repairable transcript", async () => {
+    const { transcript_id } = JSON.parse((await setup().transcribe(["--json"])).stdout);
+    const show = () =>
+      runCliInProcess(["library", "show", transcript_id, "--json"], { env: { PI_TUBE_LIBRARY_DIR: libraryDir } });
+    const { json_path, markdown_path } = JSON.parse((await show()).stdout);
+    const corrupt = JSON.stringify({ schema_version: "1.3.0", transcript: { full_text: "incomplete" } });
+    writeFileSync(json_path, corrupt);
+    rmSync(markdown_path);
+    const entries = () => readdirSync(libraryDir, { recursive: true }).sort();
+    const before = entries();
+    const { groq, transcribe } = setup();
+
+    for (const result of [await show(), await transcribe(["--json"])]) {
+      expect(result.exitCode).toBe(6);
+      expect(result.stderr).toContain("STORAGE_IO_FAILED");
+      expect(result.stderr).toContain(path.basename(json_path));
+      expect(result.stdout).toBe("");
+    }
+    expect(groq.requests).toHaveLength(0);
+    expect(entries()).toEqual(before);
+    expect(readFileSync(json_path, "utf8")).toBe(corrupt);
   });
 
   test("the human output names the transcript and the cache hit", async () => {
