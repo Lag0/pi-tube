@@ -8,6 +8,8 @@ description: |
 
 ## npm Install (Recommended for published package)
 
+Both npm and npx require Bun >=1.3.3 on PATH to run pi-tube. Node alone is not a supported runtime.
+
 ```bash
 npm install -g @syxs/pi-tube
 ```

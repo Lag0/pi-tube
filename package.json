@@ -20,7 +20,8 @@
     "format": "biome check --write .",
     "verify:fixtures": "bun run --bun scripts/verify-fixtures.ts",
     "publish-beta": "npm publish --tag beta --access public",
-    "publish-prod": "npm publish --access public"
+    "publish-prod": "npm publish --access public",
+    "smoke:installed": "node scripts/smoke-installed-command.mjs"
   },
   "files": [
     "bin",
