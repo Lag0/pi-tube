@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { lstat, readdir, readFile } from "node:fs/promises";
+import { constants } from "node:fs";
+import { lstat, open, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import type { PruneReport } from "../../core/ports/library-store.ts";
 import { errnoOf } from "../errno.ts";
@@ -9,6 +10,20 @@ const hash = (bytes: string | Buffer): string => createHash("sha256").update(byt
 const serialize = (value: unknown): string => `${JSON.stringify(value, null, 2)}\n`;
 const identity = (s: { dev: bigint; ino: bigint; birthtimeNs: bigint }): string => `${s.dev}:${s.ino}:${s.birthtimeNs}`;
 const inspect = (file: string) => lstat(file, { bigint: true });
+/** Never open a known link or special file, or read a replacement encountered during open. */
+export async function readUnlinkedFile(file: string): Promise<Buffer> {
+  const before = await inspect(file);
+  if (!before.isFile() || before.nlink !== 1n) throw new Error("Expected an unlinked regular file");
+  const handle = await open(file, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0));
+  try {
+    const opened = await handle.stat({ bigint: true });
+    if (!opened.isFile() || opened.nlink !== 1n || identity(opened) !== identity(before))
+      throw new Error("Expected an unlinked regular file");
+    return await handle.readFile();
+  } finally {
+    await handle.close();
+  }
+}
 export const receiptFor = async (file: string, written: string): Promise<string> =>
   `${identity(await inspect(file))}:${hash(written)}`;
 interface Receipt {
@@ -17,6 +32,7 @@ interface Receipt {
   ownsMetadata: boolean;
   metadata: string;
   files: Record<string, string>;
+  renderings?: Record<string, string>;
 }
 async function receiptOf(raw: string, dir: string, file: string): Promise<Receipt | undefined> {
   let decoded: Record<string, unknown>;
@@ -44,6 +60,29 @@ async function receiptOf(raw: string, dir: string, file: string): Promise<Receip
     return undefined;
   return r as Receipt;
 }
+/** For an older rendering, verify both files and rule out another JSON sharing the abbreviated Markdown id. */
+export async function matchesManagedMarkdown(
+  json: string,
+  text: string,
+  markdown: string,
+  bytes: Buffer,
+): Promise<boolean> {
+  const dir = path.dirname(json);
+  const metadata = path.join(dir, "source.json");
+  const receipt = await receiptOf((await readUnlinkedFile(metadata)).toString("utf8"), dir, metadata);
+  if (
+    !receipt ||
+    receipt.files[path.basename(json)] !== (await receiptFor(json, text)) ||
+    receipt.renderings?.[path.basename(markdown)] !==
+      hash(serialize([receipt.files[path.basename(json)], receipt.files[path.basename(markdown)]])) ||
+    receipt.files[path.basename(markdown)] !== `${identity(await inspect(markdown))}:${hash(bytes)}`
+  )
+    return false;
+  const name = path.basename(json);
+  return !(await readdir(dir)).some(
+    (other) => other !== name && other.slice(0, 8) === name.slice(0, 8) && other.slice(20) === name.slice(20),
+  );
+}
 export async function sourceWithReceipts(
   dir: string,
   temp: string,
@@ -51,6 +90,8 @@ export async function sourceWithReceipts(
   previous: string | undefined,
   created: boolean,
   files: Record<string, string>,
+  markdownName: string,
+  jsonName: string,
 ): Promise<string> {
   const old = previous === undefined ? undefined : await receiptOf(previous, dir, path.join(dir, "source.json"));
   const { cleanup_checksum: _checksum, cleanup: _receipt, ...fields } = body;
@@ -62,6 +103,12 @@ export async function sourceWithReceipts(
       ownsMetadata: previous === undefined || old?.ownsMetadata === true,
       metadata: identity(await inspect(temp)),
       files: { ...old?.files, ...files },
+      renderings: {
+        ...old?.renderings,
+        ...(files[markdownName] && files[jsonName]
+          ? { [markdownName]: hash(serialize([files[jsonName], files[markdownName]])) }
+          : {}),
+      },
     },
   };
   return serialize({ ...content, cleanup_checksum: hash(serialize(content)) });

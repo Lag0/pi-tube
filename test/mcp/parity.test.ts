@@ -1,5 +1,6 @@
-import { writeFileSync } from "node:fs";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, test } from "vitest";
 import type { AppOverrides } from "../../src/bootstrap.ts";
 import { createError, type ResolvedSource } from "../../src/core/index.ts";
@@ -71,6 +72,53 @@ describe("CLI and MCP agree on results", () => {
     expect(cliRun.exitCode).toBe(0);
     expect(pick(mcpRun.json as Record<string, unknown>)).toEqual(pick(json(cliRun.stdout)));
     expect(pick(json(cliRun.stdout)).cost).toEqual({ estimate: 0.001362, currency: "USD", price_table: "2026-10-31" });
+  });
+
+  test("incomplete Markdown returns storage errors, then ordinary retry restores both outputs", async () => {
+    const { mcp, cli } = await both(PROVIDER_KEYS, pricedFakes());
+    const args = ["transcribe", YOUTUBE, "--provider", "deepgram"];
+    const input = { input: YOUTUBE, provider: "deepgram" };
+    const fresh = JSON.parse((await cli([...args, "--json"])).stdout);
+    const { output_path: saved, markdown_path: markdown, transcript_id: id } = fresh;
+    const bytes = readFileSync(saved);
+    writeFileSync(markdown, "manual notes");
+    for (const command of [args, [...args, "--json"], ["library", "show", id, "--json"]]) {
+      const failure = await cli(command);
+      expect(failure).toMatchObject({ exitCode: 6, stdout: "" });
+      expect(failure.stderr).toContain("STORAGE_IO_FAILED");
+      expect(failure.stderr).toContain(saved);
+    }
+    expect(await mcp.call("transcribe", input)).toMatchObject({
+      isError: true,
+      json: {
+        error: {
+          code: "STORAGE_IO_FAILED",
+          message: expect.stringContaining(saved),
+          hint: expect.stringMatching(/retry/i),
+        },
+      },
+    });
+    expect(readFileSync(markdown, "utf8")).toBe("manual notes");
+    rmSync(markdown);
+    const human = await cli(args);
+    expect(human.exitCode).toBe(0);
+    expect(human.stdout).toContain(`[OUTPUT_FILE] ${markdown}`);
+    expect(human.stdout).toContain(`[OUTPUT_FILE_URI] ${pathToFileURL(markdown).href}`);
+    expect(readFileSync(markdown, "utf8")).toContain(TRANSCRIPT_HELLO.text);
+    expect(json((await cli([...args, "--json"])).stdout)).toMatchObject({
+      transcript_id: id,
+      format: "json",
+      cache_hit: true,
+      output_path: saved,
+      output_uri: pathToFileURL(saved).href,
+      markdown_path: markdown,
+      cost: { estimate: 0 },
+    });
+    expect(await mcp.call("transcribe", input)).toMatchObject({
+      isError: false,
+      json: { transcript_id: id, resource_uri: `pi-tube://transcripts/${id}`, cache_hit: true, cost: { estimate: 0 } },
+    });
+    expect(readFileSync(saved)).toEqual(bytes);
   });
 
   test("info and get_media_info", async () => {

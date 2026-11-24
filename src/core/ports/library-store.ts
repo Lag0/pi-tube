@@ -58,6 +58,11 @@ export interface PruneRequest {
   readonly maxAudioBytes?: number;
 }
 
+export interface LibraryLookupOptions extends OperationOptions {
+  /** Called after a matching canonical transcript is read, before attempting Markdown repair. */
+  readonly onCacheHit?: () => void;
+}
+
 /** The local transcript library. Its files are the source of truth; nothing is kept elsewhere. */
 export interface LibraryStore {
   /** Checks that the library can be written, before any paid work starts. */
@@ -71,9 +76,9 @@ export interface LibraryStore {
     admitted: (producer: boolean) => Promise<Result<T>>,
   ): Promise<Result<T>>;
   /** Speculative URL lookup before resolve; waits for an observed producer without taking over. */
-  findBeforeClaim(key: TranscriptKey, options?: OperationOptions): Promise<Result<StoredTranscript | undefined>>;
+  findBeforeClaim(key: TranscriptKey, options?: LibraryLookupOptions): Promise<Result<StoredTranscript | undefined>>;
   /** Cache lookup: the exact key, or, for a requested language, an `auto` transcript that detected it. */
-  find(key: TranscriptKey, options?: OperationOptions): Promise<Result<StoredTranscript | undefined>>;
+  find(key: TranscriptKey, options?: LibraryLookupOptions): Promise<Result<StoredTranscript | undefined>>;
   /**
    * Stamps the transcript id and source key on `artifact`, then writes source.json (merged), `<id>.json` and
    * `<date>-<title>-<id8>.md`. An existing transcript is returned as is; with `fresh`, the next free `<id>-<n>` is

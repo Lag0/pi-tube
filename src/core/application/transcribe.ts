@@ -158,6 +158,7 @@ const runTranscribe =
       model: provider.model,
       ...(language ? { language } : {}),
     });
+    const lookupOptions = { ...options, onCacheHit: () => trail.note({ cacheHit: true }) };
     const hit = (stored: StoredTranscript): TranscribeOutput => {
       trail.note({ cacheHit: true });
       options?.onProgress?.({ label: "Found in library" });
@@ -188,7 +189,7 @@ const runTranscribe =
     const inputKey = sourceKeyFromInput(input.input);
     if (inputKey !== undefined) trail.note({ sourceKey: inputKey });
     if (inputKey !== undefined && !input.force) {
-      const early = await deps.library.findBeforeClaim(keyFor(inputKey), options);
+      const early = await deps.library.findBeforeClaim(keyFor(inputKey), lookupOptions);
       if (!early.success) return early;
       if (early.data) return ok(hit(early.data));
     }
@@ -277,7 +278,7 @@ const runTranscribe =
     return deps.library.withTranscriptionClaim(key, options, async (producer) => {
       const ready = ensureNotAborted(options?.signal);
       if (!ready.success) return ready;
-      const cached = await deps.library.find(key, options);
+      const cached = await deps.library.find(key, lookupOptions);
       if (!cached.success) return cached;
       if (cached.data) return ok(hit(cached.data));
       if (!producer) return err(transcriptionWaitError());

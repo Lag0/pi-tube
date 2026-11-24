@@ -1,6 +1,7 @@
 import {
   chmodSync,
   existsSync,
+  linkSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -9,21 +10,32 @@ import {
   renameSync,
   rmSync,
   statSync,
+  symlinkSync,
   utimesSync,
   writeFileSync,
 } from "node:fs";
+import { open } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import type { TranscriptKey } from "../../../src/core/domain/library.ts";
 import type { ResolvedSource } from "../../../src/core/domain/source.ts";
 import { buildOutputArtifact } from "../../../src/core/domain/transcript/build-artifact.ts";
 import { renderJson } from "../../../src/core/domain/transcript/render-json.ts";
+import * as renderer from "../../../src/core/domain/transcript/render-markdown.ts";
 import {
   createFileLibraryStore,
   sourceDirName,
   transcriptIdOf,
 } from "../../../src/infrastructure/library/file-library-store.ts";
+import * as activity from "../../../src/infrastructure/library/library-activity.ts";
+
+import * as safeFiles from "../../../src/infrastructure/library/transcript-cleanup.ts";
+
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const fs = await importOriginal<typeof import("node:fs/promises")>();
+  return { ...fs, open: vi.fn(fs.open) };
+});
 
 const isWindows = process.platform === "win32";
 
@@ -76,6 +88,488 @@ describe("source directories", () => {
 });
 
 describe("save and find", () => {
+  test("an older managed rendering remains available only while both published files are intact", async () => {
+    const store = createFileLibraryStore({ libraryDir });
+    const key = keyOf();
+    const source = youtube();
+    const oldRenderer = vi.spyOn(renderer, "renderMarkdown").mockReturnValueOnce("old renderer output");
+    const saved = await store.save({ key, source, artifact: artifactOf(source) });
+    oldRenderer.mockRestore();
+    if (!saved.success) throw Error("save failed");
+    expect(await store.find(key)).toMatchObject({ success: true, data: { transcriptId: saved.data.transcriptId } });
+    // Two canonical IDs can share the abbreviated filename. A receipt isn't evidence for which ID published it.
+    const ambiguous = path.join(
+      path.dirname(saved.data.paths.json),
+      `${saved.data.transcriptId.slice(0, 8)}000000000000.json`,
+    );
+    writeFileSync(ambiguous, readFileSync(saved.data.paths.json));
+    expect(await store.find(key)).toMatchObject({ success: false, error: { code: "STORAGE_IO_FAILED" } });
+    rmSync(ambiguous);
+    const bytes = readFileSync(saved.data.paths.json, "utf8").replaceAll("hello", "modified transcript");
+    writeFileSync(saved.data.paths.json, bytes);
+    expect(await store.find(key)).toMatchObject({ success: false, error: { code: "STORAGE_IO_FAILED" } });
+    expect(readFileSync(saved.data.paths.markdown, "utf8")).toBe("old renderer output");
+  });
+
+  test("a new JSON generation cannot inherit an earlier generation's rendering", async () => {
+    const store = createFileLibraryStore({ libraryDir });
+    const input = { key: keyOf(), source: youtube(), artifact: artifactOf(youtube()) };
+    const first = await store.save(input);
+    if (!first.success) throw Error("save failed");
+    const { paths, transcriptId } = first.data;
+    const a = readFileSync(paths.json);
+    const md = readFileSync(paths.markdown);
+    expect(await store.get(transcriptId)).toMatchObject({ success: true, data: { transcriptId } });
+    expect(readFileSync(paths.json)).toEqual(a);
+    renameSync(paths.json, path.join(root, "A.json"));
+    input.artifact.transcript.full_text = "generation B";
+    const failure = {
+      success: false,
+      error: { code: "STORAGE_IO_FAILED", message: expect.stringContaining(paths.json) },
+    };
+    expect(await store.save(input)).toMatchObject(failure);
+    const b = readFileSync(paths.json);
+    expect(JSON.parse(b.toString())).toMatchObject({
+      transcript_id: transcriptId,
+      transcript: { full_text: "generation B" },
+    });
+    expect(await store.find(input.key)).toMatchObject(failure);
+    expect(await store.get(transcriptId)).toMatchObject(failure);
+    expect(readFileSync(paths.markdown)).toEqual(md);
+    expect(readFileSync(paths.json)).toEqual(b);
+    expect(readFileSync(path.join(root, "A.json"))).toEqual(a);
+  });
+
+  test("a hard-linked metadata receipt cannot endorse an older rendering", async () => {
+    const store = createFileLibraryStore({ libraryDir });
+    vi.spyOn(renderer, "renderMarkdown").mockReturnValueOnce("older");
+    const saved = await store.save({ key: keyOf(), source: youtube(), artifact: artifactOf(youtube()) });
+    if (!saved.success) throw Error("save failed");
+    linkSync(path.join(path.dirname(saved.data.paths.json), "source.json"), path.join(root, "outside"));
+    expect(await store.get(saved.data.transcriptId)).toMatchObject({ success: false });
+  });
+
+  test.each(["get", "save"])("competing %s joins the serialized Markdown publication", async (operation) => {
+    const input = { key: keyOf(), source: youtube(), artifact: artifactOf(youtube()) };
+    const other = createFileLibraryStore({ libraryDir });
+    const enter = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const producer = createFileLibraryStore({
+      libraryDir,
+      fs: {
+        link: async (temp, target) => {
+          if (target.endsWith(".md")) {
+            enter.resolve();
+            await release.promise;
+          }
+          linkSync(temp, target);
+        },
+      },
+    }).save(input);
+    await enter.promise;
+    const peer = operation === "get" ? other.get(transcriptIdOf(input.key)) : other.save(input);
+    release.resolve();
+    expect(await peer).toMatchObject({ success: true });
+    const saved = await producer;
+    expect(saved.success).toBe(true);
+    if (!saved.success) return;
+    const meta = JSON.parse(readFileSync(path.join(path.dirname(saved.data.paths.json), "source.json"), "utf8"));
+    expect(meta.cleanup.files[path.basename(saved.data.paths.markdown)]).toBeDefined();
+  });
+
+  describe.each([".json", ".md"])("publication generations for %s", (ext) => {
+    test.each(["commit", "remove", "residual"])("reader of A cannot certify B: %s", async (outcome) => {
+      const input = { key: keyOf(), source: youtube(), artifact: artifactOf(youtube()) };
+      const a = Promise.withResolvers<void>(),
+        b = Promise.withResolvers<void>();
+      const failA = Promise.withResolvers<void>(),
+        settleB = Promise.withResolvers<void>();
+      const observed = Promise.withResolvers<void>();
+      let attempts = 0;
+      let bytes: Buffer | undefined;
+      const copyFile = async (temp: string, target: string) => {
+        expect(target.endsWith(ext)).toBe(true);
+        const content = readFileSync(temp);
+        writeFileSync(target, content, { flag: "wx" });
+        if (++attempts === 1) {
+          bytes = content;
+          a.resolve();
+          await failA.promise;
+          rmSync(target);
+          throw Error("A failed");
+        }
+        expect(content).toEqual(bytes);
+        b.resolve();
+        await settleB.promise;
+        if (outcome === "commit") return;
+        if (outcome === "remove") rmSync(target);
+        throw Error("B failed");
+      };
+      const store = createFileLibraryStore({
+        libraryDir,
+        fs: {
+          copyFile,
+          link: async (temp, target) => {
+            if (target.endsWith(ext)) throw Object.assign(Error("no links"), { code: "EPERM" });
+            linkSync(temp, target);
+          },
+        },
+      });
+      const first = store.save(input);
+      await a.promise;
+      const retriedB = Promise.withResolvers<void>();
+      let tokenA: string | undefined;
+      let observationsOfB = 0;
+      const safeRead = safeFiles.readUnlinkedFile;
+      const spy = vi.spyOn(safeFiles, "readUnlinkedFile").mockImplementation(async (file) => {
+        const value = await safeRead(file);
+        if (file.endsWith(`${ext}.publication`) && value.toString().includes("pending:")) {
+          if (tokenA === undefined) {
+            tokenA = value.toString();
+            observed.resolve();
+            await b.promise;
+          } else if (value.toString() !== tokenA && ++observationsOfB === 2) retriedB.resolve();
+        }
+        return value;
+      });
+      const reader = store.get(transcriptIdOf(input.key));
+      await observed.promise;
+      failA.resolve();
+      expect((await first).success).toBe(false);
+      const second = store.save(input);
+      await b.promise;
+      try {
+        expect(await Promise.race([reader.then(() => "returned"), retriedB.promise.then(() => "pending")])).toBe(
+          "pending",
+        );
+      } finally {
+        settleB.resolve();
+        const result = await second;
+        spy.mockRestore();
+        expect(result.success).toBe(outcome === "commit");
+      }
+      expect((await reader).success).toBe(outcome === "commit");
+    });
+  });
+
+  test.each(["json", "markdown"] as const)(
+    "a generation change during the actual %s read invalidates the captured bytes",
+    async (kind) => {
+      const input = { key: keyOf(), source: youtube(), artifact: artifactOf(youtube()) };
+      const legacy = createFileLibraryStore({ libraryDir });
+      const saved = await legacy.save(input);
+      if (!saved.success) throw Error("setup failed");
+      const target = saved.data.paths[kind];
+      const safeRead = safeFiles.readUnlinkedFile;
+      let replaced = false;
+      const peer = createFileLibraryStore({
+        libraryDir,
+        fs: {
+          link: async () => {
+            throw Error("no links");
+          },
+          copyFile: async (temp, dest) => {
+            writeFileSync(dest, readFileSync(temp), { flag: "wx" });
+            throw Error("residual");
+          },
+        },
+      });
+      const spy = vi.spyOn(safeFiles, "readUnlinkedFile").mockImplementation(async (file) => {
+        const bytes = await safeRead(file);
+        if (file === target && !replaced) {
+          replaced = true;
+          rmSync(target);
+          expect((await peer.save(input)).success).toBe(false);
+        }
+        return bytes;
+      });
+      try {
+        expect((await legacy.get(saved.data.transcriptId)).success).toBe(false);
+        expect(replaced).toBe(true);
+      } finally {
+        spy.mockRestore();
+      }
+    },
+  );
+
+  test("a record replaced between inspection and open is resampled", async () => {
+    const fs = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+    const pending = Promise.withResolvers<string>();
+    const commit = Promise.withResolvers<void>();
+    const store = createFileLibraryStore({
+      libraryDir,
+      fs: {
+        link: async () => {
+          throw Error("no links");
+        },
+        copyFile: async (temp, target, flags) => {
+          await fs.copyFile(temp, target, flags);
+          if (target.endsWith(".json")) {
+            pending.resolve(`${target}.publication`);
+            await commit.promise;
+          }
+        },
+      },
+    });
+    const key = keyOf();
+    const saved = store.save({ key, source: youtube(), artifact: artifactOf(youtube()) });
+    const record = await pending.promise;
+    let replaced = false;
+    try {
+      await vi.mocked(open).withImplementation(
+        async (file, ...args) => {
+          if (file === record && !replaced) {
+            replaced = true;
+            commit.resolve();
+            await saved;
+          }
+          return fs.open(file, ...args);
+        },
+        async () => {
+          expect((await store.get(transcriptIdOf(key))).success).toBe(true);
+        },
+      );
+    } finally {
+      commit.resolve();
+      expect((await saved).success).toBe(true);
+    }
+    expect(replaced).toBe(true);
+  });
+
+  test.each([".json.", ".md.", ".committed.tmp"])("removes a partially written owned %s temp", async (kind) => {
+    const store = createFileLibraryStore({
+      libraryDir,
+      fs: {
+        link: async () => {
+          throw Error("no links");
+        },
+      },
+    });
+    const fs = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+    let temp: string | undefined;
+    await vi.mocked(open).withImplementation(
+      async (file, flags, mode) => {
+        const handle = await fs.open(file, flags, mode);
+        if (!temp && flags === "wx" && typeof file === "string" && file.endsWith(".tmp") && file.includes(kind)) {
+          temp = file;
+          await handle.writeFile("partial");
+          vi.spyOn(handle, "writeFile").mockRejectedValue(Error("write interrupted"));
+        }
+        return handle;
+      },
+      async () => {
+        expect((await store.save({ key: keyOf(), source: youtube(), artifact: artifactOf(youtube()) })).success).toBe(
+          false,
+        );
+      },
+    );
+    if (!temp) throw Error("missing partial write");
+    expect(existsSync(temp)).toBe(false);
+  });
+
+  test("a temp name collision does not remove foreign bytes", async () => {
+    const store = createFileLibraryStore({ libraryDir });
+    const fs = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+    let collision: string | undefined;
+    await vi.mocked(open).withImplementation(
+      async (file, flags, mode) => {
+        if (!collision && flags === "wx" && typeof file === "string" && file.endsWith(".tmp")) {
+          collision = file;
+          writeFileSync(file, "foreign", { flag: "wx" });
+        }
+        return fs.open(file, flags, mode);
+      },
+      async () => {
+        expect((await store.save({ key: keyOf(), source: youtube(), artifact: artifactOf(youtube()) })).success).toBe(
+          false,
+        );
+      },
+    );
+    if (!collision) throw Error("missing temp collision");
+    expect(readFileSync(collision, "utf8")).toBe("foreign");
+  });
+
+  test.each([false, true])("claim release failure preserves the copy outcome (failed: %s)", async (fail) => {
+    const warning = vi.spyOn(process, "emitWarning").mockImplementation(() => {});
+    const input = { key: keyOf(), source: youtube(), artifact: artifactOf(youtube()) };
+    const store = createFileLibraryStore({
+      libraryDir,
+      fs: {
+        link: async () => {
+          throw Error("no links");
+        },
+        copyFile: async (temp, target) => {
+          writeFileSync(target, readFileSync(temp), { flag: "wx" });
+          if (target.endsWith(".json")) {
+            writeFileSync(path.join(`${target}.publishing`, "keep"), "foreign");
+            if (fail) throw Error("uncertain copy");
+          }
+        },
+      },
+    });
+    const saved = await store.save(input);
+    expect(warning).toHaveBeenCalledWith(expect.stringContaining("publication claim"));
+    if (fail)
+      expect(saved).toMatchObject({
+        success: false,
+        error: { message: expect.stringContaining("publication is uncertain") },
+      });
+    else expect(saved.success).toBe(true);
+    expect((await store.find(input.key)).success).toBe(!fail);
+  });
+
+  test.each(["record", "claim"])("a foreign %s is preserved and does not block another target", async (kind) => {
+    const input = { key: keyOf(), source: youtube(), artifact: artifactOf(youtube()) };
+    const dir = path.join(libraryDir, sourceDirName(input.key.sourceKey));
+    mkdirSync(dir, { recursive: true });
+    const target = path.join(dir, `${transcriptIdOf(input.key)}.json`);
+    const reserved = target + (kind === "record" ? ".publication" : ".publishing");
+    writeFileSync(reserved, "foreign");
+    const store = createFileLibraryStore({ libraryDir });
+    const blocked = store.save(input);
+    expect((await store.save({ ...input, key: keyOf("fr") })).success).toBe(true);
+    expect((await blocked).success).toBe(false);
+    expect(readFileSync(reserved, "utf8")).toBe("foreign");
+    expect(existsSync(target)).toBe(false);
+    if (kind === "record") expect((await store.find(input.key)).success).toBe(false);
+  });
+
+  test("atomic links need no persistent record and a healthy legacy hit does not take admission", async () => {
+    const entered = Promise.withResolvers<void>(),
+      release = Promise.withResolvers<void>();
+    const input = { key: keyOf(), source: youtube(), artifact: artifactOf(youtube()) };
+    const store = createFileLibraryStore({
+      libraryDir,
+      fs: {
+        link: async (temp, target) => {
+          linkSync(temp, target);
+          if (target.endsWith(".json")) {
+            entered.resolve();
+            await release.promise;
+          }
+        },
+      },
+    });
+    const producer = store.save(input);
+    await entered.promise;
+    const safeRead = safeFiles.readUnlinkedFile;
+    const spy = vi.spyOn(safeFiles, "readUnlinkedFile").mockImplementation(async (file) => {
+      try {
+        return await safeRead(file);
+      } finally {
+        if (file.endsWith(".json")) release.resolve();
+      }
+    });
+    const peer = store.get(transcriptIdOf(input.key));
+    try {
+      expect((await peer).success).toBe(true);
+    } finally {
+      release.resolve();
+      spy.mockRestore();
+    }
+    const saved = await producer;
+    if (!saved.success) throw Error("atomic save failed");
+    for (const file of Object.values(saved.data.paths)) {
+      expect(existsSync(`${file}.publication`)).toBe(false);
+      mkdirSync(`${file}.publishing`);
+    }
+    expect((await store.find(input.key)).success).toBe(true);
+    for (const file of Object.values(saved.data.paths)) expect(existsSync(`${file}.publishing`)).toBe(true);
+  });
+
+  test("fallback records are neither transcript entries nor deletable cleanup receipts", async () => {
+    const store = createFileLibraryStore({
+      libraryDir,
+      fs: {
+        link: async () => {
+          throw Error("no links");
+        },
+      },
+    });
+    const saved = await store.save({ key: keyOf(), source: youtube(), artifact: artifactOf(youtube()) });
+    if (!saved.success) throw Error("fallback save failed");
+    expect(await store.entries()).toMatchObject({ success: true, data: [{ transcriptId: saved.data.transcriptId }] });
+    for (const file of Object.values(saved.data.paths)) utimesSync(file, 0, 0);
+    expect(await store.prune({ olderThanDays: 1, includeTranscripts: true, dryRun: false })).toMatchObject({
+      success: true,
+      data: { transcriptFiles: 0 },
+    });
+    for (const file of Object.values(saved.data.paths))
+      expect(readFileSync(`${file}.publication`, "utf8")).toContain("committed:");
+    expect((await store.get(saved.data.transcriptId)).success).toBe(true);
+  });
+
+  test("a stale publication temp neither endorses a linked destination nor waits indefinitely", async () => {
+    const store = createFileLibraryStore({ libraryDir });
+    const saved = await store.save({ key: keyOf(), source: youtube(), artifact: artifactOf(youtube()) });
+    if (!saved.success) throw Error("save failed");
+    const md = saved.data.paths.markdown;
+    const stale = `${md}.123.00000000-0000-4000-8000-000000000000.tmp`;
+    linkSync(md, stale);
+    expect(await store.get(saved.data.transcriptId)).toMatchObject({ success: false });
+    expect(existsSync(stale)).toBe(true);
+  }, 8000);
+
+  test("unavailable metadata locking does not prevent publication", async () => {
+    vi.spyOn(activity, "withSourceWriter").mockRejectedValueOnce(Error("unavailable"));
+    const store = createFileLibraryStore({ libraryDir });
+    const saved = await store.save({ key: keyOf(), source: youtube(), artifact: artifactOf(youtube()) });
+    expect(saved.success).toBe(true);
+    if (!saved.success) return;
+    expect(existsSync(path.join(path.dirname(saved.data.paths.json), "source.json"))).toBe(false);
+    expect(await store.get(saved.data.transcriptId)).toMatchObject({ success: true });
+  });
+
+  test.each(["directory", "hardlink", ...(isWindows ? [] : ["symlink"])])(
+    "rejects a %s at the Markdown path",
+    async (kind) => {
+      const store = createFileLibraryStore({ libraryDir });
+      const source = youtube();
+      const saved = await store.save({ key: keyOf(), source, artifact: artifactOf(source) });
+      if (!saved.success) throw Error("save failed");
+      const markdown = saved.data.paths.markdown;
+      const other = path.join(root, "outside");
+      const bytes = readFileSync(markdown);
+      renameSync(markdown, other);
+      if (kind === "directory") mkdirSync(markdown);
+      else if (kind === "hardlink") linkSync(other, markdown);
+      else symlinkSync(other, markdown);
+      expect(await store.get(saved.data.transcriptId)).toMatchObject({
+        success: false,
+        error: { code: "STORAGE_IO_FAILED" },
+      });
+      expect(readFileSync(other)).toEqual(bytes);
+    },
+  );
+
+  test("a Markdown collision on save or repair preserves both files without claiming success", async () => {
+    let markdown = "";
+    const store = createFileLibraryStore({
+      libraryDir,
+      fs: {
+        link: async (temp, target) => {
+          if (target.endsWith(".md")) {
+            markdown = target;
+            writeFileSync(target, "sentinel", { flag: "wx" });
+          }
+          linkSync(temp, target);
+        },
+      },
+    });
+    const source = youtube();
+    const key = keyOf();
+    const id = transcriptIdOf(key);
+    const saved = path.join(libraryDir, sourceDirName(key.sourceKey), `${id}.json`);
+    const failure = { success: false, error: { code: "STORAGE_IO_FAILED", message: expect.stringContaining(saved) } };
+    expect(await store.save({ key, source, artifact: artifactOf(source) })).toMatchObject(failure);
+    const bytes = readFileSync(saved);
+    expect(readFileSync(markdown, "utf8")).toBe("sentinel");
+    rmSync(markdown);
+    expect(await store.get(id)).toMatchObject(failure);
+    expect(readFileSync(markdown, "utf8")).toBe("sentinel");
+    expect(readFileSync(saved)).toEqual(bytes);
+  });
+
   test("writes source.json, the JSON and the Markdown privately and finds them again", async () => {
     const store = createFileLibraryStore({ libraryDir });
 
