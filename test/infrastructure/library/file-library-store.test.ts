@@ -30,6 +30,7 @@ import {
 } from "../../../src/infrastructure/library/file-library-store.ts";
 import * as activity from "../../../src/infrastructure/library/library-activity.ts";
 
+import * as publication from "../../../src/infrastructure/library/publication.ts";
 import * as safeFiles from "../../../src/infrastructure/library/transcript-cleanup.ts";
 
 vi.mock("node:fs/promises", async (importOriginal) => {
@@ -813,22 +814,37 @@ describe("get and entries", () => {
     expect(entries).toEqual({ success: true, data: [] });
   });
 
-  test("1,000 transcripts are listed in under a second", async () => {
-    const artifact = artifactOf(youtube());
-    for (let index = 0; index < 1000; index += 1) {
-      const dir = path.join(libraryDir, `youtube-x-${index}`);
-      mkdirSync(dir, { recursive: true });
-      writeFileSync(
-        path.join(dir, `${String(index).padStart(20, "0")}.json`),
-        renderJson({ ...artifact, transcript_id: String(index) }),
-      );
+  test("entries reads one candidate at a time across source directories without repairing", async () => {
+    const candidates = ["a/1.json", "a/2.json", "b/3.json", "b/corrupt.json"].map((file) =>
+      path.join(libraryDir, file),
+    );
+    const json = renderJson(artifactOf(youtube()));
+    for (const file of candidates) {
+      mkdirSync(path.dirname(file), { recursive: true });
+      writeFileSync(file, file.endsWith("corrupt.json") ? "{" : json);
     }
-    const startedAt = performance.now();
+    writeFileSync(path.join(libraryDir, "a/source.json"), "{}");
+    const visited: string[] = [];
+    let active = 0;
+    let peak = 0;
+    const read = publication.readPublication;
+    vi.spyOn(publication, "readPublication").mockImplementation(async (file, deadline, decode) => {
+      visited.push(file);
+      peak = Math.max(peak, ++active);
+      try {
+        return await read(file, deadline, decode);
+      } finally {
+        active--;
+      }
+    });
 
     const entries = await createFileLibraryStore({ libraryDir }).entries();
 
-    expect(entries.success ? entries.data.length : 0).toBe(1000);
-    expect(performance.now() - startedAt).toBeLessThan(1000);
+    expect(visited.sort()).toEqual(candidates.sort());
+    expect(peak).toBe(1);
+    expect(entries.success && entries.data.map((entry) => entry.transcriptId).sort()).toEqual(["1", "2", "3"]);
+    expect(readdirSync(path.join(libraryDir, "a")).sort()).toEqual(["1.json", "2.json", "source.json"]);
+    expect(readdirSync(path.join(libraryDir, "b")).sort()).toEqual(["3.json", "corrupt.json"]);
   });
 });
 

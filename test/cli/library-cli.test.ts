@@ -19,7 +19,7 @@ import { createApp } from "../../src/bootstrap.ts";
 import { DEFAULT_CONFIG } from "../../src/core/domain/config.ts";
 import type { ResolvedSource } from "../../src/core/domain/source.ts";
 import { buildOutputArtifact } from "../../src/core/domain/transcript/build-artifact.ts";
-import { createFileLibraryStore } from "../../src/infrastructure/library/file-library-store.ts";
+import { createFileLibraryStore, sourceDirName } from "../../src/infrastructure/library/file-library-store.ts";
 import { runCliInProcess } from "../helpers/cli-harness.ts";
 import { SPAWN_ROOT, spawnCli } from "../helpers/spawn-cli.ts";
 import { fakeProviders, PROVIDER_KEYS } from "../helpers/transcribe-fakes.ts";
@@ -67,6 +67,26 @@ const seed = async (sources: readonly ResolvedSource[], providers: readonly ("gr
 const library = (args: string[]) => runCliInProcess(["library", ...args], { env: { PI_TUBE_LIBRARY_DIR: libraryDir } });
 
 describe("library list", () => {
+  test("pages valid matches past a corrupt neighbor and searches metadata only", async () => {
+    const [, middle] = await seed([
+      page("aaaaaaaaaaa", "Group oldest"),
+      page("bbbbbbbbbbb", "Group middle"),
+      page("ccccccccccc", "Group newest"),
+    ]);
+    writeFileSync(path.join(libraryDir, sourceDirName("youtube:aaaaaaaaaaa"), "corrupt.json"), "{");
+    for (const command of [["list"], ["search", "Group"]]) {
+      const result = await library([...command, "--offset", "1", "--limit", "1", "--json"]);
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        total: 3,
+        offset: 1,
+        limit: 1,
+        next_offset: 2,
+        entries: [{ transcript_id: middle }],
+      });
+    }
+    expect(JSON.parse((await library(["search", "text", "--json"])).stdout)).toMatchObject({ total: 0, entries: [] });
+  });
+
   test("--json lists the newest first, with paging", async () => {
     const [older, newer] = await seed([
       page("aaaaaaaaaaa", "Aula de Ação Penal"),

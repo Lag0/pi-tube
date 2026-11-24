@@ -702,22 +702,17 @@ export const createFileLibraryStore = (deps: {
       } catch (error) {
         return errnoOf(error) === "ENOENT" ? ok([]) : err(ioError("read", deps.libraryDir, error));
       }
-      const files = (
-        await Promise.all(
-          dirs.map(async (dir) => {
-            const names = await readdir(path.join(deps.libraryDir, dir)).catch(() => [] as string[]);
-            return names
-              .filter((name) => name.endsWith(".json") && name !== SOURCE_FILE)
-              .map((name) => path.join(deps.libraryDir, dir, name));
-          }),
-        )
-      ).flat();
-      const stored = await Promise.all(files.map((file) => readTranscript(file)));
-      const entries = stored
-        .map((result) => (result.success ? result.data : undefined))
-        .filter((entry): entry is StoredTranscript => entry !== undefined)
-        .map(toEntry)
-        .sort((left, right) => right.generatedAt.localeCompare(left.generatedAt));
+      const entries: LibraryEntry[] = [];
+      for (const dir of dirs) {
+        const sourceDir = path.join(deps.libraryDir, dir);
+        const names = await readdir(sourceDir).catch(() => [] as string[]);
+        for (const name of names) {
+          if (!name.endsWith(".json") || name === SOURCE_FILE) continue;
+          const result = await readTranscript(path.join(sourceDir, name));
+          if (result.success && result.data) entries.push(toEntry(result.data));
+        }
+      }
+      entries.sort((left, right) => right.generatedAt.localeCompare(left.generatedAt));
       return ok(entries);
     },
   };
