@@ -232,9 +232,14 @@ describe("save and find", () => {
     await entered.promise;
     // The hard link disappears just before enumeration; a partial copy still has a visible temp.
     const sawConflict = vi.fn();
+    let scannedJson = false;
     publicationHooks.scan = async (dir, when) => {
       if (when !== (method === "hardlink" ? "before" : "after")) return;
       if (dir !== path.join(libraryDir, sourceDirName(input.key.sourceKey))) return;
+      if (extension === ".md" && !scannedJson) {
+        scannedJson = true;
+        return;
+      }
       sawConflict();
       release.resolve();
       await producer;
@@ -249,6 +254,56 @@ describe("save and find", () => {
     }
     expect(await producer).toMatchObject({ success: true });
   });
+
+  test.each([".md", ".json"])(
+    "complete %s bytes are not committed while exclusive copy can fail",
+    async (ext) => {
+      const beforeMarkdown = Promise.withResolvers<void>();
+      const copying = Promise.withResolvers<void>();
+      const release = Promise.withResolvers<void>();
+      const input = { key: keyOf(), source: youtube(), artifact: artifactOf(youtube()) };
+      const id = transcriptIdOf(input.key);
+      let firstMarkdown = true;
+      const store = createFileLibraryStore({
+        libraryDir,
+        fs: {
+          link: async (temp, target) => {
+            if (!target.endsWith(ext)) return linkSync(temp, target);
+            if (ext === ".md" && firstMarkdown) {
+              firstMarkdown = false;
+              beforeMarkdown.resolve();
+              await copying.promise;
+              return linkSync(temp, target);
+            }
+            throw Object.assign(new Error("no links"), { code: "EPERM" });
+          },
+        },
+      });
+      publicationHooks.copy = async (temp, target) => {
+        if (!target.endsWith(ext) || existsSync(target)) return false;
+        writeFileSync(target, readFileSync(temp), { flag: "wx" });
+        copying.resolve();
+        await release.promise;
+        rmSync(target);
+        throw Object.assign(new Error("copy failed"), { code: "EIO" });
+      };
+      const producer = store.save(input);
+      // On Markdown, get wins the repair copy while the original producer is about to publish.
+      const copier = ext === ".md" ? beforeMarkdown.promise.then(() => store.get(id)) : producer;
+      await copying.promise;
+      try {
+        const competitors = await Promise.all([ext === ".md" ? producer : store.save(input), store.get(id)]);
+        for (const result of competitors) {
+          expect(result).toMatchObject({ success: false, error: { code: "STORAGE_IO_FAILED" } });
+          if (!result.success) expect(result.error.hint).not.toContain("--force");
+        }
+      } finally {
+        release.resolve();
+        expect(await copier).toMatchObject({ success: false });
+      }
+    },
+    8000,
+  );
 
   test("a stale publication temp neither endorses a linked destination nor waits indefinitely", async () => {
     const store = createFileLibraryStore({ libraryDir });

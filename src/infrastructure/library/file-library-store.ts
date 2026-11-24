@@ -74,15 +74,14 @@ const ioError = (action: "read" | "write", target: string, error: unknown): PiTu
   createError("STORAGE_IO_FAILED", `Cannot ${action} \`${target}\` (${errnoOf(error)}).`, { hint: HINT });
 
 /** A sibling temp is only a retry hint: after it disappears the destination must still validate. */
-async function waitForPublications(target: string): Promise<boolean> {
+async function waitForPublications(target: string, deadline: number): Promise<"none" | "settled" | "timeout"> {
   const dir = path.dirname(target);
   const prefix = `${path.basename(target)}.`;
   const suffix = /^\d+\.[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.tmp$/;
   const pending = new Set(
     (await readdir(dir)).filter((name) => name.startsWith(prefix) && suffix.test(name.slice(prefix.length))),
   );
-  if (!pending.size) return false;
-  const deadline = performance.now() + 2000;
+  if (!pending.size) return "none";
   while (pending.size) {
     for (const name of pending) {
       try {
@@ -92,24 +91,24 @@ async function waitForPublications(target: string): Promise<boolean> {
         pending.delete(name);
       }
     }
-    if (!pending.size || performance.now() >= deadline) break;
-    await delay(10);
+    if (pending.size) {
+      const remaining = deadline - performance.now();
+      if (remaining <= 0) return "timeout";
+      await delay(Math.min(10, remaining));
+    }
   }
-  return true;
+  return "settled";
 }
 
 async function availableMarkdown(
   markdown: string,
   expected: string,
+  deadline: number,
   olderRendering?: (bytes: Buffer) => Promise<boolean>,
 ): Promise<boolean> {
-  const matches = async () => {
-    const bytes = await readUnlinkedFile(markdown);
-    return bytes.equals(Buffer.from(expected)) || (await olderRendering?.(bytes)) === true;
-  };
-  if (await matches().catch(() => false)) return true;
-  await waitForPublications(markdown);
-  return matches();
+  if ((await waitForPublications(markdown, deadline)) === "timeout") return false;
+  const bytes = await readUnlinkedFile(markdown);
+  return bytes.equals(Buffer.from(expected)) || (await olderRendering?.(bytes)) === true;
 }
 
 /** The first 20 hex characters of the SHA-256 of `transcriptKeyText(key)`. */
@@ -267,29 +266,33 @@ export const createFileLibraryStore = (deps: {
     onCacheHit?: () => void,
     language?: string,
   ): Promise<Result<StoredTranscript | undefined>> => {
-    let text: string;
+    const deadline = performance.now() + 2000;
     try {
-      text = await readFile(file, "utf8");
+      await lstat(file);
     } catch (error) {
       const code = errnoOf(error);
       return code === "ENOENT" || code === "ENOTDIR" ? ok(undefined) : err(ioError("read", file, error));
     }
-    let artifact = parseStoredArtifact(text);
-    let publishing = false;
-    if (!artifact.success) {
-      try {
-        publishing = await waitForPublications(file);
-        text = await readFile(file, "utf8");
-        artifact = parseStoredArtifact(text);
-      } catch (error) {
-        return err(ioError("read", file, error));
-      }
+    let text: string;
+    let publishing: boolean;
+    const retryHint = "Retry the same request normally after publication finishes.";
+    try {
+      const state = await waitForPublications(file, deadline);
+      if (state === "timeout")
+        return err(
+          createError("STORAGE_IO_FAILED", `Publication of \`${file}\` is still pending.`, { hint: retryHint }),
+        );
+      publishing = state === "settled";
+      text = await readFile(file, "utf8");
+    } catch (error) {
+      return err(ioError("read", file, error));
     }
+    const artifact = parseStoredArtifact(text);
     if (!artifact.success) {
       return err(
         createError("STORAGE_IO_FAILED", `${artifact.error.message.replace(/\.$/, "")}: \`${file}\`.`, {
           hint: publishing
-            ? "Retry the same request normally after publication finishes."
+            ? retryHint
             : `Delete \`${file}\`, or run the command again with \`--force\` to transcribe anew.`,
         }),
       );
@@ -309,9 +312,12 @@ export const createFileLibraryStore = (deps: {
         if (!info) {
           const written = await publish(markdown, expected);
           if (!written.success) return incomplete(file, markdown);
-          if (!written.data && !(await availableMarkdown(markdown, expected))) return incomplete(file, markdown);
+          if (!written.data && !(await availableMarkdown(markdown, expected, deadline)))
+            return incomplete(file, markdown);
         } else if (
-          !(await availableMarkdown(markdown, expected, (bytes) => matchesManagedMarkdown(file, text, markdown, bytes)))
+          !(await availableMarkdown(markdown, expected, deadline, (bytes) =>
+            matchesManagedMarkdown(file, text, markdown, bytes),
+          ))
         )
           return incomplete(file, markdown);
       } catch {
@@ -573,7 +579,8 @@ export const createFileLibraryStore = (deps: {
         }
         if (
           !published.success ||
-          (!published.data && !(await availableMarkdown(markdownPath, markdown).catch(() => false)))
+          (!published.data &&
+            !(await availableMarkdown(markdownPath, markdown, performance.now() + 2000).catch(() => false)))
         )
           return incomplete(jsonPath, markdownPath);
         return ok({
