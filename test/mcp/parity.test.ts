@@ -116,6 +116,65 @@ describe("CLI and MCP agree on results", () => {
     }
   });
 
+  test.skipIf(process.platform !== "win32").each(["CLI JSON", "MCP"])(
+    "%s reports only the exact keep when a cooperating writer adds a different extension after the scan",
+    async (mode) => {
+      const temp = mkdtempSync(path.join(os.tmpdir(), "pi-tube-sibling-"));
+      const file = path.join(temp, "fresh.m4a");
+      const bytes = readFileSync("test/fixtures-media/silence.m4a");
+      const other = readFileSync("test/fixtures-media/silence.ts.bin");
+      writeFileSync(file, bytes);
+      const native = await import("../../src/infrastructure/library/windows-audio.ts");
+      const publish = native.publishDownloadedAudio;
+      const observed = vi.spyOn(native, "publishDownloadedAudio").mockImplementation((input, dir, name, keptAt) => {
+        // The real publisher reads the stage timestamp after the scan, just before the no-replace rename.
+        const time = keptAt.getTime();
+        vi.spyOn(keptAt, "getTime").mockImplementationOnce(() => {
+          writeFileSync(path.join(dir, "audio.ts"), other, { flag: "wx" });
+          return time;
+        });
+        publish(input, dir, name, keptAt);
+      });
+      try {
+        const provider = createFakeSttProvider("deepgram", TRANSCRIPT_HELLO);
+        const { cli, mcp } = await both(PROVIDER_KEYS, {
+          stt: { ...fakeProviders(), deepgram: provider },
+          media: createFakeMediaFetcher({
+            source: PAGE,
+            audio: { kind: "file", path: file, bytes },
+            producerPath: file,
+          }).fetcher,
+        });
+        const args = ["transcribe", YOUTUBE, "--provider", "deepgram", "--json"];
+        const summary =
+          mode === "MCP"
+            ? (await mcp.call("transcribe", { input: YOUTUBE, provider: "deepgram" })).json
+            : json((await cli(args)).stdout);
+        expect(observed).toHaveBeenCalledOnce();
+        const dir = observed.mock.calls[0]?.[1];
+        if (!dir) throw new Error("Missing publication directory");
+        const kept = path.join(dir, "audio.m4a");
+        expect(summary).toMatchObject({ cache_hit: false, audio_retention: "kept", retained_audio_path: kept });
+        const retry = json((await cli(args)).stdout);
+        expect(retry.cache_hit).toBe(true);
+        expect(summary).toMatchObject({ transcript_id: retry.transcript_id });
+        expect(retry).not.toHaveProperty("retained_audio_path");
+        expect(provider.requests).toHaveLength(1);
+        expect(provider.requests[0]?.audio).toEqual({ kind: "file", path: file, bytes });
+        expect(json((await cli(["library", "prune", "--yes", "--json"])).stdout)).toMatchObject({
+          unsupported: true,
+          audio_files: 0,
+          bytes: 0,
+        });
+        expect(readFileSync(kept)).toEqual(bytes);
+        expect(readFileSync(path.join(dir, "audio.ts"))).toEqual(other);
+      } finally {
+        observed.mockRestore();
+        rmSync(temp, { recursive: true, force: true });
+      }
+    },
+  );
+
   test.skipIf(process.platform !== "win32").each([
     ["CLI JSON", "incomplete"],
     ["MCP", "incomplete"],
@@ -157,6 +216,7 @@ describe("CLI and MCP agree on results", () => {
             : json((await cli([...args, "--json"])).stdout);
         expect(summary).toMatchObject({ audio_retention: status, cache_hit: false, audio_seconds: 19, characters: 11 });
         expect(summary).not.toHaveProperty("audio_cap");
+        expect(summary).not.toHaveProperty("retained_audio_path");
       }
       expect(json((await cli([...args, "--json"])).stdout)).toMatchObject({ cache_hit: true });
       expect(provider.requests).toHaveLength(1);

@@ -25,6 +25,7 @@ export const toTranscribeJson = (output: TranscribeOutput) => {
     markdown_path: output.paths.markdown,
     transcript_id: output.transcriptId,
     cache_hit: output.cacheHit,
+    ...(output.retainedAudioPath && { retained_audio_path: output.retainedAudioPath }),
     ...(output.audioRetention && { audio_retention: output.audioRetention }),
     ...(output.audioCap && { audio_cap: output.audioCap }),
     format: output.format,

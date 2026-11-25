@@ -56,6 +56,7 @@ export interface TranscribeOutput {
   readonly audioSeconds?: number;
   /** Estimated cost of this call: 0 on a cache hit; absent when the duration or the model's price is unknown. */
   readonly cost?: AuditCost;
+  readonly retainedAudioPath?: string;
   readonly audioRetention?: "kept" | "skipped" | "incomplete";
   readonly audioCap?: KeptAudio["audioCap"];
 }
@@ -181,7 +182,7 @@ const runTranscribe =
       fetched: FetchedAudio,
       fetchedSource: ResolvedSource,
       sourceKey: string,
-    ): Promise<FetchedAudio & Pick<TranscribeOutput, "audioCap" | "audioRetention">> => {
+    ): Promise<FetchedAudio & Pick<TranscribeOutput, "audioCap" | "audioRetention" | "retainedAudioPath">> => {
       const { keepAudio, maxAudioBytes } = resolveLibrarySettings(config.data);
       if (!keepAudio || !isSiteSource(fetchedSource) || fetched.audio.kind !== "file") return fetched;
       const kept = await deps.library.keepAudio(sourceKey, fetched.producerPath ?? fetched.audio.path, maxAudioBytes);
@@ -189,7 +190,7 @@ const runTranscribe =
       return kept.success
         ? {
             ...fetched,
-            ...(kept.data.originalPreserved && { audioRetention: "kept" }),
+            ...(kept.data.originalPreserved && { audioRetention: "kept", retainedAudioPath: kept.data.audioPath }),
             audio: kept.data.originalPreserved ? fetched.audio : { ...fetched.audio, path: kept.data.audioPath },
             ...(kept.data.audioCap && { audioCap: kept.data.audioCap }),
           }
@@ -237,7 +238,7 @@ const runTranscribe =
       const keptAudio = reusedEarly?.audioPath ?? storedLate?.data?.audioPath;
 
       options?.onProgress?.({ label: "Transcribing audio...", detail: `(${sourceDetail(source)})` });
-      let audio: FetchedAudio & Pick<TranscribeOutput, "audioCap" | "audioRetention">;
+      let audio: FetchedAudio & Pick<TranscribeOutput, "audioCap" | "audioRetention" | "retainedAudioPath">;
       if (keptAudio !== undefined) {
         audio = { audio: { kind: "file", path: keptAudio }, release: async () => {} };
       } else {
@@ -281,6 +282,7 @@ const runTranscribe =
       return ok({
         transcriptId: saved.data.transcriptId,
         cacheHit: false,
+        ...(audio.retainedAudioPath && { retainedAudioPath: audio.retainedAudioPath }),
         ...(audio.audioRetention && { audioRetention: audio.audioRetention }),
         ...(audio.audioCap && { audioCap: audio.audioCap }),
         paths: saved.data.paths,
