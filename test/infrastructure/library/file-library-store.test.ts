@@ -1123,7 +1123,14 @@ describe("audio", () => {
   test("audio prune preserves even audio created by keepAudio without independent evidence", async () => {
     const store = createFileLibraryStore({ libraryDir });
     await seedSource(store, "aaaaaaaaaaa");
-    await store.keepAudio("youtube:aaaaaaaaaaa", audioFile("a.m4a"));
+    const audioBytes = Buffer.from([0x00, 0xff, 0x42, 0x80]);
+    const inputPath = path.join(root, "a.m4a");
+    writeFileSync(inputPath, audioBytes);
+    const kept = await store.keepAudio("youtube:aaaaaaaaaaa", inputPath);
+    if (!kept.success) throw new Error("keep failed");
+    const notePath = path.join(path.dirname(kept.data), "personal-note.txt");
+    const noteBytes = Buffer.from("My personal note\n");
+    writeFileSync(notePath, noteBytes);
 
     const dry = await store.prune({ includeTranscripts: false, dryRun: true });
     expect(dry).toEqual({
@@ -1138,6 +1145,8 @@ describe("audio", () => {
       },
     });
     expect(audioLeft()).toHaveLength(1);
+    expect(readFileSync(kept.data)).toEqual(audioBytes);
+    expect(readFileSync(notePath)).toEqual(noteBytes);
 
     const real = await store.prune({ includeTranscripts: false, dryRun: false });
     expect(real.success ? real.data : undefined).toMatchObject({
@@ -1147,6 +1156,8 @@ describe("audio", () => {
       dryRun: false,
     });
     expect(audioLeft()).toHaveLength(1);
+    expect(readFileSync(kept.data)).toEqual(audioBytes);
+    expect(readFileSync(notePath)).toEqual(noteBytes);
     expect(transcriptsLeft()).toBe(1);
   });
 
