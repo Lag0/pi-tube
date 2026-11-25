@@ -189,7 +189,7 @@ const runTranscribe =
         ? {
             ...fetched,
             ...(kept.data.originalPreserved && { audioRetention: "kept" }),
-            audio: kept.data.originalPreserved ? fetched.audio : { kind: "file", path: kept.data.audioPath },
+            audio: kept.data.originalPreserved ? fetched.audio : { ...fetched.audio, path: kept.data.audioPath },
             ...(kept.data.audioCap && { audioCap: kept.data.audioCap }),
           }
         : {

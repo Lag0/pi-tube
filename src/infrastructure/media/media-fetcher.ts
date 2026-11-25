@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, rm, stat } from "node:fs/promises";
+import { closeSync } from "node:fs";
+import { mkdir, rm, rmdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import type { EnvironmentVariables } from "../../core/domain/config.ts";
@@ -14,12 +15,13 @@ import {
   normalizeDirectMediaUrl,
   tryParseHttpUrl,
 } from "../../core/domain/source-policy.ts";
-import { MAX_LOCAL_FILE_BYTES_LIMIT, type SourceSettings } from "../../core/domain/source-settings.ts";
+import type { SourceSettings } from "../../core/domain/source-settings.ts";
 import type { MediaFetcher, ToolVersion } from "../../core/ports/media-fetcher.ts";
 import { errnoOf } from "../errno.ts";
 import { type ProcessRequest, type ProcessResult, runProcess } from "../process/run-process.ts";
 import { checkCookies, prepareCookies } from "./cookies.ts";
 import { checkHost, defaultLookup, type LookupHost } from "./host-guard.ts";
+import { pageAudioSink, validatePageAudio } from "./page-audio.ts";
 import {
   AUDIO_FORMAT_SELECTOR,
   DOWNLOAD_TEMPLATE,
@@ -116,6 +118,7 @@ export const createMediaFetcher = (deps: MediaFetcherDeps): MediaFetcher => {
     defaultTimeoutMs: number,
     settings: SourceSettings,
     options: OperationOptions | undefined,
+    writeStdout?: (chunk: Buffer) => void,
   ): Promise<Result<string>> => {
     const allowed = await checkHost(url, settings, lookupHost, purpose, {
       ...(options?.signal ? { signal: options.signal } : {}),
@@ -128,6 +131,7 @@ export const createMediaFetcher = (deps: MediaFetcherDeps): MediaFetcher => {
       const timeoutMs = resolveYtDlpTimeoutMs(deps.env, defaultTimeoutMs);
       const result = await run({
         command: "yt-dlp",
+        ...(writeStdout && { writeStdout }),
         args: withUrl([...cookies.data.args, ...args], url),
         env: deps.env,
         timeoutMs,
@@ -210,11 +214,15 @@ export const createMediaFetcher = (deps: MediaFetcherDeps): MediaFetcher => {
         const created = await makeDir(dir, TEMP_DIR_HINT);
         if (!created.success) return created;
       }
+      const input = pageAudioSink(dir, settings.maxLocalFileBytes, download);
+      const remux = pageAudioSink(dir, settings.maxLocalFileBytes, download);
       let released = false;
       const release = async (): Promise<void> => {
         if (released) return;
         released = true;
-        if (!download) return removeDir(dir);
+        input.close();
+        remux.close();
+        if (!download) return rmdir(dir).catch(() => undefined);
         try {
           download.release();
         } catch {
@@ -224,56 +232,105 @@ export const createMediaFetcher = (deps: MediaFetcherDeps): MediaFetcher => {
         }
       };
       try {
-        const stdout = await ytDlp(
+        const deadline = Date.now() + resolveYtDlpTimeoutMs(deps.env, MEDIA_TIMEOUT_MS);
+        const check = () => {
+          if (options?.signal?.aborted || Date.now() >= deadline)
+            throw new Error("Page audio acquisition timed out or cancelled");
+        };
+        const result = await ytDlp(
           [
             "--no-progress",
+            "--abort-on-unavailable-fragments",
             "-f",
             AUDIO_FORMAT_SELECTOR,
-            // The provider upload reads the whole file into memory: the local file limit bounds page audio too.
             "--max-filesize",
             String(settings.maxLocalFileBytes),
-            "--print",
-            "after_move:filepath",
             "-o",
-            path.join(dir, "%(id)s.%(ext)s"),
+            "-",
           ],
           "download",
           source.normalizedUrl,
           MEDIA_TIMEOUT_MS,
           settings,
           options,
+          input.write,
         );
-        const filePath = stdout.success ? parseDownloadedPath(stdout.data) : undefined;
-        if (!filePath) {
-          await release();
-          // `--max-filesize` makes yt-dlp skip the file and still exit 0, with nothing printed.
-          return stdout.success
-            ? err(
-                createError(
-                  "DOWNLOAD_FAILED",
-                  "Failed to download media via yt-dlp (no file was reported; the audio may be larger than local_files.max_bytes).",
-                  {
-                    hint: `If the audio is larger than local_files.max_bytes, raise it with \`pi-tube config set local_files.max_bytes <bytes>\` (at most ${MAX_LOCAL_FILE_BYTES_LIMIT}); otherwise check that the page opens in a browser and retry.`,
-                  },
-                ),
-              )
-            : stdout;
-        }
-        // yt-dlp cannot apply `--max-filesize` when the size is unknown in advance (fragmented streams).
-        download?.hold(filePath);
-        const size = download ? (await stat(filePath)).size : (await stat(filePath).catch(() => undefined))?.size;
-        if (size !== undefined && size > settings.maxLocalFileBytes) {
-          await release();
-          return err(
+        const tooLarge = () =>
+          err(
             createError(
               "LOCAL_FILE_TOO_LARGE",
-              `The audio downloaded from the page is ${size} bytes; the limit is ${settings.maxLocalFileBytes} bytes (local_files.max_bytes).`,
+              `Downloaded audio exceeds the ${settings.maxLocalFileBytes} byte limit (local_files.max_bytes).`,
             ),
           );
+        if (input.exceeded || !result.success || !input.size) {
+          await release();
+          return input.exceeded
+            ? tooLarge()
+            : !result.success
+              ? result
+              : err(createError("DOWNLOAD_FAILED", "No media bytes received (check local_files.max_bytes)."));
         }
-        return ok({ audio: { kind: "file", path: filePath }, release });
+        check();
+        let audio = input;
+        if (input.extension === "ts") {
+          if (input.size % 188 !== 0) throw new Error("Incomplete MPEG-TS packet");
+          const fd = input.openReader();
+          try {
+            const output = await run({
+              command: "ffmpeg",
+              args: [
+                "-nostdin",
+                "-v",
+                "error",
+                "-xerror",
+                "-err_detect",
+                "explode",
+                "-f",
+                "mpegts",
+                "-i",
+                "pipe:0",
+                "-map",
+                "0:a",
+                "-c:a",
+                "copy",
+                "-bsf:a",
+                "aac_adtstoasc",
+                "-movflags",
+                "empty_moov+frag_keyframe",
+                "-f",
+                "mp4",
+                "pipe:1",
+              ],
+              stdinFd: fd,
+              writeStdout: remux.write,
+              timeoutMs: Math.max(1, deadline - Date.now()),
+              signal: options?.signal,
+              env: deps.env,
+            });
+            if (remux.exceeded) throw new Error("Remux exceeds local_files.max_bytes");
+            if (
+              output.outcome !== "exited" ||
+              output.exitCode !== 0 ||
+              output.stderr.trim() ||
+              remux.extension !== "m4a"
+            )
+              throw new Error(
+                "Cannot losslessly remux this transport stream; AAC and a compatible FFmpeg are required",
+              );
+          } finally {
+            closeSync(fd);
+          }
+          audio = remux;
+        }
+        const bytes = await audio.bytes(check);
+        await validatePageAudio(bytes, audio.extension);
+        check();
+        return ok({ audio: { kind: "file", path: audio.path, bytes }, release });
       } catch (error) {
         await release();
+        if (input.exceeded || remux.exceeded)
+          return err(createError("LOCAL_FILE_TOO_LARGE", "Page audio exceeds local_files.max_bytes."));
+        if (options?.signal?.aborted) return err(createError("CANCELLED", "Operation cancelled."));
         return err(createError("DOWNLOAD_FAILED", `Cannot acquire downloaded audio (${String(error)}).`));
       }
     },

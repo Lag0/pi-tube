@@ -48,6 +48,9 @@ export interface ProcessRequest {
   readonly env: EnvironmentVariables;
   readonly timeoutMs: number;
   readonly signal?: AbortSignal;
+  /** A synchronous sink backpressures the pipe; media is never accumulated or decoded here. */
+  readonly writeStdout?: (chunk: Buffer) => void;
+  readonly stdinFd?: number;
   /** Per stream; going over it kills the process. */
   readonly maxOutputBytes?: number;
 }
@@ -132,7 +135,7 @@ export const runProcess = (request: ProcessRequest): Promise<ProcessResult> =>
     let child: ChildProcess;
     try {
       child = spawn(request.command, [...request.args], {
-        stdio: ["ignore", "pipe", "pipe"],
+        stdio: [request.stdinFd ?? "ignore", "pipe", "pipe"],
         env: buildChildEnv(request.env),
         detached: process.platform !== "win32",
         windowsHide: true,
@@ -164,7 +167,12 @@ export const runProcess = (request: ProcessRequest): Promise<ProcessResult> =>
     const stop = (outcome: ProcessOutcome): void => {
       if (stoppedWith !== undefined) return;
       stoppedWith = outcome;
-      graceTimer = killTree(child);
+      if (child.exitCode === null && child.signalCode === null) graceTimer = killTree(child);
+      else if (request.writeStdout) {
+        // Do not signal a recycled PID if a descendant is still holding a pipe.
+        child.stdout?.destroy();
+        child.stderr?.destroy();
+      }
     };
     const collect = (stream: "stdout" | "stderr") => (chunk: Buffer) => {
       sizes[stream] += chunk.length;
@@ -176,7 +184,21 @@ export const runProcess = (request: ProcessRequest): Promise<ProcessResult> =>
     };
     const onAbort = (): void => stop("aborted");
 
-    child.stdout?.on("data", collect("stdout"));
+    if (request.writeStdout) {
+      const write = request.writeStdout;
+      child.stdout?.on("data", (chunk: Buffer) => {
+        if (stoppedWith) return;
+        try {
+          write(chunk);
+        } catch {
+          stop("spawn_failed");
+        }
+      });
+      child.stdout?.on("error", () => stop("spawn_failed"));
+      child.stdout?.on("close", () => {
+        if (!child.stdout?.readableEnded) stop("spawn_failed");
+      });
+    } else child.stdout?.on("data", collect("stdout"));
     child.stderr?.on("data", collect("stderr"));
     request.signal?.addEventListener("abort", onAbort, { once: true });
     const timer = setTimeout(() => stop("timed_out"), request.timeoutMs);
@@ -188,7 +210,8 @@ export const runProcess = (request: ProcessRequest): Promise<ProcessResult> =>
       else if (error.code === "EACCES" || error.code === "EPERM") settle(spawnFailed(error));
     });
     child.on("exit", () => {
-      disarm();
+      clearTimeout(graceTimer);
+      if (!request.writeStdout) disarm();
       // Grandchildren that outlive the child would keep the pipes open; the group goes with the child.
       if (child.pid !== undefined && process.platform !== "win32") signalGroup(child.pid, "SIGKILL");
     });

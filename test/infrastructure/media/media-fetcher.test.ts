@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import {
   chmodSync,
   existsSync,
@@ -15,7 +16,11 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import type { SiteSource } from "../../../src/core/domain/source.ts";
 import type { SourceSettings } from "../../../src/core/domain/source-settings.ts";
 import { createMediaFetcher } from "../../../src/infrastructure/media/media-fetcher.ts";
-import type { ProcessRequest, ProcessResult } from "../../../src/infrastructure/process/run-process.ts";
+import {
+  type ProcessRequest,
+  type ProcessResult,
+  runProcess,
+} from "../../../src/infrastructure/process/run-process.ts";
 
 const YOUTUBE = "https://www.youtube.com/watch?v=abc";
 const INSTAGRAM = "https://www.instagram.com/reel/abc/";
@@ -341,117 +346,99 @@ describe("resolve", () => {
 describe("fetchAudio", () => {
   const youtubeSource = YOUTUBE_SOURCE;
 
-  test("downloads YouTube audio into its own temp dir and release removes it", async () => {
-    const { requests, run } = fakeRun((request) => {
-      const outputTemplate = request.args[request.args.indexOf("-o") + 1] ?? "";
-      const file = outputTemplate.replace("%(id)s.%(ext)s", "abc.m4a");
-      mkdirSync(path.dirname(file), { recursive: true });
-      writeFileSync(file, "audio");
-      return exited(`${file}\n`);
+  const fixture = (ext: string) => readFileSync(`test/fixtures-media/silence.${ext}`);
+  test.each(["m4a", "webm"])("binary %s is validated and released (no FFmpeg on PATH)", async (ext) => {
+    const bytes = fixture(ext);
+    const { requests, run } = fakeRun((req) => {
+      req.writeStdout?.(bytes.subarray(0, 1));
+      req.writeStdout?.(bytes.subarray(1));
+      return exited("wrong.mp3", 0, "side-info");
     });
-
     const result = await fetcherWith(run).fetchAudio(youtubeSource, SETTINGS);
-
-    expect(result.success).toBe(true);
-    if (!result.success) return;
-    expect(result.data.audio.kind).toBe("file");
-    if (process.platform === "win32" && result.data.audio.kind === "file") {
-      const downloaded = result.data.audio.path;
-      expect(() => writeFileSync(downloaded, "replacement")).toThrow();
-      expect(readFileSync(downloaded, "utf8")).toBe("audio");
-    }
-    expect(requests[0]?.args.slice(-2)).toEqual(["--", YOUTUBE]);
-    expect(requests[0]?.timeoutMs).toBe(1_800_000);
+    if (!result.success) throw new Error(result.error.message);
+    expect(requests).toHaveLength(1);
+    expect(requests[0]?.args.slice(-4)).toEqual(["-o", "-", "--", YOUTUBE]);
+    expect(result.data.audio).toMatchObject({ kind: "file", bytes });
+    if (result.data.audio.kind === "file") expect(path.extname(result.data.audio.path)).toBe(`.${ext}`);
     await result.data.release();
     await result.data.release();
     expect(readdirSync(tmpDir)).toEqual([]);
   });
-
-  test.skipIf(process.platform !== "win32")("refuses a reported file outside the private directory", async () => {
-    const outside = path.join(root, "unrelated.m4a");
-    writeFileSync(outside, "unrelated");
-    const { run } = fakeRun(() =>
-      exited(`${outside}
-`),
-    );
-    const result = await fetcherWith(run).fetchAudio(youtubeSource, SETTINGS);
-    expect(result).toMatchObject({ success: false, error: { code: "DOWNLOAD_FAILED" } });
-    expect(readFileSync(outside, "utf8")).toBe("unrelated");
-  });
-
-  const writesAudio = (content: string) => (request: ProcessRequest) => {
-    const outputTemplate = request.args[request.args.indexOf("-o") + 1] ?? "";
-    const file = outputTemplate.replace("%(id)s.%(ext)s", "abc.m4a");
-    mkdirSync(path.dirname(file), { recursive: true });
-    writeFileSync(file, content);
-    return exited(`${file}\n`);
-  };
-
-  test("the audio download is capped at local_files.max_bytes", async () => {
-    const { requests, run } = fakeRun(writesAudio("audio"));
-
-    const result = await fetcherWith(run).fetchAudio(youtubeSource, { ...SETTINGS, maxLocalFileBytes: 1234 });
-    if (result.success) await result.data.release();
-
-    const args = requests[0]?.args ?? [];
-    expect(args[args.indexOf("--max-filesize") + 1]).toBe("1234");
-  });
-
-  test("downloaded audio over local_files.max_bytes is LOCAL_FILE_TOO_LARGE and leaves the temp dir empty", async () => {
-    const { run } = fakeRun(writesAudio("audio"));
-
-    const result = await fetcherWith(run).fetchAudio(youtubeSource, { ...SETTINGS, maxLocalFileBytes: 4 });
-
-    expect(result.success ? undefined : result.error).toMatchObject({
-      code: "LOCAL_FILE_TOO_LARGE",
-      message: "The audio downloaded from the page is 5 bytes; the limit is 4 bytes (local_files.max_bytes).",
+  test.each(["m4a", "webm"])("truncated %s is refused", async (ext) => {
+    const { run } = fakeRun((req) => {
+      req.writeStdout?.(fixture(ext).subarray(0, -1));
+      return exited("");
     });
-    expect(existsSync(tmpDir) ? readdirSync(tmpDir) : []).toEqual([]);
-  });
-
-  test("a download yt-dlp skipped (no file reported) names the size limit as a likely cause", async () => {
-    const { run } = fakeRun(() => exited(""));
-
-    const result = await fetcherWith(run).fetchAudio(youtubeSource, SETTINGS);
-
-    expect(result.success ? undefined : result.error).toMatchObject({
-      code: "DOWNLOAD_FAILED",
-      message:
-        "Failed to download media via yt-dlp (no file was reported; the audio may be larger than local_files.max_bytes).",
-      hint: "If the audio is larger than local_files.max_bytes, raise it with `pi-tube config set local_files.max_bytes <bytes>` (at most 2147483647); otherwise check that the page opens in a browser and retry.",
+    expect(await fetcherWith(run).fetchAudio(youtubeSource, SETTINGS)).toMatchObject({
+      success: false,
+      error: { code: "DOWNLOAD_FAILED" },
     });
+    expect(readdirSync(tmpDir)).toEqual([]);
   });
-
-  test("a failed download preserves the primary error and does not authorize Windows partial-file deletion", async () => {
-    const { run } = fakeRun((request) => {
-      const outputTemplate = request.args[request.args.indexOf("-o") + 1] ?? "";
-      mkdirSync(path.dirname(outputTemplate), { recursive: true });
-      writeFileSync(path.join(path.dirname(outputTemplate), "partial.part"), "x");
-      return exited("", 1, "ERROR: boom");
+  test.each([0, 3])("checks cap before whole block after %i bytes", async (prefix) => {
+    const { run } = fakeRun((req) => {
+      req.writeStdout?.(Buffer.alloc(prefix));
+      expect(() => req.writeStdout?.(Buffer.alloc(5))).toThrow();
+      const [name] = readdirSync(tmpDir);
+      if (!name) throw new Error("Missing private stage");
+      const dir = path.join(tmpDir, name);
+      expect(readdirSync(dir)).toEqual(prefix ? ["audio.m4a"] : []);
+      if (prefix) expect(readFileSync(path.join(dir, "audio.m4a"))).toHaveLength(prefix);
+      return exited("");
     });
-
-    const warning = vi.spyOn(process, "emitWarning").mockImplementation(() => {});
-    try {
-      const fetcher = createMediaFetcher({
-        env: { PATH: "/bin" },
-        cwd: root,
-        tmpDir,
-        run,
-        lookup: PUBLIC_LOOKUP,
+    expect(await fetcherWith(run).fetchAudio(youtubeSource, { ...SETTINGS, maxLocalFileBytes: 4 })).toMatchObject({
+      success: false,
+      error: { code: "LOCAL_FILE_TOO_LARGE" },
+    });
+    expect(readdirSync(tmpDir)).toEqual([]);
+  });
+  test("refuses multiple actual tracks despite a plausible file name", async () => {
+    const { run } = fakeRun((req) => {
+      req.writeStdout?.(readFileSync("test/fixtures-media/two-tracks.webm"));
+      return exited("audio.webm");
+    });
+    expect(await fetcherWith(run).fetchAudio(youtubeSource, SETTINGS)).toMatchObject({
+      success: false,
+      error: { code: "DOWNLOAD_FAILED" },
+    });
+    expect(readdirSync(tmpDir)).toEqual([]);
+  });
+  test.skipIf(spawnSync("ffmpeg", ["-version"], { stdio: "ignore" }).status !== 0)(
+    "losslessly remuxes synthetic AAC TS through installed FFmpeg",
+    async () => {
+      const { run } = fakeRun((req) => {
+        if (req.command === "ffmpeg") return runProcess({ ...req, env: process.env });
+        req.writeStdout?.(fixture("ts.bin"));
+        return exited("wrong.m4a");
       });
-      const result = await fetcher.fetchAudio(youtubeSource, SETTINGS);
-      expect(result.success ? undefined : result.error.code).toBe("DOWNLOAD_FAILED");
-      if (process.platform === "win32") {
-        expect(warning).toHaveBeenCalledOnce();
-        const [dir] = readdirSync(tmpDir);
-        if (!dir) throw new Error("Missing private directory");
-        expect(readFileSync(path.join(tmpDir, dir, "partial.part"), "utf8")).toBe("x");
-      } else expect(readdirSync(tmpDir)).toEqual([]);
-    } finally {
-      warning.mockRestore();
-    }
-  });
-
+      const result = await fetcherWith(run).fetchAudio(youtubeSource, SETTINGS);
+      if (!result.success) throw new Error(result.error.message);
+      expect(result.data.audio.kind === "file" && path.extname(result.data.audio.path)).toBe(".m4a");
+      await result.data.release();
+      expect(readdirSync(tmpDir)).toEqual([]);
+    },
+  );
+  test.each(["source", "abort", "no FFmpeg", "partial remux", "cancel remux"])(
+    "rejects %s and releases owned partials",
+    async (failure) => {
+      const controller = new AbortController();
+      const { run } = fakeRun((req) => {
+        if (req.command === "ffmpeg") {
+          if (failure === "cancel remux") controller.abort();
+          req.writeStdout?.(fixture("m4a").subarray(0, 12));
+          return { ...exited(""), outcome: failure === "no FFmpeg" ? "not_found" : "exited" };
+        }
+        req.writeStdout?.(fixture(failure === "source" || failure === "abort" ? "m4a" : "ts.bin"));
+        if (failure === "abort") controller.abort();
+        return exited("", failure === "source" ? 1 : 0);
+      });
+      expect(await fetcherWith(run).fetchAudio(youtubeSource, SETTINGS, { signal: controller.signal })).toMatchObject({
+        success: false,
+        error: { code: controller.signal.aborted ? "CANCELLED" : "DOWNLOAD_FAILED" },
+      });
+      expect(readdirSync(tmpDir)).toEqual([]);
+    },
+  );
   test("a direct URL is handed to the provider as a URL", async () => {
     const { run } = fakeRun(() => exited(""));
     const source = {
@@ -581,11 +568,9 @@ describe("cookies", () => {
   test("fetchAudio and download pass the cookies too", async () => {
     const { requests, run } = rewritingRun((request) => {
       const template = request.args[request.args.indexOf("-o") + 1] ?? "";
-      if (template.includes("%(id)s.%(ext)s")) {
-        const file = template.replace("%(id)s.%(ext)s", "abc.m4a");
-        mkdirSync(path.dirname(file), { recursive: true });
-        writeFileSync(file, "audio");
-        return exited(`${file}\n`);
+      if (template === "-") {
+        request.writeStdout?.(readFileSync("test/fixtures-media/silence.m4a"));
+        return exited("");
       }
       return exited(`${path.join(root, "a.mp4")}\n`);
     });
@@ -759,11 +744,8 @@ describe("hardening", () => {
     "release never rejects, even when the temp dir cannot be removed",
     async () => {
       const { run } = fakeRun((request) => {
-        const template = request.args[request.args.indexOf("-o") + 1] ?? "";
-        const file = template.replace("%(id)s.%(ext)s", "abc.m4a");
-        mkdirSync(path.dirname(file), { recursive: true });
-        writeFileSync(file, "audio");
-        return exited(`${file}\n`);
+        request.writeStdout?.(readFileSync("test/fixtures-media/silence.m4a"));
+        return exited("");
       });
       const fetched = await fetcherWith(run).fetchAudio(YOUTUBE_SOURCE, SETTINGS);
       if (!fetched.success) throw new Error("fetchAudio failed");

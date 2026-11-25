@@ -105,7 +105,13 @@ export const audioReadError = (audioPath: string, error: unknown): PiTubeError =
 const loadAudio = async (audio: AudioInput): Promise<Result<LoadedAudio>> => {
   if (audio.kind === "url") return ok(audio);
   try {
-    return ok({ kind: "file", bytes: await readFile(audio.path), name: path.basename(audio.path) });
+    return ok({
+      kind: "file",
+      bytes: audio.bytes
+        ? Buffer.from(audio.bytes.buffer, audio.bytes.byteOffset, audio.bytes.byteLength)
+        : await readFile(audio.path),
+      name: path.basename(audio.path),
+    });
   } catch (error) {
     return err(audioReadError(audio.path, error));
   }

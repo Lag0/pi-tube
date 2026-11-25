@@ -68,6 +68,7 @@ function child(
   stage = false,
   writableDirectory = false,
   removable = false,
+  download = false,
 ) {
   if (
     name.includes(path.sep) ||
@@ -86,7 +87,7 @@ function child(
     check(
       create(
         out,
-        0x100081 | (stage ? 0x10102 : removable ? 0x10000 : 0),
+        0x100081 | (stage || download ? 0x10102 : removable ? 0x10000 : 0),
         {
           size: koffi.sizeof(attributes),
           root,
@@ -173,27 +174,37 @@ export function privateDownload(dir: string, createParent = true) {
   try {
     const handle = child(parent.handle, path.basename(dir), true, CREATE, false, false, true);
     let released = false;
-    let file: { path: string; handle: number | bigint } | undefined;
+    const files = new Map<string, number | bigint>();
     return {
-      hold(filePath: string) {
-        if (released || file) throw unavailable("Download lease is not available");
-        if (path.dirname(filePath) !== dir) throw unavailable("Download outside private directory");
-        file = { path: filePath, handle: child(handle, path.basename(filePath), false, OPEN, false, false, true) };
-        downloads.set(filePath, file.handle);
+      create(name: string) {
+        if (released) throw unavailable("Download lease is not available");
+        const file = child(handle, name, false, CREATE, false, false, false, true);
+        const filePath = path.join(dir, name);
+        files.set(filePath, file);
+        downloads.set(filePath, file);
+        const count = Buffer.alloc(4);
+        return (bytes: Buffer) => {
+          if (!write(file, bytes, bytes.length, count, null) || count.readUInt32LE() !== bytes.length)
+            throw new Error("Incomplete audio write");
+        };
       },
       release() {
         if (released) return;
         released = true;
         try {
-          if (file) {
-            downloads.delete(file.path);
+          let cleanupError: unknown;
+          for (const [name, file] of files) {
+            downloads.delete(name);
             try {
-              discardStage(file.handle);
+              discardStage(file);
+            } catch (error) {
+              cleanupError = error;
             } finally {
-              close(file.handle);
+              close(file);
             }
           }
           discardStage(handle);
+          if (cleanupError) throw cleanupError;
         } finally {
           close(handle);
           parent.release();

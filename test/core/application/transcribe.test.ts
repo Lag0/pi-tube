@@ -694,6 +694,7 @@ describe("kept audio", () => {
       const tmpDir = path.join(outputDir, "tmp");
       mkdirSync(tmpDir);
       const warning = vi.spyOn(process, "emitWarning").mockImplementation(() => {});
+      const bytes = readFileSync("test/fixtures-media/silence.m4a");
       const residue = fallback && occupied;
       const unusable = path.join(outputDir, "not-a-directory");
       writeFileSync(unusable, "fixture");
@@ -706,18 +707,14 @@ describe("kept audio", () => {
           cwd: outputDir,
           tmpDir: fallback ? unusable : tmpDir,
           lookup: async () => [{ address: "93.184.216.34", family: 4 }],
-          run: async ({ args }) => {
-            const file = args[args.indexOf("-o") + 1]?.replace("%(id)s.%(ext)s", "download.m4a");
-            if (!file) throw new Error("missing download template");
-            writeFileSync(file, "fresh bytes");
-            if (residue) writeFileSync(path.join(path.dirname(file), "sidecar"), "unknown");
-            return {
-              outcome: "exited",
-              exitCode: 0,
-              stdout: `${file}
-`,
-              stderr: "",
-            };
+          run: async ({ writeStdout }) => {
+            writeStdout?.(bytes);
+            if (residue) {
+              const [privateDir] = readdirSync(tmpDir);
+              if (!privateDir) throw new Error("Missing private directory");
+              writeFileSync(path.join(tmpDir, privateDir, "sidecar"), "unknown");
+            }
+            return { outcome: "exited", exitCode: 0, stdout: "untrusted.mp3", stderr: "" };
           },
         });
         const dir = path.join(outputDir, sourceDirName("youtube:jNQXAC9IVRw"));
@@ -736,7 +733,8 @@ describe("kept audio", () => {
           const file = req.audio.path;
           expect(path.dirname(path.dirname(file))).toBe(tmpDir);
           expect(() => writeFileSync(file, "changed")).toThrow();
-          expect(readFileSync(file, "utf8")).toBe("fresh bytes");
+          expect(readFileSync(file)).toEqual(bytes);
+          expect(req.audio.bytes).toEqual(bytes);
           return respond(req, opts);
         });
         const request = { input: YOUTUBE, provider: "deepgram", format: "markdown" } as const;
@@ -746,7 +744,7 @@ describe("kept audio", () => {
         expect(JSON.parse(readFileSync(result.data.paths.json, "utf8"))).toBeTruthy();
         expect(readFileSync(result.data.paths.markdown, "utf8").length).toBeGreaterThan(0);
         expect(result.data.audioRetention).toBe(keep ? (occupied ? "skipped" : "kept") : undefined);
-        if (keep) expect(readFileSync(retained, "utf8")).toBe(occupied ? "incumbent" : "fresh bytes");
+        if (keep) expect(readFileSync(retained)).toEqual(occupied ? Buffer.from("incumbent") : bytes);
         expect(local).toHaveBeenCalledTimes(fallback ? 1 : 0);
         if (residue) {
           const [left] = readdirSync(tmpDir);

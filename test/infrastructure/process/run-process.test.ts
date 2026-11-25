@@ -147,7 +147,7 @@ describe("runProcess", () => {
     }
   });
 
-  test("aborting kills the child and its children", async () => {
+  test.each([false, true])("aborting kills the child and its children (binary: %s)", async (binary) => {
     const pidFile = path.join(workDir, "pids.json");
     const controller = new AbortController();
 
@@ -157,16 +157,15 @@ describe("runProcess", () => {
       env: baseEnv,
       timeoutMs: 30_000,
       signal: controller.signal,
+      ...(binary && { writeStdout: () => {} }),
     });
     await waitFor(() => existsSync(pidFile));
     controller.abort();
     const result = await pending;
 
     expect(result.outcome).toBe("aborted");
-    if (!isWindows) {
-      const pids = readPids(pidFile);
-      await waitFor(() => !isAlive(pids.child) && !isAlive(pids.grandchild));
-    }
+    const pids = readPids(pidFile);
+    await waitFor(() => !isAlive(pids.child) && !isAlive(pids.grandchild));
   });
 
   test("an already aborted signal never spawns", async () => {
@@ -241,4 +240,19 @@ describe("buildChildEnv", () => {
       PYTHONIOENCODING: "utf-8",
     });
   });
+});
+
+test("binary stdout is delivered intact and separately from stderr", async () => {
+  const blocks: Buffer[] = [];
+  const result = await runProcess({
+    command: NODE,
+    args: ["-e", "process.stdout.write(Buffer.from([0,255,128]));process.stderr.write('side')"],
+    env: baseEnv,
+    timeoutMs: 10000,
+    writeStdout: (b) => {
+      blocks.push(b);
+    },
+  });
+  expect(result).toMatchObject({ outcome: "exited", exitCode: 0, stdout: "", stderr: "side" });
+  expect(Buffer.concat(blocks)).toEqual(Buffer.from([0, 255, 128]));
 });

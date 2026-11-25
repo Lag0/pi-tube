@@ -1,5 +1,4 @@
-import { mkdirSync, writeFileSync } from "node:fs";
-import path from "node:path";
+import { readFileSync } from "node:fs";
 import type { PiTubeError } from "../../src/core/domain/errors.ts";
 import type { TranscriptionSegment } from "../../src/core/domain/transcript/types.ts";
 import type { SttProvider, SttTranscript } from "../../src/core/ports/stt-provider.ts";
@@ -43,7 +42,7 @@ const exited = (stdout: string, exitCode = 0, stderr = ""): ProcessResult => ({
 
 /**
  * A process runner standing in for yt-dlp: `--dump-single-json` answers `metadata` (or `metadataFailure`),
- * and an audio download writes a small file where `-o` points and prints its path.
+ * and an audio download streams the synthetic AAC fixture.
  */
 export const fakeYtDlp =
   (options: { readonly metadata?: Record<string, unknown>; readonly metadataFailure?: Partial<ProcessResult> } = {}) =>
@@ -52,9 +51,6 @@ export const fakeYtDlp =
       if (options.metadataFailure) return { ...exited("", 1), ...options.metadataFailure };
       return exited(JSON.stringify(options.metadata ?? { url: "https://media.example.com/a.m4a" }));
     }
-    const template = request.args[request.args.indexOf("-o") + 1] ?? "";
-    const file = template.replace("%(id)s.%(ext)s", "media.m4a");
-    mkdirSync(path.dirname(file), { recursive: true });
-    writeFileSync(file, "audio");
-    return exited(`${file}\n`);
+    request.writeStdout?.(readFileSync("test/fixtures-media/silence.m4a"));
+    return exited("");
   };
