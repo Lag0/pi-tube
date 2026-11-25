@@ -182,6 +182,9 @@ export const runLibrary = async (deps: CliDeps, command: LibraryCommand): Promis
               preserved: report.preserved,
               busy: report.busy,
               unsupported: report.unsupported,
+              reason: report.reason,
+              max_audio_bytes: report.unverifiedAudioCap,
+              cap_verified: report.unverifiedAudioCap === undefined ? undefined : false,
               failed: report.failed,
               bytes: report.bytes,
             },
@@ -196,6 +199,16 @@ export const runLibrary = async (deps: CliDeps, command: LibraryCommand): Promis
           ? ""
           : ` transcript_files=${report.transcriptFiles} preserved=${report.preserved} failed=${report.failed}`;
       const summary = `[LIBRARY_PRUNE] dry_run=${report.dryRun} audio_files=${report.audioFiles} source_dirs=${report.sourceDirs} bytes=${report.bytes}${details}${report.busy ? " busy=true (skipped)" : ""}`;
+      if (report.reason === "unverified_audio_ownership") {
+        const cap =
+          report.unverifiedAudioCap === undefined
+            ? ""
+            : ` Space target (${report.unverifiedAudioCap} bytes) not verified.`;
+        deps.io.writeOut(
+          `${summary}\nManual audio cleanup unavailable: ownership and version cannot be verified. No files ${report.dryRun ? "selected" : "removed"}.${cap}`,
+        );
+        return 0;
+      }
       deps.io.writeOut(
         report.unsupported
           ? `${summary}\nSkipped: safe transcript removal is unavailable on this platform.`

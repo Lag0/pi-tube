@@ -129,15 +129,9 @@ const cookiesCheck = (settings: SourceSettings, cookies: "none" | "ok" | PiTubeE
 const libraryCheck = async (deps: DoctorDeps, config: PiTubeConfig): Promise<DoctorCheck> => {
   const entries = await deps.library.entries();
   if (!entries.success) return failed("library", entries.error);
-  // A dry run without `maxAudioBytes` or an age measures all the kept audio.
-  const audio = await deps.library.prune({ dryRun: true, includeTranscripts: false });
-  if (!audio.success) return failed("library", audio.error);
   const { maxAudioBytes } = resolveLibrarySettings(config);
   const limit = maxAudioBytes === undefined ? "no limit" : `limit ${maxAudioBytes}`;
-  return pass(
-    "library",
-    `${entries.data.entries.length} transcripts; ${audio.data.audioFiles} kept audio files, ${audio.data.bytes} bytes (${limit}).`,
-  );
+  return pass("library", `${entries.data.entries.length} transcripts; audio usage not measured (${limit}).`);
 };
 
 const withoutCookies = (config: PiTubeConfig): SourceSettings => {

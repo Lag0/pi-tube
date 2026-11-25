@@ -207,7 +207,7 @@ const LIBRARY_HELP_DOCUMENT: HelpDocument = {
     { term: "--until <YYYY-MM-DD>", description: "list, search: only transcripts made on or before this UTC day." },
     {
       term: "--older-than <days>",
-      description: "prune: only audio files or verified transcript artifacts older than this many days.",
+      description: "prune: age cutoff for verified transcript cleanup. Manual audio cleanup is unavailable.",
     },
     {
       term: "--include-transcripts",
@@ -218,7 +218,7 @@ const LIBRARY_HELP_DOCUMENT: HelpDocument = {
   ],
   examples: [
     `${COMMAND_IDENTITY} library list`,
-    `${COMMAND_IDENTITY} library prune --older-than 30 --yes`,
+    `${COMMAND_IDENTITY} library prune --include-transcripts --older-than 30`,
     `${COMMAND_IDENTITY} library search "aula penal"`,
     `${COMMAND_IDENTITY} library list --provider groq --since 2026-10-01 --json`,
     `${COMMAND_IDENTITY} library show 0123456789abcdef0123 --json`,
@@ -226,7 +226,7 @@ const LIBRARY_HELP_DOCUMENT: HelpDocument = {
   notes: [
     "Search matches names (title, file name or URL, platform), not the transcript text; it ignores case and accents.",
     "The library lives in ~/.pi-tube/library, or PI_TUBE_LIBRARY_DIR.",
-    "Audio is kept for reuse (library.keep_audio) and capped by library.max_audio_bytes; transcripts are never deleted automatically.",
+    "library.max_audio_bytes is a best-effort limit during audio retention, not a verified space target. Keep personal files outside the library.",
     "Transcripts pi-tube v2 saved in ~/.pi-tube (and PI_TUBE_OUTPUT_DIR) are imported once, before the first `transcribe` or `library` command; the originals are never changed. `library import` runs it again.",
   ],
 };

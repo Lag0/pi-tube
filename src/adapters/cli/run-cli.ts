@@ -232,7 +232,7 @@ function createProgram(setAction: (action: CliAction) => void): Command {
     .option("--until <YYYY-MM-DD>", "list, search: only transcripts made on or before this UTC day.")
     .option(
       "--older-than <days>",
-      "prune: only audio files or verified transcript artifacts older than this many days.",
+      "prune: age cutoff for verified transcript cleanup. Manual audio cleanup is unavailable.",
     )
     .option(
       "--scan-diagnostics",
