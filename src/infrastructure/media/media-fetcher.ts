@@ -256,7 +256,7 @@ export const createMediaFetcher = (deps: MediaFetcherDeps): MediaFetcher => {
         };
         return ok({ audio: { kind: "file", path: filePath }, release });
       }
-      const { pageAudioSink, validatePageAudio } = await import("./page-audio.ts");
+      const { pageAudioSink, pageAudioExtension } = await import("./page-audio.ts");
       let dir = path.join(deps.tmpDir, randomUUID());
       let download: ReturnType<typeof import("../library/windows-audio.ts").privateDownload>;
 
@@ -347,8 +347,8 @@ export const createMediaFetcher = (deps: MediaFetcherDeps): MediaFetcher => {
               "-i",
               "pipe:0",
               "-map",
-              "0:a",
-              "-c:a",
+              "0",
+              "-c",
               "copy",
               "-bsf:a",
               "aac_adtstoasc",
@@ -369,14 +369,30 @@ export const createMediaFetcher = (deps: MediaFetcherDeps): MediaFetcher => {
             return err(createError("STORAGE_IO_FAILED", "Cannot store remuxed audio."));
           }
           if (remux.exceeded) throw new Error("Remux exceeds local_files.max_bytes");
-          if (output.outcome !== "exited" || output.exitCode !== 0 || output.stderr.trim() || remux.extension !== "m4a")
+          if (output.outcome !== "exited" || output.exitCode !== 0 || output.stderr.trim())
             throw new Error("Cannot losslessly remux this transport stream; AAC and a compatible FFmpeg are required");
           audio = remux;
         }
         const bytes = await audio.bytes(check);
-        await validatePageAudio(bytes, audio.extension);
+        const extension = await pageAudioExtension(bytes);
+        if (audio === remux && extension !== "m4a" && extension !== "mp4") throw new Error("Invalid remux output");
         check();
-        return ok({ audio: { kind: "file", path: audio.path, bytes }, producerPath: input.path, release });
+        let audioPath = audio.path;
+        if (extension !== audio.extension) {
+          const name = `audio.${extension}`;
+          const write = download.create(name);
+          for (let at = 0; at < bytes.length; at += 256 * 1024) {
+            check();
+            write(bytes.subarray(at, at + 256 * 1024));
+          }
+          audioPath = path.join(dir, name);
+        }
+        check();
+        return ok({
+          audio: { kind: "file", path: audioPath, bytes },
+          producerPath: audio === input ? audioPath : input.path,
+          release,
+        });
       } catch {
         await release();
         if (input.exceeded || remux.exceeded)

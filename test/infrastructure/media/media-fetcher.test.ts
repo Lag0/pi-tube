@@ -428,8 +428,18 @@ describe("fetchAudio", () => {
   });
   describe.skipIf(process.platform !== "win32")("Windows byte handoff", () => {
     const fixture = (ext: string) => readFileSync(`test/fixtures-media/silence.${ext}`);
-    test.each(["m4a", "webm"])("binary %s is validated and released (no FFmpeg on PATH)", async (ext) => {
-      const bytes = fixture(ext);
+    const directFormats = [
+      "silence.m4a",
+      "silence.webm",
+      "silence.mp3",
+      "alac.m4a",
+      "vorbis.webm",
+      "streaming.webm",
+      "muxed.mp4",
+      "muxed.webm",
+    ];
+    test.each(directFormats)("binary %s is validated and released (no FFmpeg on PATH)", async (file) => {
+      const bytes = readFileSync(`test/fixtures-media/${file}`);
       const { requests, run } = fakeRun((req) => {
         req.writeStdout?.(bytes.subarray(0, 1));
         req.writeStdout?.(bytes.subarray(1));
@@ -440,14 +450,15 @@ describe("fetchAudio", () => {
       expect(requests).toHaveLength(1);
       expect(requests[0]?.args.slice(-4)).toEqual(["-o", "-", "--", YOUTUBE]);
       expect(result.data.audio).toMatchObject({ kind: "file", bytes });
-      if (result.data.audio.kind === "file") expect(path.extname(result.data.audio.path)).toBe(`.${ext}`);
+      if (result.data.audio.kind === "file") expect(path.extname(result.data.audio.path)).toBe(path.extname(file));
+      expect(readFileSync(result.data.producerPath ?? "")).toEqual(bytes);
       await result.data.release();
       await result.data.release();
       expect(readdirSync(tmpDir)).toEqual([]);
     });
-    test.each(["m4a", "webm"])("truncated %s is refused", async (ext) => {
+    test.each(directFormats)("truncated %s is refused", async (file) => {
       const { run } = fakeRun((req) => {
-        req.writeStdout?.(fixture(ext).subarray(0, -1));
+        req.writeStdout?.(readFileSync(`test/fixtures-media/${file}`).subarray(0, -1));
         return exited("");
       });
       expect(await fetcherWith(run).fetchAudio(youtubeSource, SETTINGS)).toMatchObject({
@@ -473,36 +484,40 @@ describe("fetchAudio", () => {
       });
       expect(readdirSync(tmpDir)).toEqual([]);
     });
-    test("refuses multiple actual tracks despite a plausible file name", async () => {
-      const { run } = fakeRun((req) => {
-        req.writeStdout?.(readFileSync("test/fixtures-media/two-tracks.webm"));
-        return exited("audio.webm");
-      });
-      expect(await fetcherWith(run).fetchAudio(youtubeSource, SETTINGS)).toMatchObject({
-        success: false,
-        error: { code: "DOWNLOAD_FAILED" },
-      });
-      expect(readdirSync(tmpDir)).toEqual([]);
-    });
-    test.skipIf(spawnSync("ffmpeg", ["-version"], { stdio: "ignore" }).status !== 0)(
-      "stream-copies synthetic AAC TS through installed FFmpeg",
-      async () => {
+    test.each(["two-tracks.webm", "video-only.mp4", "unsupported.ogg", "unsupported.flac", "unsupported.wav"])(
+      "refuses %s before handoff",
+      async (file) => {
         const { run } = fakeRun((req) => {
-          if (req.command === "ffmpeg") return runProcess({ ...req, env: process.env });
-          req.writeStdout?.(fixture("ts.bin"));
-          return exited("wrong.m4a");
+          req.writeStdout?.(readFileSync(`test/fixtures-media/${file}`));
+          return exited("audio.webm");
         });
-        const result = await fetcherWith(run).fetchAudio(youtubeSource, SETTINGS);
-        if (!result.success) throw new Error(result.error.message);
-        expect(readFileSync(result.data.producerPath ?? "")).toEqual(fixture("ts.bin"));
-        if (result.data.audio.kind !== "file") throw new Error("Expected remuxed audio");
-        expect(path.extname(result.data.audio.path)).toBe(".m4a");
-        expect(readFileSync(result.data.audio.path)).toEqual(result.data.audio.bytes);
-        expect(result.data.audio.bytes).not.toEqual(fixture("ts.bin"));
-        await result.data.release();
+        expect(await fetcherWith(run).fetchAudio(youtubeSource, SETTINGS)).toMatchObject({
+          success: false,
+          error: { code: "DOWNLOAD_FAILED" },
+        });
         expect(readdirSync(tmpDir)).toEqual([]);
       },
     );
+    test.skipIf(spawnSync("ffmpeg", ["-version"], { stdio: "ignore" }).status !== 0).each([
+      ["silence.ts.bin", ".m4a"],
+      ["muxed.ts.bin", ".mp4"],
+    ])("stream-copies synthetic %s through installed FFmpeg", async (file, extension) => {
+      const original = readFileSync(`test/fixtures-media/${file}`);
+      const { run } = fakeRun((req) => {
+        if (req.command === "ffmpeg") return runProcess({ ...req, env: process.env });
+        req.writeStdout?.(original);
+        return exited("wrong.m4a");
+      });
+      const result = await fetcherWith(run).fetchAudio(youtubeSource, SETTINGS);
+      if (!result.success) throw new Error(result.error.message);
+      expect(readFileSync(result.data.producerPath ?? "")).toEqual(original);
+      if (result.data.audio.kind !== "file") throw new Error("Expected remuxed audio");
+      expect(path.extname(result.data.audio.path)).toBe(extension);
+      expect(readFileSync(result.data.audio.path)).toEqual(result.data.audio.bytes);
+      expect(result.data.audio.bytes).not.toEqual(original);
+      await result.data.release();
+      expect(readdirSync(tmpDir)).toEqual([]);
+    });
     test.each([
       ["not_found", "private-marker", "YTDLP_NOT_FOUND", "Install yt-dlp"],
       ["aborted", "private-marker login required", "CANCELLED", "Run the command again"],

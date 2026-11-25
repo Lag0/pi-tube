@@ -719,7 +719,8 @@ describe("kept audio", () => {
       const tmpDir = path.join(outputDir, "tmp");
       mkdirSync(tmpDir);
       const warning = vi.spyOn(process, "emitWarning").mockImplementation(() => {});
-      const bytes = readFileSync("test/fixtures-media/silence.m4a");
+      const fixture = fallback && occupied ? "muxed.mp4" : "silence.m4a";
+      const bytes = readFileSync(`test/fixtures-media/${fixture}`);
       const producer = occupied ? bytes : readFileSync("test/fixtures-media/silence.ts.bin");
       const residue = fallback && occupied;
       const unusable = path.join(outputDir, "not-a-directory");
@@ -757,6 +758,7 @@ describe("kept audio", () => {
         vi.spyOn(stt.deepgram, "transcribe").mockImplementation(async (req, opts) => {
           if (req.audio.kind !== "file") throw new Error("expected downloaded file");
           const file = req.audio.path;
+          expect(path.extname(file)).toBe(path.extname(fixture));
           expect(path.dirname(path.dirname(file))).toBe(tmpDir);
           expect(() => writeFileSync(file, "changed")).toThrow();
           expect(readFileSync(file)).toEqual(bytes);
