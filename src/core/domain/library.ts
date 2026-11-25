@@ -63,7 +63,7 @@ export const sourceKeyFromInput = (input: string): SourceKey | undefined => {
 export interface LibrarySettings {
   /** Keep the audio pi-tube downloads for a page, so another provider or language reuses it. Default `true`. */
   readonly keepAudio: boolean;
-  /** Most bytes of kept audio; the oldest audio goes first. No limit when absent. */
+  /** Configured space target, currently unenforced. No target when absent. */
   readonly maxAudioBytes?: number;
 }
 

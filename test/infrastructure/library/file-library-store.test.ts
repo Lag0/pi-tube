@@ -1,5 +1,4 @@
 import {
-  chmodSync,
   existsSync,
   linkSync,
   mkdirSync,
@@ -1032,7 +1031,7 @@ describe("audio", () => {
     const kept = await store.keepAudio("youtube:aaaaaaaaaaa", downloaded);
     const stored = await store.storedSource("youtube:aaaaaaaaaaa");
 
-    expect(kept).toEqual({ success: true, data: path.join(dir, "audio.m4a") });
+    expect(kept).toEqual({ success: true, data: { audioPath: path.join(dir, "audio.m4a") } });
     expect(existsSync(downloaded)).toBe(false);
     if (!isWindows) expect(statSync(path.join(dir, "audio.m4a")).mode & 0o777).toBe(0o600);
     expect(stored.success ? stored.data : undefined).toEqual({
@@ -1057,18 +1056,22 @@ describe("audio", () => {
     expect(missing.success ? missing.data : "error").toBeUndefined();
   });
 
-  test("past max_audio_bytes the oldest audio goes, never the new one and never a transcript", async () => {
+  test("a configured cap preserves prior audio, unrelated audio and notes without claiming enforcement", async () => {
     const store = createFileLibraryStore({ libraryDir });
-    for (const [index, id] of ["aaaaaaaaaaa", "bbbbbbbbbbb", "ccccccccccc"].entries()) {
-      await seedSource(store, id);
-      const kept = await store.keepAudio(`youtube:${id}`, audioFile(`${index}.m4a`), 15);
-      if (!kept.success) throw new Error("keep failed");
-      age(kept.data, 3 - index);
-    }
+    const old = await seedSource(store, "aaaaaaaaaaa");
+    await store.keepAudio("youtube:aaaaaaaaaaa", audioFile("old.m4a", 16));
+    writeFileSync(path.join(old.dir, "audio.wav"), "personal recording");
+    writeFileSync(path.join(old.dir, "note.txt"), "personal note");
+    const fresh = await seedSource(store, "bbbbbbbbbbb");
+    const kept = await store.keepAudio("youtube:bbbbbbbbbbb", audioFile("fresh.m4a", 4), 0);
 
-    expect(audioLeft()).toHaveLength(1);
-    expect(audioLeft()[0]).toContain("youtube-ccccccccccc");
-    expect(transcriptsLeft()).toBe(3);
+    expect(readFileSync(path.join(old.dir, "audio.m4a"), "utf8")).toBe("x".repeat(16));
+    expect(readFileSync(path.join(old.dir, "audio.wav"), "utf8")).toBe("personal recording");
+    expect(readFileSync(path.join(old.dir, "note.txt"), "utf8")).toBe("personal note");
+    const audioPath = path.join(fresh.dir, "audio.m4a");
+    expect(readFileSync(audioPath, "utf8")).toBe("xxxx");
+    expect(kept).toEqual({ success: true, data: { audioPath, audioCap: "unenforced" } });
+    expect(transcriptsLeft()).toBe(2);
   });
 
   test("a new audio larger than max_audio_bytes on its own is still kept", async () => {
@@ -1094,31 +1097,11 @@ describe("audio", () => {
 
     const kept = await store.keepAudio("youtube:aaaaaaaaaaa", downloaded);
 
-    expect(kept).toEqual({ success: true, data: path.join(dir, "audio.m4a") });
+    expect(kept).toEqual({ success: true, data: { audioPath: path.join(dir, "audio.m4a") } });
     expect(readFileSync(path.join(dir, "audio.m4a"), "utf8")).toBe("x".repeat(10));
     expect(readdirSync(dir).filter((name) => name.endsWith(".tmp"))).toEqual([]);
     expect(existsSync(downloaded)).toBe(false);
   });
-
-  test.skipIf(isWindows || process.getuid?.() === 0)(
-    "an eviction that cannot delete old audio does not fail the new keep",
-    async () => {
-      const store = createFileLibraryStore({ libraryDir });
-      const old = await seedSource(store, "aaaaaaaaaaa");
-      const kept = await store.keepAudio("youtube:aaaaaaaaaaa", audioFile("a.m4a"));
-      if (!kept.success) throw new Error("keep failed");
-      age(kept.data, 3);
-      await seedSource(store, "bbbbbbbbbbb");
-      chmodSync(old.dir, 0o500);
-
-      try {
-        const second = await store.keepAudio("youtube:bbbbbbbbbbb", audioFile("b.m4a"), 15);
-        expect(second.success).toBe(true);
-      } finally {
-        chmodSync(old.dir, 0o700);
-      }
-    },
-  );
 
   test("audio prune preserves even audio created by keepAudio without independent evidence", async () => {
     const store = createFileLibraryStore({ libraryDir });
@@ -1128,7 +1111,7 @@ describe("audio", () => {
     writeFileSync(inputPath, audioBytes);
     const kept = await store.keepAudio("youtube:aaaaaaaaaaa", inputPath);
     if (!kept.success) throw new Error("keep failed");
-    const notePath = path.join(path.dirname(kept.data), "personal-note.txt");
+    const notePath = path.join(path.dirname(kept.data.audioPath), "personal-note.txt");
     const noteBytes = Buffer.from("My personal note\n");
     writeFileSync(notePath, noteBytes);
 
@@ -1145,7 +1128,7 @@ describe("audio", () => {
       },
     });
     expect(audioLeft()).toHaveLength(1);
-    expect(readFileSync(kept.data)).toEqual(audioBytes);
+    expect(readFileSync(kept.data.audioPath)).toEqual(audioBytes);
     expect(readFileSync(notePath)).toEqual(noteBytes);
 
     const real = await store.prune({ includeTranscripts: false, dryRun: false });
@@ -1156,7 +1139,7 @@ describe("audio", () => {
       dryRun: false,
     });
     expect(audioLeft()).toHaveLength(1);
-    expect(readFileSync(kept.data)).toEqual(audioBytes);
+    expect(readFileSync(kept.data.audioPath)).toEqual(audioBytes);
     expect(readFileSync(notePath)).toEqual(noteBytes);
     expect(transcriptsLeft()).toBe(1);
   });
@@ -1168,7 +1151,7 @@ describe("audio", () => {
     const old = await store.keepAudio("youtube:aaaaaaaaaaa", audioFile("a.m4a"));
     await store.keepAudio("youtube:bbbbbbbbbbb", audioFile("b.m4a"));
     if (!old.success) throw new Error("keep failed");
-    age(old.data, 40);
+    age(old.data.audioPath, 40);
 
     const pruned = await store.prune({ olderThanDays: 30, includeTranscripts: false, dryRun: false });
 
@@ -1195,7 +1178,7 @@ describe("audio", () => {
       await seedSource(store, id);
       const kept = await store.keepAudio(`youtube:${id}`, audioFile(`${index}.m4a`));
       if (!kept.success) throw new Error("keep failed");
-      age(kept.data, 3 - index);
+      age(kept.data.audioPath, 3 - index);
     }
 
     const pruned = await store.prune({ includeTranscripts: false, dryRun: false, maxAudioBytes: 15 });

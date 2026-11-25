@@ -1,4 +1,5 @@
-import { readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, test } from "vitest";
@@ -72,6 +73,39 @@ describe("CLI and MCP agree on results", () => {
     expect(cliRun.exitCode).toBe(0);
     expect(pick(mcpRun.json as Record<string, unknown>)).toEqual(pick(json(cliRun.stdout)));
     expect(pick(json(cliRun.stdout)).cost).toEqual({ estimate: 0.001362, currency: "USD", price_table: "2026-10-31" });
+  });
+
+  test.each(["CLI", "CLI JSON", "MCP"])("%s reports an unenforced audio cap on a successful keep", async (mode) => {
+    const temp = mkdtempSync(path.join(os.tmpdir(), "pi-tube-cap-"));
+    try {
+      const downloaded = path.join(temp, "input.m4a");
+      writeFileSync(downloaded, "audio");
+      const { mcp, cli } = await both(PROVIDER_KEYS, {
+        ...pricedFakes(),
+        media: createFakeMediaFetcher({ source: PAGE, audio: { kind: "file", path: downloaded } }).fetcher,
+      });
+      expect((await cli(["config", "set", "library.max_audio_bytes", "1"])).exitCode).toBe(0);
+      if (mode === "MCP") {
+        expect(await mcp.call("transcribe", { input: YOUTUBE, provider: "deepgram" })).toMatchObject({
+          isError: false,
+          json: { cache_hit: false, audio_cap: "unenforced" },
+        });
+      } else {
+        const result = await cli([
+          "transcribe",
+          YOUTUBE,
+          "--provider",
+          "deepgram",
+          ...(mode === "CLI JSON" ? ["--json"] : []),
+        ]);
+        expect(result.exitCode).toBe(0);
+        if (mode === "CLI JSON")
+          expect(json(result.stdout)).toMatchObject({ cache_hit: false, audio_cap: "unenforced" });
+        else expect(result.stderr).toContain("library.max_audio_bytes was not enforced");
+      }
+    } finally {
+      rmSync(temp, { recursive: true, force: true });
+    }
   });
 
   test("incomplete Markdown returns storage errors, then ordinary retry restores both outputs", async () => {

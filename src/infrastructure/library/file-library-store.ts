@@ -11,7 +11,6 @@ import {
   readFile,
   rename,
   rm,
-  stat,
   unlink,
   utimes,
   writeFile,
@@ -160,13 +159,6 @@ const AUDIO_PREFIX = "audio.";
 const isAudioName = (name: string): boolean => name.startsWith(AUDIO_PREFIX) && !name.endsWith(".tmp");
 const DAY_MS = 86_400_000;
 const SITE_KINDS: ReadonlySet<string> = new Set(["youtube", "instagram", "site"]);
-
-interface AudioFile {
-  readonly dir: string;
-  readonly path: string;
-  readonly bytes: number;
-  readonly mtimeMs: number;
-}
 
 const text = (value: unknown): string | undefined => (typeof value === "string" ? value : undefined);
 const num = (value: unknown): number | undefined => (typeof value === "number" ? value : undefined);
@@ -415,45 +407,6 @@ export const createFileLibraryStore = (deps: {
     return readdir(dir).catch(() => [] as string[]);
   }
 
-  const filesOf = async (
-    dir: string,
-  ): Promise<Array<{ readonly path: string; readonly bytes: number; readonly mtimeMs: number }>> => {
-    const names = await listDir(dir);
-    const stats = await Promise.all(
-      names.map(async (name) => {
-        const file = path.join(dir, name);
-        const info = await stat(file).catch(() => undefined);
-        return info?.isFile() ? { path: file, bytes: info.size, mtimeMs: info.mtimeMs } : undefined;
-      }),
-    );
-    return stats.filter((entry) => entry !== undefined);
-  };
-
-  const audioFiles = async (): Promise<AudioFile[]> => {
-    const dirs = await listDir(deps.libraryDir);
-    const perDir = await Promise.all(
-      dirs.map(async (name) => {
-        const dir = path.join(deps.libraryDir, name);
-        const files = await filesOf(dir);
-        return files.filter((file) => isAudioName(path.basename(file.path))).map((file) => ({ dir, ...file }));
-      }),
-    );
-    return perDir.flat();
-  };
-
-  /** The oldest audio to drop so the rest fits in `maxBytes`; `keep` is never chosen. */
-  const overflow = (audio: readonly AudioFile[], maxBytes: number, keep?: string): AudioFile[] => {
-    let total = audio.reduce((sum, file) => sum + file.bytes, 0);
-    const dropped: AudioFile[] = [];
-    for (const file of [...audio].sort((left, right) => left.mtimeMs - right.mtimeMs)) {
-      if (total <= maxBytes) break;
-      if (file.path === keep) continue;
-      dropped.push(file);
-      total -= file.bytes;
-    }
-    return dropped;
-  };
-
   const stamp = (artifact: OutputArtifact, transcriptId: string, sourceKey: SourceKey): OutputArtifact => ({
     ...artifact,
     transcript_id: transcriptId,
@@ -629,8 +582,7 @@ export const createFileLibraryStore = (deps: {
         for (const name of await listDir(dir)) {
           if (isAudioName(name) && path.join(dir, name) !== target) await rm(path.join(dir, name), { force: true });
         }
-        // yt-dlp sets the upload date as mtime; the library ages audio from when it was kept. Stamped before the
-        // move, so another run's eviction never sees the new audio as the oldest.
+        // yt-dlp sets the upload date as mtime; the library ages audio from when it was kept.
         const keptAt = now();
         await utimes(filePath, keptAt, keptAt);
         try {
@@ -648,13 +600,7 @@ export const createFileLibraryStore = (deps: {
       } catch (error) {
         return err(ioError("write", target, error));
       }
-      if (maxAudioBytes !== undefined) {
-        // Best-effort: audio that cannot be deleted stays, and the new audio is kept either way.
-        for (const file of overflow(await audioFiles(), maxAudioBytes, target)) {
-          await rm(file.path, { force: true }).catch(() => undefined);
-        }
-      }
-      return ok(target);
+      return ok({ audioPath: target, ...(maxAudioBytes === undefined ? {} : { audioCap: "unenforced" as const }) });
     },
 
     prune: async ({ olderThanDays, includeTranscripts, dryRun, maxAudioBytes }) => {

@@ -10,4 +10,12 @@ On 2026-11-24, [Lag0/pi-tube@0c7c723](https://github.com/Lag0/pi-tube/commit/0c7
 
 `library prune` without `--include-transcripts` no longer scans or removes audio on any platform, including Windows. An `audio.*` name, age, size or identical contents do not establish that pi-tube created the current file. `keepAudio` does not yet record independent evidence of the version it published. Preview and apply therefore report zero selected or removed, **not** zero audio usage. JSON reports `unsupported: true` and `reason: "unverified_audio_ownership"`; a configured space target is returned as `max_audio_bytes` with `cap_verified: false`. Apply is still audited.
 
-This fence does not deliver verified manual reclaim (#34) or change transcript cleanup (#33). It does not protect automatic eviction (#35) or replacement during retention (#36): those existing paths can still remove or overwrite files by name. Do not use a library containing personal files for audio retention. No files are migrated or adopted.
+This fence does not deliver verified manual reclaim (#34) or change transcript cleanup (#33). It did not change eviction or replacement during retention. Do not use a library containing personal files for audio retention. No files are migrated or adopted.
+
+**Delivery update, 2026-11-24:** [Lag0/pi-tube@eb46881](https://github.com/Lag0/pi-tube/commit/eb46881) merged [PR #69](https://github.com/Lag0/pi-tube/pull/69) and closed [#67](https://github.com/Lag0/pi-tube/issues/67). On independently reviewed head `5cae558`, the [Windows, macOS and Ubuntu jobs](https://github.com/Lag0/pi-tube/actions/runs/45530838706) passed. After both preview and apply, the regression read the original retained audio and its sibling note at their original paths and verified their distinct bytes. This establishes preservation, not successful reclaim. [#34 remains open](https://github.com/Lag0/pi-tube/issues/34#issuecomment-7150486632).
+
+### Automatic space cap during retention
+
+A successful keep with `library.max_audio_bytes` reports `audio_cap: "unenforced"` in CLI JSON and MCP, or a warning on CLI stderr. No overflow scan or eviction runs. Disk usage can grow; this is not a measurement of usage or a claim that the target was exceeded. A warning does not invalidate the transcript or require another provider call.
+
+This fence does not complete #35 or #68. Keeping audio for the same source can still delete an alternate-extension sibling or overwrite an occupied name. `storedSource` still reuses audio by filename, not by proof of creation. Safe replacement and reuse need evidence captured at publication and input bound to the verified object through consumption. Keep personal files outside the library.

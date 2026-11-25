@@ -16,6 +16,7 @@ import { artifactChaptersJson, ChapterOutput, transcriptUri } from "./library.ts
 export const TranscribeOutput = z.strictObject({
   transcript_id: z.string(),
   cache_hit: z.boolean(),
+  audio_cap: z.literal("unenforced").optional(),
   provider: z.string(),
   model: z.string().nullable(),
   requested_language: z.string().nullable(),
@@ -113,6 +114,7 @@ const transcribeJson = (output: TranscribeUseCaseOutput, detailed: boolean): z.i
   return {
     transcript_id: output.transcriptId,
     cache_hit: output.cacheHit,
+    ...(output.audioCap && { audio_cap: output.audioCap }),
     provider: artifact.transcription.provider,
     model: artifact.transcription.model ?? null,
     requested_language: artifact.transcription.requested_language ?? null,
