@@ -2,7 +2,10 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, test, vi } from "vitest";
-import { resolveWindowsExecutable } from "../../../src/infrastructure/process/windows-executable.ts";
+import {
+  resolveWindowsExecutable,
+  windowsExecutableCandidates,
+} from "../../../src/infrastructure/process/windows-executable.ts";
 
 test.skipIf(process.platform !== "win32")(
   "resolves inert files only in configured directories or explicit paths",
@@ -13,7 +16,7 @@ test.skipIf(process.platform !== "win32")(
       mkdirSync(tools);
       for (const dir of [cwd, tools]) writeFileSync(path.join(dir, "item.exe"), "placeholder");
       const resolve = (command: string, searchPath?: string) =>
-        resolveWindowsExecutable(command, cwd, searchPath, performance.now() + 5000);
+        resolveWindowsExecutable(windowsExecutableCandidates(command, cwd, searchPath), performance.now() + 5000);
       expect(await resolve("item", `;"";"${tools}";`)).toEqual({ exe: path.join(tools, "item.exe") });
       expect(await resolve("ITEM.EXE", "tools")).toEqual({ exe: path.join(tools, "ITEM.EXE") });
       for (const empty of [undefined, "", ";;", '""'])
@@ -36,9 +39,7 @@ test.each(["aborted", "timed_out"] as const)("a pending probe loses to %s withou
       }),
   );
   const pending = resolveWindowsExecutable(
-    "sample",
-    "C:\\work",
-    "one;two",
+    ["C:\\one\\sample.exe", "C:\\two\\sample.exe"],
     performance.now() + (outcome === "aborted" ? 5000 : 50),
     controller.signal,
     probe,

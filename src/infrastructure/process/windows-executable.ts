@@ -13,24 +13,28 @@ const isFile = async (candidate: string) => {
 
 type Lookup = { exe: string } | { outcome: "aborted" | "timed_out" | "not_found" };
 
+export function windowsExecutableCandidates(command: string, cwd: string, searchPath: string | undefined): string[] {
+  const dirs = /[\\/:]/.test(command) ? [cwd] : (searchPath ?? "").split(";");
+  const name = path.extname(command) ? command : `${command}.exe`;
+  const candidates: string[] = [];
+  for (const entry of dirs) {
+    const dir = entry.replace(/^"(.*)"$/, "$1");
+    if (dir.trim()) candidates.push(path.resolve(cwd, dir, name));
+  }
+  return candidates;
+}
+
 export async function resolveWindowsExecutable(
-  command: string,
-  cwd: string,
-  searchPath: string | undefined,
+  candidates: readonly string[],
   deadline: number,
   signal?: AbortSignal,
   probe = isFile,
 ): Promise<Lookup> {
   const stop = () => (signal?.aborted ? "aborted" : performance.now() >= deadline ? "timed_out" : undefined);
   const search = async (): Promise<Lookup> => {
-    const dirs = /[\\/:]/.test(command) ? [cwd] : (searchPath ?? "").split(";");
-    const name = path.extname(command) ? command : `${command}.exe`;
-    for (const entry of dirs) {
+    for (const exe of candidates) {
       const stopped = stop();
       if (stopped) return { outcome: stopped };
-      const dir = entry.replace(/^"(.*)"$/, "$1");
-      if (!dir.trim()) continue;
-      const exe = path.resolve(cwd, dir, name);
       if (await probe(exe)) return { exe };
     }
     return { outcome: "not_found" };

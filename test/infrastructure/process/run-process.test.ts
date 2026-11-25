@@ -325,6 +325,38 @@ test.skipIf(!isWindows)(
   },
 );
 
+test.skipIf(!isWindows)(
+  "native launch captures relative stdin and drive-relative candidates before yielding",
+  async () => {
+    const native = await import("../../../src/infrastructure/process/windows-binary-process.ts");
+    const launch = vi
+      .spyOn(native, "runWindowsBinary")
+      .mockResolvedValue({ outcome: "not_found", exitCode: null, stdout: "", stderr: "" });
+    const cwd = process.cwd();
+    const resolve = path.win32.resolve;
+    const paths = vi
+      .spyOn(path.win32, "resolve")
+      .mockImplementation((...parts) => resolve(...parts.map((part) => part.replace(/^Z:(?![\\/])/, "Z:/original/"))));
+    const request = {
+      command: "sample",
+      args: [],
+      env: { Path: "first;Z:tools" },
+      windowsBinaryStdinPath: "inputs/file.bin",
+      timeoutMs: 5000,
+      writeStdout: () => {},
+    };
+    const pending = [runProcess(request), runProcess({ ...request, command: "Z:sample" })];
+    expect(paths).toHaveBeenCalledWith(cwd, request.windowsBinaryStdinPath);
+    paths.mockRestore();
+    await Promise.all(pending);
+    const expected = { cwd, stdinPath: resolve(cwd, "inputs/file.bin") };
+    expect(launch.mock.calls.map((call) => call[4])).toEqual([
+      { ...expected, candidates: [resolve(cwd, "first/sample.exe"), "Z:\\original\\tools\\sample.exe"] },
+      { ...expected, candidates: ["Z:\\original\\sample.exe"] },
+    ]);
+  },
+);
+
 test.skipIf(!isWindows)("an aborted discovery cannot launch late or block another binary job", async () => {
   const lookup = windowsExecutable.resolveWindowsExecutable;
   const controller = new AbortController();
@@ -333,20 +365,17 @@ test.skipIf(!isWindows)("an aborted discovery cannot launch late or block anothe
   const probing = new Promise<void>((resolve) => {
     entered = resolve;
   });
-  vi.spyOn(windowsExecutable, "resolveWindowsExecutable").mockImplementationOnce(
-    (command, cwd, search, deadline, signal) =>
-      lookup(
-        command,
-        cwd,
-        search,
-        deadline,
-        signal,
-        () =>
-          new Promise<boolean>((resolve) => {
-            resume = resolve;
-            entered();
-          }),
-      ),
+  vi.spyOn(windowsExecutable, "resolveWindowsExecutable").mockImplementationOnce((candidates, deadline, signal) =>
+    lookup(
+      candidates,
+      deadline,
+      signal,
+      () =>
+        new Promise<boolean>((resolve) => {
+          resume = resolve;
+          entered();
+        }),
+    ),
   );
   const marker = path.join(workDir, "late-launch");
   const request = {

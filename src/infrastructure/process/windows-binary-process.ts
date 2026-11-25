@@ -44,7 +44,7 @@ export async function runWindowsBinary(
   env: Record<string, string>,
   limit: number,
   deadline: number,
-  cwd: string,
+  { cwd, stdinPath, candidates }: { cwd: string; stdinPath: string; candidates: string[] },
 ): Promise<ProcessResult> {
   const stop = () => (req.signal?.aborted ? "aborted" : performance.now() >= deadline ? "timed_out" : undefined);
   const handles = new Set<number>();
@@ -75,8 +75,7 @@ export async function runWindowsBinary(
           s.includes("\0"),
         ),
     );
-    const searchPath = entries.find(([name]) => name.toUpperCase() === "PATH")?.[1];
-    const lookup = await resolveWindowsExecutable(req.command, cwd, searchPath, deadline, req.signal);
+    const lookup = await resolveWindowsExecutable(candidates, deadline, req.signal);
     if ("outcome" in lookup) return failed(lookup.outcome);
     const j = own(job(null, null));
     // JOBOBJECT_EXTENDED_LIMIT_INFORMATION.BasicLimitInformation.LimitFlags
@@ -91,7 +90,7 @@ export async function runWindowsBinary(
     };
     const [out, outW] = makePipe(),
       [err, errW] = makePipe();
-    const input = own(file(req.windowsBinaryStdinPath ?? "NUL", 0x80000000, 7, null, 3, 0, 0));
+    const input = own(file(stdinPath, 0x80000000, 7, null, 3, 0, 0));
     const stdio = [input, outW, errW];
     for (const h of stdio) check(inherit(h, 1, 1));
     const size = Buffer.alloc(width);

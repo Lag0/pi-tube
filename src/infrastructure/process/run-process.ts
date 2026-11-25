@@ -1,5 +1,8 @@
 import { type ChildProcess, spawn, spawnSync } from "node:child_process";
+import { win32 } from "node:path";
 import type { EnvironmentVariables } from "../../core/domain/config.ts";
+
+import { windowsExecutableCandidates } from "./windows-executable.ts";
 
 /** Env vars a child process may see. Everything else (provider keys, `PI_TUBE_*`) stays in pi-tube. */
 export const CHILD_ENV_ALLOWLIST: readonly string[] = [
@@ -136,8 +139,17 @@ export const runProcess = (request: ProcessRequest): Promise<ProcessResult> =>
       const run = async () => {
         const deadline = performance.now() + request.timeoutMs;
         const cwd = process.cwd();
+        const env = buildChildEnv(request.env);
+        const searchPath = Object.entries(env).find(([name]) => name.toUpperCase() === "PATH")?.[1];
+        // Drive-relative paths can depend on the host's per-drive directory as well as cwd.
+        const paths = {
+          cwd,
+          stdinPath:
+            request.windowsBinaryStdinPath === undefined ? "NUL" : win32.resolve(cwd, request.windowsBinaryStdinPath),
+          candidates: windowsExecutableCandidates(request.command, cwd, searchPath),
+        };
         const { runWindowsBinary } = await import("./windows-binary-process.ts");
-        return runWindowsBinary(request, buildChildEnv(request.env), limit, deadline, cwd);
+        return runWindowsBinary(request, env, limit, deadline, paths);
       };
       run().then(resolve, () => resolve({ outcome: "spawn_failed", exitCode: null, stdout: "", stderr: "" }));
       return;
