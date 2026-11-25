@@ -129,16 +129,28 @@ function completeWave(bytes: Buffer) {
     at += 8;
     if (at + size + (size % 2) > bytes.length) return false;
     if (id === "fmt ") {
-      if (align || size < 16 || bytes.readUInt16LE(at) !== 1) return false;
+      if (align || size < 16) return false;
+      const tag = bytes.readUInt16LE(at);
+      const width = bytes.readUInt16LE(at + 14);
+      if (tag === 0xfffe) {
+        // Microsoft's WAVEFORMATEXTENSIBLE: valid precision is independent of the byte-sized container.
+        if (size < 40) return false;
+        const extra = bytes.readUInt16LE(at + 16);
+        const valid = bytes.readUInt16LE(at + 18);
+        if (
+          extra < 22 ||
+          18 + extra > size ||
+          width % 8 ||
+          !valid ||
+          valid > width ||
+          bytes.toString("hex", at + 24, at + 40) !== "0100000000001000800000aa00389b71"
+        )
+          return false;
+      } else if (tag !== 1) return false;
       const channels = bytes.readUInt16LE(at + 2);
       const rate = bytes.readUInt32LE(at + 4);
       align = bytes.readUInt16LE(at + 12);
-      if (
-        !align ||
-        !rate ||
-        align !== channels * Math.ceil(bytes.readUInt16LE(at + 14) / 8) ||
-        bytes.readUInt32LE(at + 8) !== align * rate
-      )
+      if (!align || !rate || align !== channels * Math.ceil(width / 8) || bytes.readUInt32LE(at + 8) !== align * rate)
         return false;
     } else if (id === "data") {
       if (data || !align || !size || size % align) return false;
@@ -164,6 +176,21 @@ function crcByte(table: Uint32Array, crc: number, byte: number) {
   return ((crc << 8) ^ (table[(crc >>> 24) ^ byte] ?? 0)) >>> 0;
 }
 
+// RFC 7845 section 5.1: version 1, mono/stereo or Vorbis surround mapping.
+function validOpusHead(packet: Buffer) {
+  if (packet.length < 19 || packet.toString("latin1", 0, 8) !== "OpusHead" || packet[8] !== 1) return false;
+  const channels = packet.readUInt8(9);
+  if (!channels) return false;
+  if (packet[18] === 0) return channels <= 2 && packet.length === 19;
+  if (packet[18] !== 1 || channels > 8 || packet.length !== 21 + channels) return false;
+  const streams = packet.readUInt8(19);
+  const coupled = packet.readUInt8(20);
+  const decoded = streams + coupled;
+  return (
+    streams > 0 && coupled <= streams && decoded <= 255 && packet.subarray(21).every((c) => c === 255 || c < decoded)
+  );
+}
+
 function completeOpus(bytes: Buffer) {
   const serial = bytes.readUInt32LE(14);
   let lastGranule = 0n;
@@ -184,13 +211,11 @@ function completeOpus(bytes: Buffer) {
       return false;
     const priorPackets = packets;
     const segments = bytes.readUInt8(at + 26);
-    let end = at + 27 + segments;
+    const payload = at + 27 + segments;
+    let end = payload;
     for (let i = at + 27; i < at + 27 + segments; i++) {
       const length = bytes.readUInt8(i);
-      if (
-        !continued &&
-        (!length || (packets < 2 && bytes.toString("latin1", end, end + 8) !== (packets ? "OpusTags" : "OpusHead")))
-      )
+      if (!continued && (!length || (packets === 1 && bytes.toString("latin1", end, end + 8) !== "OpusTags")))
         return false;
       end += length;
       continued = length === 255;
@@ -198,7 +223,11 @@ function completeOpus(bytes: Buffer) {
     }
     if (end > bytes.length || Boolean(flags & 4) !== (end === bytes.length)) return false;
     const granule = bytes.readBigInt64LE(at + 6);
-    if (sequence === 1 && (packets !== 1 || continued || granule !== 0n)) return false;
+    if (
+      sequence === 1 &&
+      (packets !== 1 || continued || granule !== 0n || !validOpusHead(bytes.subarray(payload, end)))
+    )
+      return false;
     if (packets === priorPackets) {
       if (granule !== -1n) return false;
     } else {

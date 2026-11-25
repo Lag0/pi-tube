@@ -103,7 +103,12 @@ try {
   copyFileSync(path.join(repo, "test/fixtures-process/installed-page-audio.mjs"), probe);
   const entry = path.join(pkg, "src/infrastructure/media/page-audio.ts");
   for (const mode of ["intact", "abort", "timeout", "exit"]) {
-    const output = run(`installed page audio ${mode}`, bun, ["--no-env-file", probe, entry, mode], { timeout: 9000 });
+    const output = run(
+      `installed page audio ${mode}`,
+      bun,
+      ["--no-env-file", probe, entry, mode, path.join(repo, "test/fixtures-media")],
+      { timeout: 9000 },
+    );
     assert.match(output, new RegExp(`^${mode} passed `));
     console.log(`Installed page audio: ${output}`);
   }

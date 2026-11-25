@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
+import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
@@ -13,6 +14,12 @@ if (mode === "intact") {
   const bytes = Buffer.from(data);
   for (let at = 0; at < bytes.length; at += 417) bytes.writeUInt32BE(0xfffb9000, at);
   assert.equal(await pageAudioExtension(data, Date.now() + 5000), "mp3");
+  for (const file of ["extensible.wav", "silence.ogg", "stereo.ogg", "5.1.ogg"]) {
+    const bytes = readFileSync(path.join(process.argv[4], file));
+    const input = new SharedArrayBuffer(bytes.length);
+    Buffer.from(input).set(bytes);
+    assert.equal(await pageAudioExtension(input, Date.now() + 5000), path.extname(file).slice(1));
+  }
 } else if (mode === "exit") {
   // A real worker with no message or pending handles. Only the temporary install is modified.
   writeFileSync(worker, "export {};\n");

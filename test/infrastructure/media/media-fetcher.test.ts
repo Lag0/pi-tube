@@ -433,6 +433,9 @@ describe("fetchAudio", () => {
       "silence.webm",
       "silence.mp3",
       "silence.ogg",
+      "stereo.ogg",
+      "5.1.ogg",
+      "extensible.wav",
       "silence.flac",
       "silence.wav",
       "alac.m4a",
@@ -521,6 +524,55 @@ describe("fetchAudio", () => {
       });
       expect(readdirSync(tmpDir)).toEqual([]);
     });
+    test.each([
+      [36, 21], // cbSize too small for the GUID
+      [36, 23], // extension would cross the fmt boundary
+      [38, 0], // no valid bits
+      [38, 25], // wider than the container
+      [34, 23], // non-byte-sized container
+      [32, 2], // alignment must use the 24-bit container, not the valid bits
+      [44, 3], // IEEE float
+      [59, 0], // unknown GUID with the PCM prefix
+    ])("rejects extensible fmt byte %i = %i", async (offset, value) => {
+      const bytes = readFileSync("test/fixtures-media/extensible.wav");
+      bytes.writeUInt8(value, offset);
+      await expectFormatRefusal(bytes);
+    });
+
+    test.each([
+      [8, 16], // incompatible version
+      [9, 0], // no channels
+      [18, 0], // family 0 cannot describe six channels
+      [18, 2], // unsupported mapping family
+      [19, 0], // no streams
+      [20, 5], // more coupled streams than streams
+      [21, 6], // map references a missing decoded channel
+      [9, 7], // packet lacks the seventh map entry
+    ])("rejects OpusHead byte %i = %i with intact page CRC", async (offset, value) => {
+      const bytes = readFileSync("test/fixtures-media/5.1.ogg");
+      const start = bytes.indexOf("OpusHead");
+      bytes.writeUInt8(value, start + offset);
+      bytes.writeUInt32LE(0, 22);
+      let crc = 0;
+      for (const byte of bytes.subarray(0, bytes.indexOf("OggS", start))) {
+        crc ^= byte << 24;
+        for (let bit = 0; bit < 8; bit++) crc = (crc << 1) ^ (crc < 0 ? 0x04c11db7 : 0);
+      }
+      bytes.writeUInt32LE(crc >>> 0, 22);
+      await expectFormatRefusal(bytes);
+    });
+
+    async function expectFormatRefusal(bytes: Buffer) {
+      const { run } = fakeRun((req) => {
+        req.writeStdout?.(bytes);
+        return exited("");
+      });
+      expect(await fetcherWith(run).fetchAudio(youtubeSource, SETTINGS)).toMatchObject({
+        success: false,
+        error: { code: "DOWNLOAD_FAILED" },
+      });
+      expect(readdirSync(tmpDir)).toEqual([]);
+    }
     test.each(["flac", "ogg", "wav"])("%s rejects contradictions even with intact outer extents", async (ext) => {
       const bytes = fixture(ext);
       if (ext === "flac") bytes.writeUInt32BE(3199, 22); // STREAMINFO promises fewer samples than the complete frames.

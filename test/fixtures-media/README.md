@@ -16,4 +16,9 @@ ffmpeg -i muxed.mp4 -c:v libvpx-vp9 -c:a libopus muxed.webm
 ffmpeg -i silence.webm -c copy silence.ogg
 ffmpeg -i silence.m4a -c:a flac -metadata_header_padding 0 silence.flac
 ffmpeg -i silence.m4a -c:a pcm_s16le silence.wav
+ffmpeg -f lavfi -i anullsrc=r=48000:cl=stereo -t 0.1 -c:a libopus stereo.ogg
+ffmpeg -f lavfi -i anullsrc=r=48000:cl=5.1 -t 0.1 -c:a libopus 5.1.ogg
+ffmpeg -f lavfi -i anullsrc=r=16000:cl=mono -t 0.1 -c:a pcm_s24le extensible.wav
 ```
+
+In `extensible.wav`, set byte 38 to 16 after encoding: 16 valid bits in a 24-bit silent container.

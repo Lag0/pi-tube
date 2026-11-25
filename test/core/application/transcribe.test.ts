@@ -749,7 +749,7 @@ describe("kept audio", () => {
   );
 
   test.skipIf(process.platform !== "win32").each([
-    ...["silence.ogg", "silence.flac", "silence.wav"].map((direct) => ({
+    ...["silence.ogg", "stereo.ogg", "5.1.ogg", "silence.flac", "silence.wav", "extensible.wav"].map((direct) => ({
       occupied: false,
       keep: true,
       fallback: false,
