@@ -306,7 +306,7 @@ describe("library prune", () => {
   );
 
   test.runIf(process.platform === "win32")(
-    "a library admission failure is audited for transcription and applied audio prune",
+    "transcription admission failure and no-op audio apply are both audited",
     async () => {
       const app = createApp(
         {
@@ -321,11 +321,14 @@ describe("library prune", () => {
       const handle = pin(libraryDir, "prune-root");
       try {
         expect((await app.transcribe({ input: "test.mp3", format: "json" })).success).toBe(false);
-        expect((await app.pruneLibrary({ includeTranscripts: false, dryRun: false })).success).toBe(false);
+        expect(await app.pruneLibrary({ includeTranscripts: false, dryRun: false })).toMatchObject({
+          success: true,
+          data: { unsupported: true },
+        });
       } finally {
         handle.close();
       }
-      const audit = await app.queryAudit({ offset: 0, limit: 10, errorsOnly: true });
+      const audit = await app.queryAudit({ offset: 0, limit: 10, errorsOnly: false });
       expect(audit.success && audit.data.records.map((r) => r.operation).sort()).toEqual([
         "library_prune",
         "transcribe",
@@ -485,7 +488,7 @@ describe("library prune", () => {
     },
   );
 
-  function previewAudio(args: string[]) {
+  function pruneAudio(args: string[]) {
     return spawnCli(["library", "prune", ...args], {
       BUN_RUNTIME_TRANSPILER_CACHE_PATH: path.join(SPAWN_ROOT, "bun-cache"),
       HOME: libraryDir,
@@ -495,43 +498,75 @@ describe("library prune", () => {
   }
 
   test("default audio preview leaves an empty home empty", () => {
-    expect(previewAudio([]).exitCode).toBe(0);
+    expect(pruneAudio([]).exitCode).toBe(0);
     expect(readdirSync(libraryDir)).toEqual([]);
   });
 
-  test.each(["age", "space"])("%s audio preview preserves home entries and file bytes", (mode) => {
-    for (const [name, bytes] of [
-      ["old", "older"],
-      ["new", "new"],
-    ] as const) {
-      const dir = path.join(libraryDir, "library", name);
-      mkdirSync(dir, { recursive: true });
-      const file = path.join(dir, "audio.mp3");
-      writeFileSync(file, bytes);
-      if (name === "old") utimesSync(file, new Date(0), new Date(0));
-    }
-    const auditDir = path.join(libraryDir, ".pi-tube", "audit");
-    mkdirSync(auditDir, { recursive: true });
-    writeFileSync(path.join(auditDir, "2000-01.jsonl"), "{}");
-    if (mode === "space") {
-      writeFileSync(
-        path.join(libraryDir, "config.json"),
-        JSON.stringify({ ...DEFAULT_CONFIG, library: { max_audio_bytes: 3 } }),
-      );
-    }
-    const snapshot = () =>
-      readdirSync(libraryDir, { recursive: true, encoding: "utf8" })
-        .sort()
-        .map((entry) => {
-          const file = path.join(libraryDir, entry);
-          return [entry, statSync(file).isDirectory() ? null : readFileSync(file)];
-        });
-    const before = snapshot();
-    const result = previewAudio(mode === "space" ? ["--json"] : ["--older-than", "30", "--json"]);
-    expect(result.exitCode).toBe(0);
-    expect(JSON.parse(result.stdout)).toEqual({ dry_run: true, audio_files: 1, source_dirs: 0, bytes: 5 });
-    expect(snapshot()).toEqual(before);
-  });
+  test.each(["age", "space"])(
+    "%s audio preview is read-only and apply preserves files and linked directories",
+    (mode) => {
+      for (const [name, bytes] of [
+        ["old", "older"],
+        ["new", "new"],
+      ] as const) {
+        const dir = path.join(libraryDir, "library", name);
+        mkdirSync(dir, { recursive: true });
+        const file = path.join(dir, "audio.mp3");
+        writeFileSync(file, bytes);
+        if (name === "old") utimesSync(file, new Date(0), new Date(0));
+      }
+      const auditDir = path.join(libraryDir, ".pi-tube", "audit");
+      mkdirSync(auditDir, { recursive: true });
+      writeFileSync(path.join(auditDir, "2000-01.jsonl"), "{}");
+      if (mode === "space") {
+        writeFileSync(
+          path.join(libraryDir, "config.json"),
+          JSON.stringify({ ...DEFAULT_CONFIG, library: { max_audio_bytes: 3 } }),
+        );
+      }
+      const snapshot = () =>
+        readdirSync(libraryDir, { recursive: true, encoding: "utf8" })
+          .sort()
+          .map((entry) => {
+            const file = path.join(libraryDir, entry);
+            return [entry, statSync(file).isDirectory() ? null : readFileSync(file)];
+          });
+      const before = snapshot();
+      const result = pruneAudio(mode === "space" ? ["--json"] : ["--older-than", "30", "--json"]);
+      expect(result.exitCode).toBe(0);
+      const counts = {
+        audio_files: 0,
+        source_dirs: 0,
+        bytes: 0,
+        unsupported: true,
+        reason: "unverified_audio_ownership",
+        ...(mode === "space" ? { max_audio_bytes: 3, cap_verified: false } : {}),
+      };
+      expect(JSON.parse(result.stdout)).toEqual({ ...counts, dry_run: true });
+      expect(snapshot()).toEqual(before);
+
+      const external = path.join(libraryDir, "outside");
+      mkdirSync(external);
+      writeFileSync(path.join(external, "audio.mp3"), "personal");
+      const junction = path.join(libraryDir, "library", "alias");
+      symlinkSync(external, junction, process.platform === "win32" ? "junction" : "dir");
+      const applied = pruneAudio([...(mode === "space" ? [] : ["--older-than", "30"]), "--yes", "--json"]);
+      expect(applied.exitCode).toBe(0);
+      expect(JSON.parse(applied.stdout)).toEqual({ ...counts, dry_run: false });
+      if (mode === "space") {
+        const human = pruneAudio(["--yes"]);
+        expect(human.exitCode).toBe(0);
+        expect(human.stdout).toContain("No files removed. Space target (3 bytes) not verified.");
+      }
+      expect(readFileSync(path.join(junction, "audio.mp3"), "utf8")).toBe("personal");
+      for (const [name, bytes] of [
+        ["old", "older"],
+        ["new", "new"],
+      ] as const) {
+        expect(readFileSync(path.join(libraryDir, "library", name, "audio.mp3"), "utf8")).toBe(bytes);
+      }
+    },
+  );
 
   test("transcript preview does not import or audit into an empty home", async () => {
     const home = path.join(libraryDir, "empty-home");
@@ -562,21 +597,28 @@ describe("library prune", () => {
     expect(readdirSync(dir)).toHaveLength(process.platform === "win32" ? 0 : 3);
   });
 
-  test("without --yes it only reports, and says how to delete", async () => {
+  test("audio preview explains the safety stop rather than suggesting --yes", async () => {
     await seed([page("aaaaaaaaaaa", "Aula de Ação Penal")]);
 
     const result = await library(["prune"]);
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toBe(
-      "[LIBRARY_PRUNE] dry_run=true audio_files=0 source_dirs=0 bytes=0\nRun again with --yes to delete.\n",
+      "[LIBRARY_PRUNE] dry_run=true audio_files=0 source_dirs=0 bytes=0\nManual audio cleanup unavailable: ownership and version cannot be verified. No files selected.\n",
     );
   });
 
   test("--json reports the counts", async () => {
     const payload = JSON.parse((await library(["prune", "--yes", "--json"])).stdout);
 
-    expect(payload).toEqual({ dry_run: false, audio_files: 0, source_dirs: 0, bytes: 0 });
+    expect(payload).toEqual({
+      dry_run: false,
+      audio_files: 0,
+      source_dirs: 0,
+      bytes: 0,
+      unsupported: true,
+      reason: "unverified_audio_ownership",
+    });
   });
 
   test("--include-transcripts without --older-than is INPUT_INVALID", async () => {

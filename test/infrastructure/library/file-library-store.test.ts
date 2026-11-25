@@ -1120,27 +1120,48 @@ describe("audio", () => {
     },
   );
 
-  test("prune without --yes reports and deletes nothing; with it, deletes audio only", async () => {
+  test("audio prune preserves even audio created by keepAudio without independent evidence", async () => {
     const store = createFileLibraryStore({ libraryDir });
     await seedSource(store, "aaaaaaaaaaa");
-    await store.keepAudio("youtube:aaaaaaaaaaa", audioFile("a.m4a"));
+    const audioBytes = Buffer.from([0x00, 0xff, 0x42, 0x80]);
+    const inputPath = path.join(root, "a.m4a");
+    writeFileSync(inputPath, audioBytes);
+    const kept = await store.keepAudio("youtube:aaaaaaaaaaa", inputPath);
+    if (!kept.success) throw new Error("keep failed");
+    const notePath = path.join(path.dirname(kept.data), "personal-note.txt");
+    const noteBytes = Buffer.from("My personal note\n");
+    writeFileSync(notePath, noteBytes);
 
     const dry = await store.prune({ includeTranscripts: false, dryRun: true });
-    expect(dry).toEqual({ success: true, data: { audioFiles: 1, sourceDirs: 0, bytes: 10, dryRun: true } });
+    expect(dry).toEqual({
+      success: true,
+      data: {
+        audioFiles: 0,
+        sourceDirs: 0,
+        bytes: 0,
+        dryRun: true,
+        unsupported: true,
+        reason: "unverified_audio_ownership",
+      },
+    });
     expect(audioLeft()).toHaveLength(1);
+    expect(readFileSync(kept.data)).toEqual(audioBytes);
+    expect(readFileSync(notePath)).toEqual(noteBytes);
 
     const real = await store.prune({ includeTranscripts: false, dryRun: false });
     expect(real.success ? real.data : undefined).toMatchObject({
-      audioFiles: 1,
+      audioFiles: 0,
       sourceDirs: 0,
-      bytes: 10,
+      bytes: 0,
       dryRun: false,
     });
-    expect(audioLeft()).toHaveLength(0);
+    expect(audioLeft()).toHaveLength(1);
+    expect(readFileSync(kept.data)).toEqual(audioBytes);
+    expect(readFileSync(notePath)).toEqual(noteBytes);
     expect(transcriptsLeft()).toBe(1);
   });
 
-  test("prune --older-than keeps recent audio", async () => {
+  test("age cutoff cannot authorize removal", async () => {
     const store = createFileLibraryStore({ libraryDir });
     await seedSource(store, "aaaaaaaaaaa");
     await seedSource(store, "bbbbbbbbbbb");
@@ -1151,8 +1172,8 @@ describe("audio", () => {
 
     const pruned = await store.prune({ olderThanDays: 30, includeTranscripts: false, dryRun: false });
 
-    expect(pruned.success ? pruned.data.audioFiles : undefined).toBe(1);
-    expect(audioLeft().map((entry) => entry.split("/")[0]?.startsWith("youtube-bbbbbbbbbbb"))).toEqual([true]);
+    expect(pruned.success ? pruned.data.audioFiles : undefined).toBe(0);
+    expect(audioLeft()).toHaveLength(2);
   });
 
   test("prune --include-transcripts removes an owned directory once its old artifacts are gone", async () => {
@@ -1168,7 +1189,7 @@ describe("audio", () => {
     expect(transcriptsLeft()).toBe(isWindows ? 1 : 2);
   });
 
-  test("prune applies max_audio_bytes: the oldest audio goes until the rest fits", async () => {
+  test("manual space cleanup reports the unverified cap and preserves retained audio", async () => {
     const store = createFileLibraryStore({ libraryDir });
     for (const [index, id] of ["aaaaaaaaaaa", "bbbbbbbbbbb", "ccccccccccc"].entries()) {
       await seedSource(store, id);
@@ -1179,8 +1200,7 @@ describe("audio", () => {
 
     const pruned = await store.prune({ includeTranscripts: false, dryRun: false, maxAudioBytes: 15 });
 
-    expect(pruned.success ? pruned.data.audioFiles : undefined).toBe(2);
-    expect(audioLeft()).toHaveLength(1);
-    expect(audioLeft()[0]).toContain("youtube-ccccccccccc");
+    expect(pruned).toMatchObject({ success: true, data: { audioFiles: 0, unverifiedAudioCap: 15 } });
+    expect(audioLeft()).toHaveLength(3);
   });
 });

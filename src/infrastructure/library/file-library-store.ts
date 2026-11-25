@@ -668,30 +668,15 @@ export const createFileLibraryStore = (deps: {
           return err(ioError("read", deps.libraryDir, error));
         }
       }
-      const audio = await audioFiles();
-      const byAge =
-        cutoff !== undefined ? audio.filter((file) => file.mtimeMs < cutoff) : maxAudioBytes === undefined ? audio : [];
-      const aged = new Set(byAge.map((file) => file.path));
-      const bySize =
-        maxAudioBytes === undefined
-          ? []
-          : overflow(
-              audio.filter((file) => !aged.has(file.path)),
-              maxAudioBytes,
-            );
-      const dropped = [...byAge, ...bySize];
-      if (!dryRun) {
-        try {
-          for (const file of dropped) await rm(file.path, { force: true });
-        } catch (error) {
-          return err(ioError("write", deps.libraryDir, error));
-        }
-      }
+      // keepAudio publishes no independent ownership/version receipt. A filename cannot authorize removal.
       return ok({
-        audioFiles: dropped.length,
+        audioFiles: 0,
         sourceDirs: 0,
-        bytes: dropped.reduce((sum, entry) => sum + entry.bytes, 0),
+        bytes: 0,
         dryRun,
+        unsupported: true,
+        reason: "unverified_audio_ownership",
+        ...(maxAudioBytes === undefined ? {} : { unverifiedAudioCap: maxAudioBytes }),
       });
     },
 

@@ -43,13 +43,15 @@ export interface PruneReport {
   readonly preserved?: number;
   readonly busy?: boolean;
   readonly unsupported?: boolean;
+  readonly reason?: "unverified_audio_ownership";
+  readonly unverifiedAudioCap?: number;
   readonly failed?: number;
   readonly sourceDirs: number;
   readonly bytes: number;
   readonly dryRun: boolean;
 }
 
-/** What `prune` removes: audio (all of it, or older than `olderThanDays`, or past `maxAudioBytes`), or verified transcript artifacts. */
+/** Manual audio policy or verified transcript cleanup. An unsupported policy selects nothing. */
 export interface PruneRequest {
   readonly olderThanDays?: number;
   /** Includes verified transcript artifacts older than `olderThanDays` (required then). */

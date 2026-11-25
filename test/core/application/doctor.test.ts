@@ -257,16 +257,16 @@ describe("doctor", () => {
     });
   });
 
-  test("library counts transcripts and kept audio, with the limit", async () => {
+  test("library counts transcripts without inferring audio usage from prune", async () => {
     const config: PiTubeConfig = { ...DEFAULT_CONFIG, library: { max_audio_bytes: 1000 } };
 
     expect(await check(doctor().run, "library")).toEqual({
       id: "library",
       status: "ok",
-      summary: "0 transcripts; 0 kept audio files, 0 bytes (no limit).",
+      summary: "0 transcripts; audio usage not measured (no limit).",
     });
     expect((await check(doctor({ config }).run, "library"))?.summary).toBe(
-      "0 transcripts; 0 kept audio files, 0 bytes (limit 1000).",
+      "0 transcripts; audio usage not measured (limit 1000).",
     );
   });
 

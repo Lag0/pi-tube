@@ -145,17 +145,7 @@ export const createApp = (environment: AppEnvironment, overrides: AppOverrides =
     <I, O>(useCase: UseCase<I, O>): UseCase<I, O> =>
     (input, options) =>
       withLibraryActivity(paths.libraryDir, () => useCase(input, options));
-  const prune = createPruneLibrary({
-    library: {
-      ...library,
-      prune: (input) =>
-        !input.includeTranscripts && !input.dryRun
-          ? withLibraryActivity(paths.libraryDir, () => library.prune(input))
-          : library.prune(input),
-    },
-    configStore,
-    audit,
-  });
+  const prune = createPruneLibrary({ library, configStore, audit });
   return {
     providers: PROVIDER_DESCRIPTORS,
     listProviders: createListProviders(accountDeps),

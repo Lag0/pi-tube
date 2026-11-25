@@ -200,10 +200,7 @@ const runPrune =
     return deps.library.prune({ ...input, ...(maxAudioBytes === undefined ? {} : { maxAudioBytes }) });
   };
 
-/**
- * Removes kept audio (all of it, or older than `olderThanDays`, plus what `library.max_audio_bytes` does not fit)
- * or, with `includeTranscripts`, verified transcript artifacts older than `olderThanDays`. Prune previews write nothing.
- */
+/** Only apply is audited: prune previews write nothing. */
 export const createPruneLibrary =
   (
     deps: LibraryDeps & { readonly configStore: ConfigStore; readonly audit: AuditTrailDeps },
