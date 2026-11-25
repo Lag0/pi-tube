@@ -127,6 +127,7 @@ export async function pruneTranscripts(root: string, cutoff: number, dryRun: boo
   async function remove(file: string, handle: ReturnType<typeof pin>, expected: string) {
     const stat = await inspect(file);
     if (
+      handle.linkCount !== 1 ||
       !stat.isFile() ||
       identity(stat) !== handle.identity ||
       Number(stat.mtimeMs) >= cutoff ||

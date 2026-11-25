@@ -19,3 +19,11 @@ This fence does not deliver verified manual reclaim (#34) or change transcript c
 A successful keep with `library.max_audio_bytes` reports `audio_cap: "unenforced"` in CLI JSON and MCP, or a warning on CLI stderr. No overflow scan or eviction runs. Disk usage can grow; this is not a measurement of usage or a claim that the target was exceeded. A warning does not invalidate the transcript or require another provider call.
 
 This fence does not complete #35 or #68. Keeping audio for the same source can still delete an alternate-extension sibling or overwrite an occupied name. `storedSource` still reuses audio by filename, not by proof of creation. Safe replacement and reuse need evidence captured at publication and input bound to the verified object through consumption. Keep personal files outside the library.
+
+### Manual transcript cleanup (#33)
+
+`library prune --include-transcripts --older-than N` previews; `--yes` rechecks before applying. This backend can remove unchanged, old, individually receipted artifacts on Windows drive-letter paths on local fixed or removable volumes advertising POSIX unlink/rename support. Every ancestor must be pinnable without following a reparse point; deletion must succeed by disposition on the authorized handle. Windows alone is not a capability guarantee. A busy library is skipped, and an unexpected I/O failure is reported separately from preservation.
+
+The current Linux and macOS backend preserves everything. Windows UNC roots, other non-drive roots, other drive types and volumes without the required flag are unsupported. Unsupported preview and apply select/remove nothing and report zero bytes. There is no pathname-unlink fallback. A link or junction is not authority to clean its target; multiply linked files (including metadata) are not selected for removal.
+
+A legacy directory needs no migration for entries with valid independent receipts. Without that evidence even a familiar name and matching contents cannot distinguish an original from a replacement. Edited and unreceipted entries stay. Only an empty owned directory can go; the library root stays. Bytes are logical file lengths, including `source.json` only when removed, not volume free-space measurements. The transcript-file count excludes metadata. None of these guarantees authorize audio cleanup, eviction or replacement (#34–36).
