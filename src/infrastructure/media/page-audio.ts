@@ -7,6 +7,7 @@ const readInto = promisify(read);
 export async function pageAudioExtension(buffer: SharedArrayBuffer, deadline: number, signal?: AbortSignal) {
   if (Date.now() >= deadline || signal?.aborted) throw new Error("Page audio validation expired");
   const worker = new Worker(new URL("./page-audio-worker.ts", import.meta.url), { workerData: buffer });
+  let exited = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let stop: (() => void) | undefined;
   try {
@@ -16,12 +17,16 @@ export async function pageAudioExtension(buffer: SharedArrayBuffer, deadline: nu
       signal?.addEventListener("abort", stop, { once: true });
       worker.once("message", resolve);
       worker.once("error", reject);
-      worker.once("exit", () => reject(new Error("Page audio validation stopped")));
+      worker.once("exit", () => {
+        exited = true;
+        reject(new Error("Page audio validation stopped"));
+      });
     });
   } finally {
     clearTimeout(timer);
     if (stop) signal?.removeEventListener("abort", stop);
-    await worker.terminate();
+    // On Bun 1.3.3, terminating after the exit event can leave the promise pending.
+    if (!exited) await worker.terminate();
   }
 }
 export function pageAudioSink(

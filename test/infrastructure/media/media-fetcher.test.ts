@@ -456,6 +456,29 @@ describe("fetchAudio", () => {
       await result.data.release();
       expect(readdirSync(tmpDir)).toEqual([]);
     });
+    test.each(["intact", "untagged", "missing tail", "wrong frames", "wrong bytes"])("VBRI: %s", async (mode) => {
+      // Six silent MPEG-1 Layer III mono frames; VBRI is at 36 even for mono.
+      const frameSize = 417;
+      const bytes = Buffer.alloc(6 * frameSize);
+      for (let at = 0; at < bytes.length; at += frameSize) bytes.writeUInt32BE(0xfffb90c0, at);
+      if (mode !== "untagged") {
+        bytes.write("VBRI", 36);
+        bytes.writeUInt16BE(1, 40);
+        const audioBytes = bytes.length - frameSize;
+        bytes.writeUInt32BE(audioBytes + (mode === "wrong bytes" ? 1 : 0), 46);
+        bytes.writeUInt32BE(mode === "wrong frames" ? 6 : 5, 50);
+        // One two-byte seek entry covering the five audio frames at scale one.
+        for (const [i, n] of [1, 1, 2, 5, audioBytes].entries()) bytes.writeUInt16BE(n, 54 + i * 2);
+      }
+      const { run } = fakeRun((req) => {
+        req.writeStdout?.(mode === "missing tail" ? bytes.subarray(0, -frameSize) : bytes);
+        return exited("");
+      });
+      const result = await fetcherWith(run).fetchAudio(youtubeSource, SETTINGS);
+      if (result.success) await result.data.release();
+      expect(result.success).toBe(mode === "intact" || mode === "untagged");
+      expect(readdirSync(tmpDir)).toEqual([]);
+    });
     test.each(["Info", "Xing"])("%s totals must match the complete MPEG frames", async (tag) => {
       const bytes = fixture("mp3");
       const header = bytes.indexOf("Info");

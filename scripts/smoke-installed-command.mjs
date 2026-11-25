@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -99,6 +99,14 @@ try {
     ...["deepgram", "groq", "elevenlabs"].map((id) => `${id} configured=false key_source=none`),
   ]);
   console.log(`Installed CLI parser smoke passed: ${installed.name}@${installed.version}`);
+  const probe = path.join(cwd, "installed-page-audio.mjs");
+  copyFileSync(path.join(repo, "test/fixtures-process/installed-page-audio.mjs"), probe);
+  const entry = path.join(pkg, "src/infrastructure/media/page-audio.ts");
+  for (const mode of ["intact", "abort", "timeout", "exit"]) {
+    const output = run(`installed page audio ${mode}`, bun, ["--no-env-file", probe, entry, mode], { timeout: 9000 });
+    assert.match(output, new RegExp(`^${mode} passed `));
+    console.log(`Installed page audio: ${output}`);
+  }
   if (win) {
     const input = path.join(cwd, "synthetic.bin");
     const bytes = Buffer.from([0, 255, 13, 10]);

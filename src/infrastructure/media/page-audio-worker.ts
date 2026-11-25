@@ -64,7 +64,7 @@ function completeMp3(bytes: Buffer) {
   }
   const end =
     bytes.toString("latin1", bytes.length - 128, bytes.length - 125) === "TAG" ? bytes.length - 128 : bytes.length;
-  const start = at;
+  let countedBytesStart = at;
   let frameCount: number | undefined;
   let byteCount: number | undefined;
   let frames = 0;
@@ -96,17 +96,26 @@ function completeMp3(bytes: Buffer) {
           field += 4;
         }
         if (field > frameEnd) return false;
+      } else if (
+        at + 42 <= frameEnd &&
+        bytes.toString("latin1", at + 36, at + 40) === "VBRI" &&
+        bytes.readUInt16BE(at + 40) === 1
+      ) {
+        if (at + 62 > frameEnd) return false;
+        byteCount = bytes.readUInt32BE(at + 46);
+        frameCount = bytes.readUInt32BE(at + 50);
+        countedBytesStart = frameEnd;
       }
     }
     at = frameEnd;
     frames++;
   }
-  // Xing counts audio frames after the header, but bytes including the header (not ID3).
+  // Both tags count following audio frames. Only Xing/Info include the header frame in bytes.
   return (
     frames > 0 &&
     at === end &&
     (frameCount === undefined || frameCount === frames - 1) &&
-    (byteCount === undefined || byteCount === end - start)
+    (byteCount === undefined || byteCount === end - countedBytesStart)
   );
 }
 
