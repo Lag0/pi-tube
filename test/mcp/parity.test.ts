@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import type { AppOverrides } from "../../src/bootstrap.ts";
 import { createError, type ResolvedSource } from "../../src/core/index.ts";
 import { runCliInProcess } from "../helpers/cli-harness.ts";
@@ -112,6 +112,52 @@ describe("CLI and MCP agree on results", () => {
         else expect(result.stderr).toContain("library.max_audio_bytes was not enforced");
       }
     } finally {
+      rmSync(temp, { recursive: true, force: true });
+    }
+  });
+
+  test.skipIf(process.platform !== "win32").each([
+    ["CLI JSON", "incomplete"],
+    ["MCP", "incomplete"],
+    ["CLI JSON", "skipped"],
+    ["MCP", "skipped"],
+    ["CLI", "incomplete"],
+    ["CLI", "skipped"],
+  ])("%s keeps the paid result for %s retention without a configured cap", async (mode, status) => {
+    const native = await import("../../src/infrastructure/library/windows-audio.ts");
+    const publish = vi.spyOn(native, "publishDownloadedAudio").mockImplementation(() => {
+      throw Object.assign(new Error("fixture"), { code: status === "skipped" ? "ENOTSUP" : "EIO" });
+    });
+    const temp = mkdtempSync(path.join(os.tmpdir(), "pi-tube-status-"));
+    try {
+      const file = path.join(temp, "input.m4a");
+      writeFileSync(file, "audio");
+      const provider = createFakeSttProvider("deepgram", { ...TRANSCRIPT_HELLO, durationSeconds: 19 });
+      const { cli, mcp } = await both(PROVIDER_KEYS, {
+        stt: { ...fakeProviders(), deepgram: provider },
+        media: createFakeMediaFetcher({ source: PAGE, audio: { kind: "file", path: file } }).fetcher,
+      });
+      const args = ["transcribe", YOUTUBE, "--provider", "deepgram"];
+      if (mode === "CLI") {
+        const result = await cli(args);
+        expect(result.exitCode).toBe(0);
+        expect(result.stderr).toContain(
+          status === "skipped" ? "retention was skipped" : "I/O failure prevented audio retention",
+        );
+        expect(result.stderr).not.toContain("max_audio_bytes");
+      } else {
+        const summary =
+          mode === "MCP"
+            ? (await mcp.call("transcribe", { input: YOUTUBE, provider: "deepgram" })).json
+            : json((await cli([...args, "--json"])).stdout);
+        expect(summary).toMatchObject({ audio_retention: status, cache_hit: false, audio_seconds: 19, characters: 11 });
+        expect(summary).not.toHaveProperty("audio_cap");
+      }
+      expect(json((await cli([...args, "--json"])).stdout)).toMatchObject({ cache_hit: true });
+      expect(provider.requests).toHaveLength(1);
+      expect(publish).toHaveBeenCalledOnce();
+    } finally {
+      publish.mockRestore();
       rmSync(temp, { recursive: true, force: true });
     }
   });

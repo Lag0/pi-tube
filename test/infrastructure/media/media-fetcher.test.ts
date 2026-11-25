@@ -11,7 +11,7 @@ import {
 } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import type { SiteSource } from "../../../src/core/domain/source.ts";
 import type { SourceSettings } from "../../../src/core/domain/source-settings.ts";
 import { createMediaFetcher } from "../../../src/infrastructure/media/media-fetcher.ts";
@@ -363,6 +363,7 @@ describe("fetchAudio", () => {
     expect(requests[0]?.args.slice(-2)).toEqual(["--", YOUTUBE]);
     expect(requests[0]?.timeoutMs).toBe(1_800_000);
     await result.data.release();
+    await result.data.release();
     expect(readdirSync(tmpDir)).toEqual([]);
   });
 
@@ -421,7 +422,7 @@ describe("fetchAudio", () => {
     });
   });
 
-  test("a failed audio download is DOWNLOAD_FAILED and leaves the temp dir empty", async () => {
+  test("a failed download preserves the primary error and does not authorize Windows partial-file deletion", async () => {
     const { run } = fakeRun((request) => {
       const outputTemplate = request.args[request.args.indexOf("-o") + 1] ?? "";
       mkdirSync(path.dirname(outputTemplate), { recursive: true });
@@ -429,10 +430,26 @@ describe("fetchAudio", () => {
       return exited("", 1, "ERROR: boom");
     });
 
-    const result = await fetcherWith(run).fetchAudio(youtubeSource, SETTINGS);
-
-    expect(result.success ? undefined : result.error.code).toBe("DOWNLOAD_FAILED");
-    expect(existsSync(tmpDir) ? readdirSync(tmpDir) : []).toEqual([]);
+    const warning = vi.spyOn(process, "emitWarning").mockImplementation(() => {});
+    try {
+      const fetcher = createMediaFetcher({
+        env: { PATH: "/bin" },
+        cwd: root,
+        tmpDir,
+        run,
+        lookup: PUBLIC_LOOKUP,
+      });
+      const result = await fetcher.fetchAudio(youtubeSource, SETTINGS);
+      expect(result.success ? undefined : result.error.code).toBe("DOWNLOAD_FAILED");
+      if (process.platform === "win32") {
+        expect(warning).toHaveBeenCalledOnce();
+        const [dir] = readdirSync(tmpDir);
+        if (!dir) throw new Error("Missing private directory");
+        expect(readFileSync(path.join(tmpDir, dir, "partial.part"), "utf8")).toBe("x");
+      } else expect(readdirSync(tmpDir)).toEqual([]);
+    } finally {
+      warning.mockRestore();
+    }
   });
 
   test("a direct URL is handed to the provider as a URL", async () => {
@@ -703,11 +720,21 @@ describe("hardening", () => {
       lookup: PUBLIC_LOOKUP,
     });
 
-    const result = await fetcher.fetchAudio(YOUTUBE_SOURCE, SETTINGS);
+    const local =
+      process.platform === "win32"
+        ? vi
+            .spyOn(await import("../../../src/infrastructure/library/windows-audio.ts"), "localDownloadRoot")
+            .mockReturnValue(blocker)
+        : undefined;
+    try {
+      const result = await fetcher.fetchAudio(YOUTUBE_SOURCE, SETTINGS);
 
-    expect(result.success ? undefined : result.error.code).toBe("STORAGE_IO_FAILED");
-    expect(result.success ? undefined : result.error.hint).not.toContain("--output");
-    expect(requests).toHaveLength(0);
+      expect(result.success ? undefined : result.error.code).toBe("STORAGE_IO_FAILED");
+      expect(result.success ? undefined : result.error.hint).not.toContain("--output");
+      expect(requests).toHaveLength(0);
+    } finally {
+      local?.mockRestore();
+    }
   });
 
   test("download stages its temp files inside the output dir, so the final move never crosses filesystems", async () => {

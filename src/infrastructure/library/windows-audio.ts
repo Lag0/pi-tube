@@ -34,6 +34,9 @@ const set = nt.func(
 const close = kernel.func("int __stdcall CloseHandle(intptr_t h)");
 const info = kernel.func("int __stdcall GetFileInformationByHandle(intptr_t h, void *data)");
 const read = kernel.func("int __stdcall ReadFile(intptr_t h, void *data, uint32_t size, void *count, void *overlap)");
+const rewind = kernel.func(
+  "int __stdcall SetFilePointerEx(intptr_t h, int64_t distance, void *position, uint32_t method)",
+);
 const write = kernel.func("int __stdcall WriteFile(intptr_t h, void *data, uint32_t size, void *count, void *overlap)");
 const time = kernel.func("int __stdcall SetFileTime(intptr_t h, void *birth, void *access, void *modified)");
 const convert = koffi
@@ -64,6 +67,7 @@ function child(
   disposition: number,
   stage = false,
   writableDirectory = false,
+  removable = false,
 ) {
   if (
     name.includes(path.sep) ||
@@ -82,7 +86,7 @@ function child(
     check(
       create(
         out,
-        0x100081 | (stage ? 0x10102 : 0),
+        0x100081 | (stage ? 0x10102 : removable ? 0x10000 : 0),
         {
           size: koffi.sizeof(attributes),
           root,
@@ -118,6 +122,13 @@ function child(
   } catch (e) {
     try {
       if (stage) discardStage(h);
+      if (removable && disposition === CREATE) {
+        try {
+          discardStage(h);
+        } catch {
+          process.emitWarning("Could not remove the newly created private download directory.");
+        }
+      }
     } finally {
       close(h);
     }
@@ -145,34 +156,57 @@ function directories(dir: string, makeMissing = false) {
     throw e;
   }
 }
-export function privateDownload(dir: string) {
-  const parent = directories(path.dirname(dir), true);
+// The provider reads by name, but retention can copy from the same delete-capable pin.
+const downloads = new Map<string, number | bigint>();
+const localAppData = koffi
+  .load("shell32.dll")
+  .func("int32_t __stdcall SHGetFolderPathW(intptr_t window, int folder, intptr_t token, uint32_t flags, void *path)");
+export function localDownloadRoot() {
+  const buffer = Buffer.alloc(520);
+  if (localAppData(0, 0x1c, 0, 0, buffer) !== 0) throw unavailable("Local application data is unavailable");
+  const local = buffer.toString("utf16le").split("\0")[0];
+  if (!local || !path.isAbsolute(local)) throw unavailable("Invalid local application data folder");
+  return path.join(local, "Temp");
+}
+export function privateDownload(dir: string, createParent = true) {
+  const parent = directories(path.dirname(dir), createParent);
   try {
-    const handle = child(parent.handle, path.basename(dir), true, CREATE, false, true);
-    return () => {
-      close(handle);
-      parent.release();
+    const handle = child(parent.handle, path.basename(dir), true, CREATE, false, false, true);
+    let released = false;
+    let file: { path: string; handle: number | bigint } | undefined;
+    return {
+      hold(filePath: string) {
+        if (released || file) throw unavailable("Download lease is not available");
+        if (path.dirname(filePath) !== dir) throw unavailable("Download outside private directory");
+        file = { path: filePath, handle: child(handle, path.basename(filePath), false, OPEN, false, false, true) };
+        downloads.set(filePath, file.handle);
+      },
+      release() {
+        if (released) return;
+        released = true;
+        try {
+          if (file) {
+            downloads.delete(file.path);
+            try {
+              discardStage(file.handle);
+            } finally {
+              close(file.handle);
+            }
+          }
+          discardStage(handle);
+        } finally {
+          close(handle);
+          parent.release();
+        }
+      },
     };
   } catch (e) {
     parent.release();
     throw e;
   }
 }
-export function holdDownload(dir: string, name: string) {
-  const pinned = directories(dir);
-  try {
-    const h = child(pinned.handle, name, false, OPEN);
-    return () => {
-      close(h);
-      pinned.release();
-    };
-  } catch (error) {
-    pinned.release();
-    throw error;
-  }
-}
 function discardStage(stage: number | bigint) {
-  // FileDispositionInformation sets delete-on-close on our create-exclusive handle only.
+  // FileDispositionInformation targets the opened entry, never a later pathname lookup.
   if (set(stage, Buffer.alloc(word * 2), Buffer.from([1]), 1, 13) < 0)
     throw new Error("Could not discard the private audio stage");
 }
@@ -209,11 +243,16 @@ function publishStage(input: number | bigint, dest: number | bigint, name: strin
 }
 export function publishDownloadedAudio(file: string, dir: string, name: string, keptAt: Date) {
   if (!/^audio\.[a-z0-9]+$/i.test(name)) throw unavailable("Unsupported audio extension");
-  const source = directories(path.dirname(file));
-  const release: Array<() => void> = [source.release];
+  const release: Array<() => void> = [];
   try {
-    const input = child(source.handle, path.basename(file), false, OPEN);
-    release.push(() => close(input));
+    let input = downloads.get(file);
+    if (input === undefined) {
+      const source = directories(path.dirname(file));
+      release.push(source.release);
+      const opened = child(source.handle, path.basename(file), false, OPEN);
+      release.push(() => close(opened));
+      input = opened;
+    } else if (!rewind(input, 0, null, 0)) throw new Error("Cannot rewind downloaded audio");
     const parent = directories(path.dirname(dir));
     release.push(parent.release);
     // A relative rename needs write sharing on its parent. With no delete sharing, its entry cannot move.

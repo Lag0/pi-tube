@@ -188,12 +188,17 @@ export const createMediaFetcher = (deps: MediaFetcherDeps): MediaFetcher => {
       if (source.kind === "direct_url")
         return ok({ audio: { kind: "url", url: source.mediaUrl }, release: async () => {} });
 
-      const dir = path.join(deps.tmpDir, randomUUID());
-      let closeDirectory: (() => void) | undefined;
-      let unlock: (() => void) | undefined;
+      let dir = path.join(deps.tmpDir, randomUUID());
+      let download: ReturnType<typeof import("../library/windows-audio.ts").privateDownload> | undefined;
       if (process.platform === "win32") {
         try {
-          closeDirectory = (await import("../library/windows-audio.ts")).privateDownload(dir);
+          const { privateDownload, localDownloadRoot } = await import("../library/windows-audio.ts");
+          try {
+            download = privateDownload(dir);
+          } catch {
+            dir = path.join(localDownloadRoot(), randomUUID());
+            download = privateDownload(dir, false);
+          }
         } catch (error) {
           return err(
             createError("STORAGE_IO_FAILED", `Cannot acquire private download directory (${String(error)}).`, {
@@ -209,9 +214,14 @@ export const createMediaFetcher = (deps: MediaFetcherDeps): MediaFetcher => {
       const release = async (): Promise<void> => {
         if (released) return;
         released = true;
-        unlock?.();
-        closeDirectory?.();
-        await removeDir(dir);
+        if (!download) return removeDir(dir);
+        try {
+          download.release();
+        } catch {
+          process.emitWarning(
+            "Could not fully clean the private download directory; unverified residue was preserved.",
+          );
+        }
       };
       try {
         const stdout = await ytDlp(
@@ -250,11 +260,8 @@ export const createMediaFetcher = (deps: MediaFetcherDeps): MediaFetcher => {
             : stdout;
         }
         // yt-dlp cannot apply `--max-filesize` when the size is unknown in advance (fragmented streams).
-        if (closeDirectory) {
-          if (path.dirname(filePath) !== dir) throw new Error("Download outside private directory");
-          unlock = (await import("../library/windows-audio.ts")).holdDownload(dir, path.basename(filePath));
-        }
-        const size = closeDirectory ? (await stat(filePath)).size : (await stat(filePath).catch(() => undefined))?.size;
+        download?.hold(filePath);
+        const size = download ? (await stat(filePath)).size : (await stat(filePath).catch(() => undefined))?.size;
         if (size !== undefined && size > settings.maxLocalFileBytes) {
           await release();
           return err(

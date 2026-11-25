@@ -679,63 +679,87 @@ describe("kept audio", () => {
     expect(stt.groq.requests).toHaveLength(1);
   });
 
-  test.skipIf(process.platform !== "win32").each([false, true])(
-    "private download stays pinned through the paid consumer (occupied=%s)",
-    async (occupied) => {
-      const { stt, deps } = setup({ env: { DEEPGRAM_API_KEY: "dg" } });
+  test.skipIf(process.platform !== "win32").each([
+    { occupied: false, keep: true, fallback: false },
+    { occupied: true, keep: true, fallback: false },
+    { occupied: true, keep: true, fallback: true },
+    { occupied: false, keep: false, fallback: true },
+  ])(
+    "private provider input and ordinary retry ($occupied, $keep, $fallback)",
+    async ({ occupied, keep, fallback }) => {
+      const { stt, deps } = setup({
+        env: { DEEPGRAM_API_KEY: "dg" },
+        config: config({ library: { keep_audio: keep } }),
+      });
       const tmpDir = path.join(outputDir, "tmp");
-      const media = createMediaFetcher({
-        env: { PATH: "/bin" },
-        cwd: outputDir,
-        tmpDir,
-        lookup: async () => [{ address: "93.184.216.34", family: 4 }],
-        run: async ({ args }) => {
-          const file = args[args.indexOf("-o") + 1]?.replace("%(id)s.%(ext)s", "download.m4a");
-          if (!file) throw new Error("missing download template");
-          writeFileSync(file, "fresh bytes");
-          return {
-            outcome: "exited",
-            exitCode: 0,
-            stdout: `${file}
+      mkdirSync(tmpDir);
+      const warning = vi.spyOn(process, "emitWarning").mockImplementation(() => {});
+      const residue = fallback && occupied;
+      const unusable = path.join(outputDir, "not-a-directory");
+      writeFileSync(unusable, "fixture");
+      const local = vi
+        .spyOn(await import("../../../src/infrastructure/library/windows-audio.ts"), "localDownloadRoot")
+        .mockReturnValue(tmpDir);
+      try {
+        const media = createMediaFetcher({
+          env: { PATH: "/bin" },
+          cwd: outputDir,
+          tmpDir: fallback ? unusable : tmpDir,
+          lookup: async () => [{ address: "93.184.216.34", family: 4 }],
+          run: async ({ args }) => {
+            const file = args[args.indexOf("-o") + 1]?.replace("%(id)s.%(ext)s", "download.m4a");
+            if (!file) throw new Error("missing download template");
+            writeFileSync(file, "fresh bytes");
+            if (residue) writeFileSync(path.join(path.dirname(file), "sidecar"), "unknown");
+            return {
+              outcome: "exited",
+              exitCode: 0,
+              stdout: `${file}
 `,
-            stderr: "",
-          };
-        },
-      });
-      const dir = path.join(outputDir, sourceDirName("youtube:jNQXAC9IVRw"));
-      mkdirSync(dir);
-      writeFileSync(
-        path.join(dir, "source.json"),
-        JSON.stringify({
-          kind: "youtube",
-          normalized_url: YOUTUBE,
-          metadata: { platform: "Youtube", media_id: "jNQXAC9IVRw" },
-        }),
-      );
-      const retained = path.join(dir, "audio.m4a");
-      if (occupied) writeFileSync(retained, "incumbent");
-      const transcribe = createTranscribe({
-        ...deps,
-        media: { ...media, resolve: async () => ({ success: true, data: youtube }) },
-      });
-      const respond = stt.deepgram.transcribe;
-      vi.spyOn(stt.deepgram, "transcribe").mockImplementation(async (req, opts) => {
-        if (req.audio.kind !== "file") throw new Error("expected downloaded file");
-        const file = req.audio.path;
-        expect(path.dirname(path.dirname(file))).toBe(tmpDir);
-        expect(() => writeFileSync(file, "changed")).toThrow();
-        expect(readFileSync(file, "utf8")).toBe("fresh bytes");
-        return respond(req, opts);
-      });
-      const request = { input: YOUTUBE, provider: "deepgram", format: "markdown" } as const;
-      expect(await transcribe(request)).toMatchObject({
-        success: true,
-        data: { audioRetention: occupied ? "skipped" : "kept" },
-      });
-      expect(readFileSync(retained, "utf8")).toBe(occupied ? "incumbent" : "fresh bytes");
-      expect(readdirSync(tmpDir)).toEqual([]);
-      expect(await transcribe(request)).toMatchObject({ success: true, data: { cacheHit: true } });
-      expect(stt.deepgram.requests).toHaveLength(1);
+              stderr: "",
+            };
+          },
+        });
+        const dir = path.join(outputDir, sourceDirName("youtube:jNQXAC9IVRw"));
+        const retained = path.join(dir, "audio.m4a");
+        if (occupied) {
+          mkdirSync(dir);
+          writeFileSync(retained, "incumbent");
+        }
+        const transcribe = createTranscribe({
+          ...deps,
+          media: { ...media, resolve: async () => ({ success: true, data: youtube }) },
+        });
+        const respond = stt.deepgram.transcribe;
+        vi.spyOn(stt.deepgram, "transcribe").mockImplementation(async (req, opts) => {
+          if (req.audio.kind !== "file") throw new Error("expected downloaded file");
+          const file = req.audio.path;
+          expect(path.dirname(path.dirname(file))).toBe(tmpDir);
+          expect(() => writeFileSync(file, "changed")).toThrow();
+          expect(readFileSync(file, "utf8")).toBe("fresh bytes");
+          return respond(req, opts);
+        });
+        const request = { input: YOUTUBE, provider: "deepgram", format: "markdown" } as const;
+        const result = await transcribe(request);
+        expect(result.success).toBe(true);
+        if (!result.success) throw new Error(result.error.message);
+        expect(JSON.parse(readFileSync(result.data.paths.json, "utf8"))).toBeTruthy();
+        expect(readFileSync(result.data.paths.markdown, "utf8").length).toBeGreaterThan(0);
+        expect(result.data.audioRetention).toBe(keep ? (occupied ? "skipped" : "kept") : undefined);
+        if (keep) expect(readFileSync(retained, "utf8")).toBe(occupied ? "incumbent" : "fresh bytes");
+        expect(local).toHaveBeenCalledTimes(fallback ? 1 : 0);
+        if (residue) {
+          const [left] = readdirSync(tmpDir);
+          if (!left) throw new Error("Missing sidecar directory");
+          expect(readdirSync(path.join(tmpDir, left))).toEqual(["sidecar"]);
+        } else expect(readdirSync(tmpDir)).toEqual([]);
+        expect(warning).toHaveBeenCalledTimes(residue ? 1 : 0);
+        expect(await transcribe(request)).toMatchObject({ success: true, data: { cacheHit: true } });
+        expect(stt.deepgram.requests).toHaveLength(1);
+      } finally {
+        local.mockRestore();
+        warning.mockRestore();
+      }
     },
   );
 

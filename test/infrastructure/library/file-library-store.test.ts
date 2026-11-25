@@ -1152,7 +1152,28 @@ describe("audio", () => {
     expect(audioLeft()).toHaveLength(1);
   });
 
-  test("across file systems (EXDEV) the audio is copied through a temp file and nothing partial is left", async () => {
+  test.skipIf(!isWindows)(
+    "native same-volume copy preserves nonuniform bytes across multiple chunks and keep time",
+    async () => {
+      const now = new Date("2026-06-01T00:00:00Z");
+      const store = createFileLibraryStore({ libraryDir, now: () => now });
+      await store.prepare();
+      const downloaded = path.join(root, "large.m4a");
+      const bytes = Buffer.alloc(2 * 256 * 1024 + 91);
+      for (let i = 0; i < bytes.length; i++) bytes[i] = (i % 251) ^ ((i >>> 18) * 31);
+      writeFileSync(downloaded, bytes);
+      const kept = await store.keepAudio("youtube:aaaaaaaaaaa", downloaded);
+      expect(kept.success).toBe(true);
+      if (!kept.success) throw new Error(kept.error.message);
+      expect(readFileSync(kept.data.audioPath).equals(bytes)).toBe(true);
+      expect(statSync(kept.data.audioPath).mtime.toISOString()).toBe(now.toISOString());
+      expect(readFileSync(downloaded).equals(bytes)).toBe(true);
+      const { dir } = await seedSource(store, "aaaaaaaaaaa");
+      expect(readdirSync(dir)).toContain("audio.m4a");
+    },
+  );
+
+  test.skipIf(isWindows)("legacy injected EXDEV copies through a temp file and leaves nothing partial", async () => {
     const crossDevice = {
       rename: async (from: string, to: string) => {
         if (path.dirname(from) !== path.dirname(to)) throw Object.assign(new Error("EXDEV"), { code: "EXDEV" });
