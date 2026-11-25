@@ -9,6 +9,8 @@ import {
   windowsKillOptions,
 } from "../../../src/infrastructure/process/run-process.ts";
 
+import * as windowsExecutable from "../../../src/infrastructure/process/windows-executable.ts";
+
 const SCRIPTS = path.resolve("test", "fixtures-process");
 const NODE = process.execPath;
 const isWindows = process.platform === "win32";
@@ -322,6 +324,50 @@ test.skipIf(!isWindows)(
     );
   },
 );
+
+test.skipIf(!isWindows)("an aborted discovery cannot launch late or block another binary job", async () => {
+  const lookup = windowsExecutable.resolveWindowsExecutable;
+  const controller = new AbortController();
+  let resume!: (found: boolean) => void;
+  let entered!: () => void;
+  const probing = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  vi.spyOn(windowsExecutable, "resolveWindowsExecutable").mockImplementationOnce(
+    (command, cwd, search, deadline, signal) =>
+      lookup(
+        command,
+        cwd,
+        search,
+        deadline,
+        signal,
+        () =>
+          new Promise<boolean>((resolve) => {
+            resume = resolve;
+            entered();
+          }),
+      ),
+  );
+  const marker = path.join(workDir, "late-launch");
+  const request = {
+    command: NODE,
+    args: ["-e", `require('fs').writeFileSync(${JSON.stringify(marker)}, 'started')`],
+    env: baseEnv,
+    timeoutMs: 5000,
+    writeStdout: () => {},
+  };
+  const pending = runProcess({ ...request, signal: controller.signal });
+  await probing;
+  try {
+    expect(await runProcess({ ...request, args: ["-e", ""] })).toMatchObject({ outcome: "exited", exitCode: 0 });
+    controller.abort();
+    expect((await pending).outcome).toBe("aborted");
+  } finally {
+    resume(true);
+  }
+  await new Promise((resolve) => setTimeout(resolve, 250));
+  expect(existsSync(marker)).toBe(false);
+});
 
 test.skipIf(!isWindows)("binary stderr overflow and failed setup do not accumulate native handles", async () => {
   const { default: koffi } = await import("koffi");

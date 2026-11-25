@@ -133,10 +133,13 @@ export const runProcess = (request: ProcessRequest): Promise<ProcessResult> =>
 
     const limit = request.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES;
     if (process.platform === "win32" && request.writeStdout) {
-      const deadline = performance.now() + request.timeoutMs;
-      import("./windows-binary-process.ts")
-        .then(({ runWindowsBinary }) => runWindowsBinary(request, buildChildEnv(request.env), limit, deadline))
-        .then(resolve, () => resolve({ outcome: "spawn_failed", exitCode: null, stdout: "", stderr: "" }));
+      const run = async () => {
+        const deadline = performance.now() + request.timeoutMs;
+        const cwd = process.cwd();
+        const { runWindowsBinary } = await import("./windows-binary-process.ts");
+        return runWindowsBinary(request, buildChildEnv(request.env), limit, deadline, cwd);
+      };
+      run().then(resolve, () => resolve({ outcome: "spawn_failed", exitCode: null, stdout: "", stderr: "" }));
       return;
     }
     // Only the error code: spawn's own messages quote the argument they refused.

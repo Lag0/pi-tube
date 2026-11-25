@@ -1,7 +1,6 @@
-import { statSync } from "node:fs";
-import path from "node:path";
 import koffi from "koffi";
 import type { ProcessRequest, ProcessResult } from "./run-process.ts";
+import { resolveWindowsExecutable } from "./windows-executable.ts";
 
 const k = koffi.load("kernel32.dll");
 const api = (signature: string) => k.func(signature);
@@ -45,6 +44,7 @@ export async function runWindowsBinary(
   env: Record<string, string>,
   limit: number,
   deadline: number,
+  cwd: string,
 ): Promise<ProcessResult> {
   const stop = () => (req.signal?.aborted ? "aborted" : performance.now() >= deadline ? "timed_out" : undefined);
   const handles = new Set<number>();
@@ -69,21 +69,15 @@ export async function runWindowsBinary(
     // CreateProcessW consumes a sorted, double-NUL-terminated Unicode environment block.
     const entries = Object.entries(env).sort(([a], [b]) => (a.toUpperCase() < b.toUpperCase() ? -1 : 1));
     check(new Set(entries.map(([name]) => name.toUpperCase())).size === entries.length);
-    const cwd = process.cwd();
     check(
       req.stdinFd === undefined &&
         ![req.command, ...req.args, req.windowsBinaryStdinPath ?? "", ...Object.values(env)].some((s) =>
           s.includes("\0"),
         ),
     );
-    const dirs = /[\\/:]/.test(req.command)
-      ? [cwd]
-      : [cwd, ...(entries.find(([k]) => k.toUpperCase() === "PATH")?.[1] ?? "").split(";")];
-    const name = path.extname(req.command) ? req.command : `${req.command}.exe`;
-    const exe = dirs
-      .map((d) => path.resolve(cwd, d.replace(/^"(.*)"$/, "$1"), name))
-      .find((p) => statSync(p, { throwIfNoEntry: false })?.isFile());
-    if (!exe) return failed("not_found");
+    const searchPath = entries.find(([name]) => name.toUpperCase() === "PATH")?.[1];
+    const lookup = await resolveWindowsExecutable(req.command, cwd, searchPath, deadline, req.signal);
+    if ("outcome" in lookup) return failed(lookup.outcome);
     const j = own(job(null, null));
     // JOBOBJECT_EXTENDED_LIMIT_INFORMATION.BasicLimitInformation.LimitFlags
     const limits = Buffer.alloc(width === 8 ? 144 : 112);
@@ -122,7 +116,7 @@ export async function runWindowsBinary(
     if (stopped) return failed(stopped);
     check(
       start(
-        exe,
+        lookup.exe,
         wide([req.command, ...req.args].map(quote).join(" ")),
         null,
         null,

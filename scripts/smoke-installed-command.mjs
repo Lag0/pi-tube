@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const repo = fileURLToPath(new URL("../", import.meta.url));
 const root = mkdtempSync(path.join(tmpdir(), "pi-tube npm smoke "));
@@ -98,7 +98,27 @@ try {
     `config_path=${config}`,
     ...["deepgram", "groq", "elevenlabs"].map((id) => `${id} configured=false key_source=none`),
   ]);
-  console.log(`Installed launcher passed: ${installed.name}@${installed.version}`);
+  console.log(`Installed CLI parser smoke passed: ${installed.name}@${installed.version}`);
+  if (win) {
+    const input = path.join(cwd, "synthetic.bin");
+    const bytes = Buffer.from([0, 255, 13, 10]);
+    writeFileSync(input, bytes);
+    const runner = pathToFileURL(path.join(pkg, "src/infrastructure/process/run-process.ts"));
+    const output = run("installed Windows native binary runner", bun, [
+      "--no-env-file",
+      "-e",
+      `
+        import { runProcess } from ${JSON.stringify(runner.href)};
+        const chunks = [];
+        const result = await runProcess({ command: ${JSON.stringify(process.execPath)},
+          args: ["-e", "process.stdin.pipe(process.stdout)"], env: process.env, timeoutMs: 10000,
+          windowsBinaryStdinPath: ${JSON.stringify(input)}, writeStdout: chunk => chunks.push(chunk) });
+        if (result.outcome !== "exited" || result.exitCode !== 0) throw Error(JSON.stringify(result));
+        console.log(Buffer.concat(chunks).toString("hex"));`,
+    ]);
+    assert.equal(output, bytes.toString("hex"));
+    console.log("Installed Windows native binary stdin/stdout smoke passed");
+  }
 } finally {
   rmSync(root, { recursive: true, force: true });
 }
