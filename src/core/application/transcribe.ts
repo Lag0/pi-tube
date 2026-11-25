@@ -17,7 +17,7 @@ import { toSafeLine } from "../domain/text.ts";
 import { buildOutputArtifact } from "../domain/transcript/build-artifact.ts";
 import type { OutputArtifact } from "../domain/transcript/contract.ts";
 import type { ConfigStore } from "../ports/config-store.ts";
-import type { LibraryStore, StoredTranscript } from "../ports/library-store.ts";
+import type { KeptAudio, LibraryStore, StoredTranscript } from "../ports/library-store.ts";
 import type { FetchedAudio, MediaFetcher } from "../ports/media-fetcher.ts";
 import type { SttProvider, SttTranscript } from "../ports/stt-provider.ts";
 import { type AuditTrail, type AuditTrailDeps, audited } from "./audit-trail.ts";
@@ -56,6 +56,7 @@ export interface TranscribeOutput {
   readonly audioSeconds?: number;
   /** Estimated cost of this call: 0 on a cache hit; absent when the duration or the model's price is unknown. */
   readonly cost?: AuditCost;
+  readonly audioCap?: KeptAudio["audioCap"];
 }
 
 /** Dependencies of `transcribe`. */
@@ -179,11 +180,17 @@ const runTranscribe =
       fetched: FetchedAudio,
       fetchedSource: ResolvedSource,
       sourceKey: string,
-    ): Promise<FetchedAudio> => {
+    ): Promise<FetchedAudio & Pick<KeptAudio, "audioCap">> => {
       const { keepAudio, maxAudioBytes } = resolveLibrarySettings(config.data);
       if (!keepAudio || !isSiteSource(fetchedSource) || fetched.audio.kind !== "file") return fetched;
       const kept = await deps.library.keepAudio(sourceKey, fetched.audio.path, maxAudioBytes);
-      return kept.success ? { ...fetched, audio: { kind: "file", path: kept.data } } : fetched;
+      return kept.success
+        ? {
+            ...fetched,
+            audio: { kind: "file", path: kept.data.audioPath },
+            ...(kept.data.audioCap && { audioCap: kept.data.audioCap }),
+          }
+        : fetched;
     };
     // YouTube and Instagram keys come from the URL, so a cache hit, or a reuse of kept audio, runs no yt-dlp.
     const inputKey = sourceKeyFromInput(input.input);
@@ -223,7 +230,7 @@ const runTranscribe =
       const keptAudio = reusedEarly?.audioPath ?? storedLate?.data?.audioPath;
 
       options?.onProgress?.({ label: "Transcribing audio...", detail: `(${sourceDetail(source)})` });
-      let audio: FetchedAudio;
+      let audio: FetchedAudio & Pick<KeptAudio, "audioCap">;
       if (keptAudio !== undefined) {
         audio = { audio: { kind: "file", path: keptAudio }, release: async () => {} };
       } else {
@@ -267,6 +274,7 @@ const runTranscribe =
       return ok({
         transcriptId: saved.data.transcriptId,
         cacheHit: false,
+        ...(audio.audioCap && { audioCap: audio.audioCap }),
         paths: saved.data.paths,
         format: input.format,
         artifact: saved.data.artifact,

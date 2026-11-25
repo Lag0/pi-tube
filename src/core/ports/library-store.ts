@@ -70,6 +70,11 @@ export interface ScanDiagnostics {
   readonly unlisted_children: number;
 }
 
+export interface KeptAudio {
+  readonly audioPath: string;
+  readonly audioCap?: "unenforced";
+}
+
 /** The local transcript library. Its files are the source of truth; nothing is kept elsewhere. */
 export interface LibraryStore {
   /** Checks that the library can be written, before any paid work starts. */
@@ -104,8 +109,8 @@ export interface LibraryStore {
   storedSource(sourceKey: SourceKey): Promise<Result<StoredSource | undefined>>;
   /**
    * Moves downloaded audio into the source's directory as `audio.<ext>` (mode 600, stamped now) and returns its
-   * new path. Past `maxAudioBytes`, the oldest audio of other sources is removed; transcripts never are.
+   * new path. A configured cap is reported as unenforced; no files are selected for eviction.
    */
-  keepAudio(sourceKey: SourceKey, filePath: string, maxAudioBytes?: number): Promise<Result<string>>;
+  keepAudio(sourceKey: SourceKey, filePath: string, maxAudioBytes?: number): Promise<Result<KeptAudio>>;
   prune(request: PruneRequest): Promise<Result<PruneReport>>;
 }

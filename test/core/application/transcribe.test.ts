@@ -660,6 +660,24 @@ describe("kept audio", () => {
     return { stt, media, transcribe: createTranscribe({ ...deps, media: media.fetcher }) };
   };
 
+  test("an unenforced one-byte cap leaves the paid transcript reusable", async () => {
+    const { stt, transcribe } = withDownloadedAudio({ library: { max_audio_bytes: 1 } });
+    const respond = stt.groq.transcribe;
+    vi.spyOn(stt.groq, "transcribe").mockImplementation(async (request, options) => {
+      expect(request.audio.kind === "file" && readFileSync(request.audio.path, "utf8")).toBe("audio");
+      return respond(request, options);
+    });
+    const input = { input: YOUTUBE, provider: "groq", format: "json" } as const;
+    const first = await transcribe(input);
+    if (!first.success) throw new Error(first.error.message);
+    const canonical = readFileSync(first.data.paths.json);
+    expect(first.data).toMatchObject({ cacheHit: false, audioCap: "unenforced" });
+    const retry = await transcribe(input);
+    expect(retry).toMatchObject({ success: true, data: { transcriptId: first.data.transcriptId, cacheHit: true } });
+    expect(readFileSync(first.data.paths.json)).toEqual(canonical);
+    expect(stt.groq.requests).toHaveLength(1);
+  });
+
   test("another provider reuses the kept audio and the stored source: no resolve, no download", async () => {
     const { stt, media, transcribe } = withDownloadedAudio();
 

@@ -25,6 +25,7 @@ export const toTranscribeJson = (output: TranscribeOutput) => {
     markdown_path: output.paths.markdown,
     transcript_id: output.transcriptId,
     cache_hit: output.cacheHit,
+    ...(output.audioCap && { audio_cap: output.audioCap }),
     format: output.format,
     provider: artifact.transcription.provider,
     source: {
@@ -82,6 +83,8 @@ export const runTranscribe = async (deps: CliDeps, command: TranscribeCommand): 
     deps.io.writeOut(JSON.stringify(toTranscribeJson(output), null, 2));
     return 0;
   }
+  if (output.audioCap)
+    deps.io.writeErr("Warning: library.max_audio_bytes was not enforced; no audio was evicted for space.");
   deps.io.writeOut(`[OUTPUT_FILE] ${outputPath}`);
   deps.io.writeOut(`[OUTPUT_FILE_URI] ${pathToFileURL(outputPath).href}`);
   deps.io.writeOut(`[TRANSCRIPT_ID] ${output.transcriptId}`);

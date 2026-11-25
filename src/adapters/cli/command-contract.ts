@@ -226,7 +226,7 @@ const LIBRARY_HELP_DOCUMENT: HelpDocument = {
   notes: [
     "Search matches names (title, file name or URL, platform), not the transcript text; it ignores case and accents.",
     "The library lives in ~/.pi-tube/library, or PI_TUBE_LIBRARY_DIR.",
-    "library.max_audio_bytes is a best-effort limit during audio retention, not a verified space target. Keep personal files outside the library.",
+    "library.max_audio_bytes is not enforced during audio retention; no audio is evicted for space. Keep personal files outside the library.",
     "Transcripts pi-tube v2 saved in ~/.pi-tube (and PI_TUBE_OUTPUT_DIR) are imported once, before the first `transcribe` or `library` command; the originals are never changed. `library import` runs it again.",
   ],
 };
