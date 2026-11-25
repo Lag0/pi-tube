@@ -1,9 +1,11 @@
 import {
   existsSync,
+  linkSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
+  readlinkSync,
   realpathSync,
   renameSync,
   rmSync,
@@ -252,28 +254,107 @@ describe("library prune", () => {
     expect(existsSync(libraryDir)).toBe(true);
   });
 
-  test("prunes managed transcripts individually and preserves a user's corrected Markdown", async () => {
-    const [id] = await seed([page("aaaaaaaaaaa", "Original interview")]);
-    const { markdown_path: markdown, json_path: json } = JSON.parse(
-      (await library(["show", id ?? "", "--json"])).stdout,
+  // Record directory and link entries too, without following a link into its target.
+  function snapshot(dir: string, base = dir): Record<string, string> {
+    const entries: Record<string, string> = {};
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const file = path.join(dir, entry.name);
+      const key = path.relative(base, file);
+      if (entry.isDirectory()) {
+        entries[key] = "directory";
+        Object.assign(entries, snapshot(file, base));
+      } else
+        entries[key] = entry.isSymbolicLink() ? `link:${readlinkSync(file)}` : readFileSync(file).toString("base64");
+    }
+    return entries;
+  }
+
+  test("qualified transcript reclaim matches preview and apply to removed paths and bytes", async () => {
+    const ids = await seed(
+      ["aaaaaaaaaaa", "bbbbbbbbbbb", "ccccccccccc", "ddddddddddd"].map((id) => page(id, "Synthetic")),
     );
-    const dir = path.dirname(json);
-    const note = path.join(dir, "my-notes.md");
-    writeFileSync(note, "personal notes");
-    for (const entry of readdirSync(dir)) utimesSync(path.join(dir, entry), new Date(0), new Date(0));
-    const args = ["prune", "--include-transcripts", "--older-than", "30", "--json"];
-    const preview = await library(args);
-    expect(JSON.parse(preview.stdout)).toMatchObject({ source_dirs: 0, preserved: expect.any(Number) });
-    expect(existsSync(json)).toBe(true);
-    writeFileSync(markdown, "my corrections");
-    utimesSync(markdown, new Date(0), new Date(0));
-    const applied = await library([...args, "--yes"]);
-    expect(applied.exitCode).toBe(0);
-    expect(existsSync(json)).toBe(process.platform !== "win32");
-    if (process.platform !== "win32")
-      expect(JSON.parse(applied.stdout)).toMatchObject({ unsupported: true, bytes: 0, transcript_files: 0 });
-    expect(readFileSync(markdown, "utf8")).toBe("my corrections");
-    expect(readFileSync(note, "utf8")).toBe("personal notes");
+    const paths = async (i: number) => {
+      const { json_path: json, markdown_path: md } = JSON.parse(
+        (await library(["show", ids[i] ?? "", "--json"])).stdout,
+      ) as { json_path: string; markdown_path: string };
+      const dir = path.dirname(json);
+      return { json, md, dir, meta: path.join(dir, "source.json") };
+    };
+    const [owned, mixed, linked, metadata] = await Promise.all([paths(0), paths(1), paths(2), paths(3)]);
+    const user = path.join(libraryDir, "user");
+    mkdirSync(user);
+    writeFileSync(path.join(user, "note"), "personal notes");
+    writeFileSync(mixed.md, "my corrections");
+    for (const { dir } of [owned, mixed, linked, metadata])
+      for (const name of readdirSync(dir)) utimesSync(path.join(dir, name), 0, 0);
+    symlinkSync(user, path.join(mixed.dir, "notes"), "junction");
+    linkSync(linked.md, path.join(user, "rendering"));
+    linkSync(metadata.meta, path.join(user, "metadata"));
+    const selected = [owned.json, owned.md, owned.meta, mixed.json, linked.json, metadata.json, metadata.md];
+    const bytes = selected.reduce((sum, file) => sum + statSync(file).size, 0);
+    const before = snapshot(libraryDir);
+    const after = { ...before };
+    for (const file of [...selected, owned.dir]) delete after[path.relative(libraryDir, file)];
+    const supported = process.platform === "win32"; // Windows CI must demonstrate nonzero physical deletion.
+    for (const apply of [false, true]) {
+      const result = await library([
+        "prune",
+        "--include-transcripts",
+        "--older-than",
+        "30",
+        "--json",
+        ...(apply ? ["--yes"] : []),
+      ]);
+      const report = JSON.parse(result.stdout);
+      expect(result.exitCode).toBe(0);
+      expect(report).toMatchObject({
+        dry_run: !apply,
+        bytes: supported ? bytes : 0,
+        transcript_files: supported ? selected.length - 1 : 0,
+        source_dirs: supported ? 1 : 0,
+        audio_files: 0,
+        failed: 0,
+      });
+      if (supported) expect(report.preserved).toBeGreaterThan(0);
+      else expect(report.unsupported).toBe(true);
+      expect(snapshot(libraryDir)).toEqual(apply && supported ? after : before);
+    }
+  });
+
+  test("unsupported transcript cleanup preserves every entry in both modes", async () => {
+    await seed([page("aaaaaaaaaaa", "Synthetic")]);
+    const dir = path.join(libraryDir, sourceDirName("youtube:aaaaaaaaaaa"));
+    for (const name of readdirSync(dir)) utimesSync(path.join(dir, name), 0, 0);
+    const before = snapshot(libraryDir);
+    // Exercise the native non-drive-root rejection without accessing a share.
+    const native =
+      process.platform === "win32" ? await import("../../src/infrastructure/library/windows-handle.ts") : undefined;
+    const gate = native?.withPinnedRoot;
+    const mock =
+      native && gate
+        ? vi
+            .spyOn(native, "withPinnedRoot")
+            .mockImplementation((_root, run) => gate("//synthetic.invalid/share/library", run))
+        : undefined;
+    try {
+      const args = ["prune", "--include-transcripts", "--older-than", "30"];
+      expect((await library(args)).stdout).toContain("safe transcript removal is unavailable");
+      for (const flags of [[], ["--yes"]]) {
+        const result = await library([...args, "--json", ...flags]);
+        expect(result.exitCode).toBe(0);
+        expect(JSON.parse(result.stdout)).toMatchObject({
+          unsupported: true,
+          bytes: 0,
+          transcript_files: 0,
+          source_dirs: 0,
+          audio_files: 0,
+          failed: 0,
+        });
+        expect(snapshot(libraryDir)).toEqual(before);
+      }
+    } finally {
+      mock?.mockRestore();
+    }
   });
 
   test("concurrent saves for one source keep the receipts for both transcripts", async () => {
@@ -375,16 +456,22 @@ describe("library prune", () => {
     const call = app.transcribe({ input: "https://example.invalid/test.mp3", provider: "groq", format: "json" });
     try {
       await entered.promise;
-      const result = spawnCli(["library", "prune", "--older-than", "30", "--include-transcripts", "--yes", "--json"], {
-        PI_TUBE_LIBRARY_DIR: libraryDir,
-      });
-      expect(result.exitCode).toBe(0);
-      expect(JSON.parse(result.stdout)).toMatchObject({
-        bytes: 0,
-        source_dirs: 0,
-        ...(process.platform === "win32" ? { busy: true } : { unsupported: true }),
-      });
-      expect(existsSync(shown.json_path)).toBe(true);
+      const before = snapshot(path.dirname(shown.json_path));
+      for (const flags of [[], ["--yes"]]) {
+        const result = spawnCli(
+          ["library", "prune", "--older-than", "30", "--include-transcripts", ...flags, "--json"],
+          {
+            PI_TUBE_LIBRARY_DIR: libraryDir,
+          },
+        );
+        expect(result.exitCode).toBe(0);
+        expect(JSON.parse(result.stdout)).toMatchObject({
+          bytes: 0,
+          source_dirs: 0,
+          ...(process.platform === "win32" ? { busy: true } : { unsupported: true }),
+        });
+        expect(snapshot(path.dirname(shown.json_path))).toEqual(before);
+      }
     } finally {
       release.resolve();
       await call;

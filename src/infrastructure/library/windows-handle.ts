@@ -69,6 +69,7 @@ export function pin(file: string, kind: "ancestor" | "activity" | "prune-root" |
     const birthtimeNs = (data.readBigUInt64LE(4) - 116444736000000000n) * 100n; // FILETIME to Unix ns
     return {
       handle,
+      linkCount: data.readUInt32LE(40),
       identity: `${data.readUInt32LE(28)}:${inode}:${birthtimeNs}`,
       close: () => {
         close(handle);
