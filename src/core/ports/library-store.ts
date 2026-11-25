@@ -71,6 +71,7 @@ export interface ScanDiagnostics {
 }
 
 export interface KeptAudio {
+  readonly originalPreserved?: true;
   readonly audioPath: string;
   readonly audioCap?: "unenforced";
 }
@@ -108,8 +109,7 @@ export interface LibraryStore {
   /** The page source saved for `sourceKey`, and its kept audio; undefined for an unknown key or a non-page source. */
   storedSource(sourceKey: SourceKey): Promise<Result<StoredSource | undefined>>;
   /**
-   * Moves downloaded audio into the source's directory as `audio.<ext>` (mode 600, stamped now) and returns its
-   * new path. A configured cap is reported as unenforced; no files are selected for eviction.
+   * Keeps downloaded audio as `audio.<ext>`. Windows keeps a separate copy; only the original is for upload. A configured cap is reported as unenforced; no files are selected for eviction.
    */
   keepAudio(sourceKey: SourceKey, filePath: string, maxAudioBytes?: number): Promise<Result<KeptAudio>>;
   prune(request: PruneRequest): Promise<Result<PruneReport>>;

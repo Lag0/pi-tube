@@ -88,7 +88,11 @@ describe("CLI and MCP agree on results", () => {
       if (mode === "MCP") {
         expect(await mcp.call("transcribe", { input: YOUTUBE, provider: "deepgram" })).toMatchObject({
           isError: false,
-          json: { cache_hit: false, audio_cap: "unenforced" },
+          json: {
+            cache_hit: false,
+            audio_cap: "unenforced",
+            ...(process.platform === "win32" && { audio_retention: "kept" }),
+          },
         });
       } else {
         const result = await cli([
@@ -100,7 +104,11 @@ describe("CLI and MCP agree on results", () => {
         ]);
         expect(result.exitCode).toBe(0);
         if (mode === "CLI JSON")
-          expect(json(result.stdout)).toMatchObject({ cache_hit: false, audio_cap: "unenforced" });
+          expect(json(result.stdout)).toMatchObject({
+            cache_hit: false,
+            audio_cap: "unenforced",
+            ...(process.platform === "win32" && { audio_retention: "kept" }),
+          });
         else expect(result.stderr).toContain("library.max_audio_bytes was not enforced");
       }
     } finally {

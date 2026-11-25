@@ -14,6 +14,7 @@ import {
   sourceDirName,
   transcriptIdOf,
 } from "../../../src/infrastructure/library/file-library-store.ts";
+import { createMediaFetcher } from "../../../src/infrastructure/media/media-fetcher.ts";
 import { PROVIDER_DESCRIPTORS } from "../../../src/infrastructure/stt/registry.ts";
 import { createFakeMediaFetcher } from "../../helpers/fake-media.ts";
 import { createFakeSttProvider, TRANSCRIPT_HELLO } from "../../helpers/fake-stt.ts";
@@ -678,20 +679,83 @@ describe("kept audio", () => {
     expect(stt.groq.requests).toHaveLength(1);
   });
 
-  test("another provider reuses the kept audio and the stored source: no resolve, no download", async () => {
-    const { stt, media, transcribe } = withDownloadedAudio();
+  test.skipIf(process.platform !== "win32").each([false, true])(
+    "private download stays pinned through the paid consumer (occupied=%s)",
+    async (occupied) => {
+      const { stt, deps } = setup({ env: { DEEPGRAM_API_KEY: "dg" } });
+      const tmpDir = path.join(outputDir, "tmp");
+      const media = createMediaFetcher({
+        env: { PATH: "/bin" },
+        cwd: outputDir,
+        tmpDir,
+        lookup: async () => [{ address: "93.184.216.34", family: 4 }],
+        run: async ({ args }) => {
+          const file = args[args.indexOf("-o") + 1]?.replace("%(id)s.%(ext)s", "download.m4a");
+          if (!file) throw new Error("missing download template");
+          writeFileSync(file, "fresh bytes");
+          return {
+            outcome: "exited",
+            exitCode: 0,
+            stdout: `${file}
+`,
+            stderr: "",
+          };
+        },
+      });
+      const dir = path.join(outputDir, sourceDirName("youtube:jNQXAC9IVRw"));
+      mkdirSync(dir);
+      writeFileSync(
+        path.join(dir, "source.json"),
+        JSON.stringify({
+          kind: "youtube",
+          normalized_url: YOUTUBE,
+          metadata: { platform: "Youtube", media_id: "jNQXAC9IVRw" },
+        }),
+      );
+      const retained = path.join(dir, "audio.m4a");
+      if (occupied) writeFileSync(retained, "incumbent");
+      const transcribe = createTranscribe({
+        ...deps,
+        media: { ...media, resolve: async () => ({ success: true, data: youtube }) },
+      });
+      const respond = stt.deepgram.transcribe;
+      vi.spyOn(stt.deepgram, "transcribe").mockImplementation(async (req, opts) => {
+        if (req.audio.kind !== "file") throw new Error("expected downloaded file");
+        const file = req.audio.path;
+        expect(path.dirname(path.dirname(file))).toBe(tmpDir);
+        expect(() => writeFileSync(file, "changed")).toThrow();
+        expect(readFileSync(file, "utf8")).toBe("fresh bytes");
+        return respond(req, opts);
+      });
+      const request = { input: YOUTUBE, provider: "deepgram", format: "markdown" } as const;
+      expect(await transcribe(request)).toMatchObject({
+        success: true,
+        data: { audioRetention: occupied ? "skipped" : "kept" },
+      });
+      expect(readFileSync(retained, "utf8")).toBe(occupied ? "incumbent" : "fresh bytes");
+      expect(readdirSync(tmpDir)).toEqual([]);
+      expect(await transcribe(request)).toMatchObject({ success: true, data: { cacheHit: true } });
+      expect(stt.deepgram.requests).toHaveLength(1);
+    },
+  );
 
-    await transcribe({ input: YOUTUBE, provider: "groq", format: "markdown" });
-    const second = await transcribe({ input: YOUTUBE, provider: "deepgram", format: "markdown" });
+  test.skipIf(process.platform === "win32")(
+    "another provider reuses the kept audio and the stored source: no resolve, no download",
+    async () => {
+      const { stt, media, transcribe } = withDownloadedAudio();
 
-    expect(second.success ? second.data.cacheHit : undefined).toBe(false);
-    expect(media.calls.resolve).toHaveLength(1);
-    expect(media.calls.fetchAudio).toHaveLength(1);
-    const audio = stt.deepgram.requests[0]?.audio;
-    expect(audio?.kind).toBe("file");
-    expect(audio?.kind === "file" ? audio.path : "").toMatch(/youtube-jnqxac9ivrw-[0-9a-f]{10}[\\/]audio\.m4a$/);
-    expect(audio?.kind === "file" ? audio.path.startsWith(outputDir) : false).toBe(true);
-  });
+      await transcribe({ input: YOUTUBE, provider: "groq", format: "markdown" });
+      const second = await transcribe({ input: YOUTUBE, provider: "deepgram", format: "markdown" });
+
+      expect(second.success ? second.data.cacheHit : undefined).toBe(false);
+      expect(media.calls.resolve).toHaveLength(1);
+      expect(media.calls.fetchAudio).toHaveLength(1);
+      const audio = stt.deepgram.requests[0]?.audio;
+      expect(audio?.kind).toBe("file");
+      expect(audio?.kind === "file" ? audio.path : "").toMatch(/youtube-jnqxac9ivrw-[0-9a-f]{10}[\\/]audio\.m4a$/);
+      expect(audio?.kind === "file" ? audio.path.startsWith(outputDir) : false).toBe(true);
+    },
+  );
 
   test("with library.keep_audio false the audio is not kept and is downloaded again", async () => {
     const { media, transcribe } = withDownloadedAudio({ library: { keep_audio: false } });

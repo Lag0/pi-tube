@@ -189,61 +189,86 @@ export const createMediaFetcher = (deps: MediaFetcherDeps): MediaFetcher => {
         return ok({ audio: { kind: "url", url: source.mediaUrl }, release: async () => {} });
 
       const dir = path.join(deps.tmpDir, randomUUID());
-      const created = await makeDir(dir, TEMP_DIR_HINT);
-      if (!created.success) return created;
-      const stdout = await ytDlp(
-        [
-          "--no-progress",
-          "-f",
-          AUDIO_FORMAT_SELECTOR,
-          // The provider upload reads the whole file into memory: the local file limit bounds page audio too.
-          "--max-filesize",
-          String(settings.maxLocalFileBytes),
-          "--print",
-          "after_move:filepath",
-          "-o",
-          path.join(dir, "%(id)s.%(ext)s"),
-        ],
-        "download",
-        source.normalizedUrl,
-        MEDIA_TIMEOUT_MS,
-        settings,
-        options,
-      );
-      const filePath = stdout.success ? parseDownloadedPath(stdout.data) : undefined;
-      if (!filePath) {
-        await removeDir(dir);
-        // `--max-filesize` makes yt-dlp skip the file and still exit 0, with nothing printed.
-        return stdout.success
-          ? err(
-              createError(
-                "DOWNLOAD_FAILED",
-                "Failed to download media via yt-dlp (no file was reported; the audio may be larger than local_files.max_bytes).",
-                {
-                  hint: `If the audio is larger than local_files.max_bytes, raise it with \`pi-tube config set local_files.max_bytes <bytes>\` (at most ${MAX_LOCAL_FILE_BYTES_LIMIT}); otherwise check that the page opens in a browser and retry.`,
-                },
-              ),
-            )
-          : stdout;
-      }
-      // yt-dlp cannot apply `--max-filesize` when the size is unknown in advance (fragmented streams).
-      const size = (await stat(filePath).catch(() => undefined))?.size;
-      if (size !== undefined && size > settings.maxLocalFileBytes) {
-        await removeDir(dir);
-        return err(
-          createError(
-            "LOCAL_FILE_TOO_LARGE",
-            `The audio downloaded from the page is ${size} bytes; the limit is ${settings.maxLocalFileBytes} bytes (local_files.max_bytes).`,
-          ),
-        );
+      let closeDirectory: (() => void) | undefined;
+      let unlock: (() => void) | undefined;
+      if (process.platform === "win32") {
+        try {
+          closeDirectory = (await import("../library/windows-audio.ts")).privateDownload(dir);
+        } catch (error) {
+          return err(
+            createError("STORAGE_IO_FAILED", `Cannot acquire private download directory (${String(error)}).`, {
+              hint: TEMP_DIR_HINT,
+            }),
+          );
+        }
+      } else {
+        const created = await makeDir(dir, TEMP_DIR_HINT);
+        if (!created.success) return created;
       }
       let released = false;
       const release = async (): Promise<void> => {
         if (released) return;
         released = true;
+        unlock?.();
+        closeDirectory?.();
         await removeDir(dir);
       };
-      return ok({ audio: { kind: "file", path: filePath }, release });
+      try {
+        const stdout = await ytDlp(
+          [
+            "--no-progress",
+            "-f",
+            AUDIO_FORMAT_SELECTOR,
+            // The provider upload reads the whole file into memory: the local file limit bounds page audio too.
+            "--max-filesize",
+            String(settings.maxLocalFileBytes),
+            "--print",
+            "after_move:filepath",
+            "-o",
+            path.join(dir, "%(id)s.%(ext)s"),
+          ],
+          "download",
+          source.normalizedUrl,
+          MEDIA_TIMEOUT_MS,
+          settings,
+          options,
+        );
+        const filePath = stdout.success ? parseDownloadedPath(stdout.data) : undefined;
+        if (!filePath) {
+          await release();
+          // `--max-filesize` makes yt-dlp skip the file and still exit 0, with nothing printed.
+          return stdout.success
+            ? err(
+                createError(
+                  "DOWNLOAD_FAILED",
+                  "Failed to download media via yt-dlp (no file was reported; the audio may be larger than local_files.max_bytes).",
+                  {
+                    hint: `If the audio is larger than local_files.max_bytes, raise it with \`pi-tube config set local_files.max_bytes <bytes>\` (at most ${MAX_LOCAL_FILE_BYTES_LIMIT}); otherwise check that the page opens in a browser and retry.`,
+                  },
+                ),
+              )
+            : stdout;
+        }
+        // yt-dlp cannot apply `--max-filesize` when the size is unknown in advance (fragmented streams).
+        if (closeDirectory) {
+          if (path.dirname(filePath) !== dir) throw new Error("Download outside private directory");
+          unlock = (await import("../library/windows-audio.ts")).holdDownload(dir, path.basename(filePath));
+        }
+        const size = closeDirectory ? (await stat(filePath)).size : (await stat(filePath).catch(() => undefined))?.size;
+        if (size !== undefined && size > settings.maxLocalFileBytes) {
+          await release();
+          return err(
+            createError(
+              "LOCAL_FILE_TOO_LARGE",
+              `The audio downloaded from the page is ${size} bytes; the limit is ${settings.maxLocalFileBytes} bytes (local_files.max_bytes).`,
+            ),
+          );
+        }
+        return ok({ audio: { kind: "file", path: filePath }, release });
+      } catch (error) {
+        await release();
+        return err(createError("DOWNLOAD_FAILED", `Cannot acquire downloaded audio (${String(error)}).`));
+      }
     },
 
     download: async (source, request, settings, options) => {

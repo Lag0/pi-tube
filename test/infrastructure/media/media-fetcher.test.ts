@@ -355,10 +355,27 @@ describe("fetchAudio", () => {
     expect(result.success).toBe(true);
     if (!result.success) return;
     expect(result.data.audio.kind).toBe("file");
+    if (process.platform === "win32" && result.data.audio.kind === "file") {
+      const downloaded = result.data.audio.path;
+      expect(() => writeFileSync(downloaded, "replacement")).toThrow();
+      expect(readFileSync(downloaded, "utf8")).toBe("audio");
+    }
     expect(requests[0]?.args.slice(-2)).toEqual(["--", YOUTUBE]);
     expect(requests[0]?.timeoutMs).toBe(1_800_000);
     await result.data.release();
     expect(readdirSync(tmpDir)).toEqual([]);
+  });
+
+  test.skipIf(process.platform !== "win32")("refuses a reported file outside the private directory", async () => {
+    const outside = path.join(root, "unrelated.m4a");
+    writeFileSync(outside, "unrelated");
+    const { run } = fakeRun(() =>
+      exited(`${outside}
+`),
+    );
+    const result = await fetcherWith(run).fetchAudio(youtubeSource, SETTINGS);
+    expect(result).toMatchObject({ success: false, error: { code: "DOWNLOAD_FAILED" } });
+    expect(readFileSync(outside, "utf8")).toBe("unrelated");
   });
 
   const writesAudio = (content: string) => (request: ProcessRequest) => {
@@ -372,7 +389,8 @@ describe("fetchAudio", () => {
   test("the audio download is capped at local_files.max_bytes", async () => {
     const { requests, run } = fakeRun(writesAudio("audio"));
 
-    await fetcherWith(run).fetchAudio(youtubeSource, { ...SETTINGS, maxLocalFileBytes: 1234 });
+    const result = await fetcherWith(run).fetchAudio(youtubeSource, { ...SETTINGS, maxLocalFileBytes: 1234 });
+    if (result.success) await result.data.release();
 
     const args = requests[0]?.args ?? [];
     expect(args[args.indexOf("--max-filesize") + 1]).toBe("1234");
