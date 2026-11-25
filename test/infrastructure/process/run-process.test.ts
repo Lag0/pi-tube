@@ -270,3 +270,87 @@ test("a rejected binary sink reports storage failure without diagnostics", async
   expect(result.outcome).toBe("sink_failed");
   expect(JSON.stringify(result)).not.toContain("benign-marker");
 });
+
+test.skipIf(!isWindows).each(["aborted", "timed_out"] as const)(
+  "%s owns helper after launcher exit",
+  async (outcome) => {
+    const pidFile = path.join(workDir, "helper.pid");
+    const controller = new AbortController();
+    const pending = runProcess({
+      command: NODE,
+      args: [script("exit-leaving-pipe-open.mjs"), pidFile, "15000", `${pidFile}.launcher`],
+      env: baseEnv,
+      signal: controller.signal,
+      timeoutMs: outcome === "aborted" ? 10000 : 1500,
+      writeStdout: () => {},
+    });
+    await waitFor(() => existsSync(pidFile));
+    const launcher = Number(readFileSync(`${pidFile}.launcher`, "utf8"));
+    await waitFor(() => !isAlive(launcher));
+    const pid = Number(readFileSync(pidFile, "utf8"));
+    expect(isAlive(pid)).toBe(true);
+    if (outcome === "aborted") controller.abort();
+    expect((await pending).outcome).toBe(outcome);
+    await waitFor(() => !isAlive(pid), 1000);
+  },
+);
+
+test.skipIf(!isWindows)(
+  "binary executable lookup, argv, environment and file stdin survive native launch",
+  async () => {
+    const file = path.join(workDir, "benign input.bin");
+    const bytes = Buffer.from([0, 0xff, 0x80, 0x10]);
+    writeFileSync(file, bytes);
+    const args = ["", 'a"b', `sp ace${path.sep}`, `a${path.sep}"b`, "&|^%😀"];
+    const chunks: Buffer[] = [];
+    const r = await runProcess({
+      command: path.basename(NODE),
+      args: [
+        "-e",
+        `process.stdout.write(require('node:fs').readFileSync(0));process.stdout.write(JSON.stringify([process.argv.slice(1),process.cwd(),process.env.GROQ_API_KEY??null]))`,
+        "--",
+        ...args,
+      ],
+      env: { Path: path.dirname(NODE), SYSTEMROOT: process.env.SYSTEMROOT, GROQ_API_KEY: "not-a-key" },
+      windowsBinaryStdinPath: file,
+      timeoutMs: 5000,
+      writeStdout: (b) => chunks.push(b),
+    });
+    expect(r).toMatchObject({ outcome: "exited", exitCode: 0 });
+    expect(Buffer.concat(chunks)).toEqual(
+      Buffer.concat([bytes, Buffer.from(JSON.stringify([args, process.cwd(), null]))]),
+    );
+  },
+);
+
+test.skipIf(!isWindows)("binary stderr overflow and failed setup do not accumulate native handles", async () => {
+  const { default: koffi } = await import("koffi");
+  const count = koffi.load("kernel32.dll").func("int __stdcall GetProcessHandleCount(intptr_t, void *)");
+  const handles = () => {
+    const n = Buffer.alloc(4);
+    expect(count(-1, n)).toBe(1);
+    return n.readUInt32LE();
+  };
+  const request = {
+    command: NODE,
+    args: ["-e", "process.stderr.write(Buffer.alloc(300000));"],
+    env: baseEnv,
+    timeoutMs: 5000,
+    maxOutputBytes: 1024,
+    writeStdout: () => {},
+  };
+  expect((await runProcess(request)).outcome).toBe("output_too_large");
+  const notExecutable = path.join(workDir, "not-an-image.exe");
+  writeFileSync(notExecutable, "benign fixture");
+  // The first bad image initializes Windows loader state. Measure repeated calls after warm-up.
+  expect((await runProcess({ ...request, command: notExecutable })).outcome).toBe("spawn_failed");
+  const before = handles();
+  for (let i = 0; i < 8; i++) {
+    expect((await runProcess({ ...request, command: notExecutable })).outcome).toBe("spawn_failed");
+    expect((await runProcess({ ...request, windowsBinaryStdinPath: path.join(workDir, "absent") })).outcome).toBe(
+      "spawn_failed",
+    );
+    expect((await runProcess(request)).outcome).toBe("output_too_large");
+  }
+  expect(handles()).toBeLessThanOrEqual(before);
+});

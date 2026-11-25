@@ -53,6 +53,7 @@ export interface ProcessRequest {
   /** Inspect bounded stderr privately before a failed binary run discards it. */
   readonly onBinaryFailureStderr?: (stderr: string) => void;
   readonly stdinFd?: number;
+  readonly windowsBinaryStdinPath?: string;
   /** Per stream; going over it kills the process. */
   readonly maxOutputBytes?: number;
 }
@@ -131,6 +132,13 @@ export const runProcess = (request: ProcessRequest): Promise<ProcessResult> =>
     }
 
     const limit = request.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES;
+    if (process.platform === "win32" && request.writeStdout) {
+      const deadline = performance.now() + request.timeoutMs;
+      import("./windows-binary-process.ts")
+        .then(({ runWindowsBinary }) => runWindowsBinary(request, buildChildEnv(request.env), limit, deadline))
+        .then(resolve, () => resolve({ outcome: "spawn_failed", exitCode: null, stdout: "", stderr: "" }));
+      return;
+    }
     // Only the error code: spawn's own messages quote the argument they refused.
     const spawnFailed = (error: unknown): ProcessResult => ({
       outcome: "spawn_failed",
@@ -177,14 +185,9 @@ export const runProcess = (request: ProcessRequest): Promise<ProcessResult> =>
       if (stoppedWith !== undefined) return;
       stoppedWith = outcome;
       if (child.exitCode === null && child.signalCode === null) {
-        // Binary Windows runs can stop the launcher by handle, not an owned process tree.
-        if (request.writeStdout && process.platform === "win32") child.kill();
-        else graceTimer = killTree(child);
+        graceTimer = killTree(child);
       }
-      if (
-        request.writeStdout &&
-        (process.platform === "win32" || child.exitCode !== null || child.signalCode !== null)
-      ) {
+      if (request.writeStdout && (child.exitCode !== null || child.signalCode !== null)) {
         // Release our pipe ends on stop. This is not descendant termination.
         child.stdout?.destroy();
         child.stderr?.destroy();

@@ -59,6 +59,7 @@ try {
     metadata.bin["pi-tube"],
     "bin/pi-tube.ts",
     "src/main.ts",
+    "src/infrastructure/process/windows-binary-process.ts",
     "skills/pi-tube/SKILL.md",
     "skills/pi-tube/rules/install.md",
     "skills/pi-tube/rules/security.md",

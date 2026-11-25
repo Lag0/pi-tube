@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { closeSync } from "node:fs";
 import { mkdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -334,56 +333,44 @@ export const createMediaFetcher = (deps: MediaFetcherDeps): MediaFetcher => {
         let audio = input;
         if (input.extension === "ts") {
           if (input.size % 188 !== 0) throw new Error("Incomplete MPEG-TS packet");
-          const fd = input.openReader();
-          try {
-            const output = await run({
-              command: "ffmpeg",
-              args: [
-                "-nostdin",
-                "-v",
-                "error",
-                "-xerror",
-                "-err_detect",
-                "explode",
-                "-f",
-                "mpegts",
-                "-i",
-                "pipe:0",
-                "-map",
-                "0:a",
-                "-c:a",
-                "copy",
-                "-bsf:a",
-                "aac_adtstoasc",
-                "-movflags",
-                "empty_moov+frag_keyframe",
-                "-f",
-                "mp4",
-                "pipe:1",
-              ],
-              stdinFd: fd,
-              writeStdout: remux.write,
-              timeoutMs: Math.max(1, deadline - Date.now()),
-              signal: options?.signal,
-              env: deps.env,
-            });
-            if (output.outcome === "sink_failed" && !remux.exceeded) {
-              await release();
-              return err(createError("STORAGE_IO_FAILED", "Cannot store remuxed audio."));
-            }
-            if (remux.exceeded) throw new Error("Remux exceeds local_files.max_bytes");
-            if (
-              output.outcome !== "exited" ||
-              output.exitCode !== 0 ||
-              output.stderr.trim() ||
-              remux.extension !== "m4a"
-            )
-              throw new Error(
-                "Cannot losslessly remux this transport stream; AAC and a compatible FFmpeg are required",
-              );
-          } finally {
-            closeSync(fd);
+          const output = await run({
+            command: "ffmpeg",
+            args: [
+              "-nostdin",
+              "-v",
+              "error",
+              "-xerror",
+              "-err_detect",
+              "explode",
+              "-f",
+              "mpegts",
+              "-i",
+              "pipe:0",
+              "-map",
+              "0:a",
+              "-c:a",
+              "copy",
+              "-bsf:a",
+              "aac_adtstoasc",
+              "-movflags",
+              "empty_moov+frag_keyframe",
+              "-f",
+              "mp4",
+              "pipe:1",
+            ],
+            windowsBinaryStdinPath: input.path,
+            writeStdout: remux.write,
+            timeoutMs: Math.max(1, deadline - Date.now()),
+            signal: options?.signal,
+            env: deps.env,
+          });
+          if (output.outcome === "sink_failed" && !remux.exceeded) {
+            await release();
+            return err(createError("STORAGE_IO_FAILED", "Cannot store remuxed audio."));
           }
+          if (remux.exceeded) throw new Error("Remux exceeds local_files.max_bytes");
+          if (output.outcome !== "exited" || output.exitCode !== 0 || output.stderr.trim() || remux.extension !== "m4a")
+            throw new Error("Cannot losslessly remux this transport stream; AAC and a compatible FFmpeg are required");
           audio = remux;
         }
         const bytes = await audio.bytes(check);

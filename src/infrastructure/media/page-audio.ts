@@ -98,9 +98,6 @@ export function pageAudioSink(
       write(chunk);
       size += chunk.length;
     },
-    openReader() {
-      return openSync(file, "r");
-    },
     async bytes(check: () => void) {
       const reader = openSync(file, "r");
       try {
