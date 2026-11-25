@@ -589,7 +589,7 @@ describe("library cache", () => {
 
   test("a detected language name (Groq) is saved as its code, so a later request in that code is a hit", async () => {
     const { deps } = setup({ env: { GROQ_API_KEY: "gq" } });
-    const groq = createFakeSttProvider("groq", { text: "olá", detectedLanguage: "Portuguese", segments: [] });
+    const groq = createFakeSttProvider("groq", { text: "olÃ¡", detectedLanguage: "Portuguese", segments: [] });
     const media = createFakeMediaFetcher({
       source: youtube,
       audio: { kind: "url", url: "https://cdn.example.com/a.m4a" },
@@ -704,6 +704,34 @@ describe("kept audio", () => {
     },
   );
 
+  test.skipIf(process.platform !== "win32").each(["mov", "aac"])(
+    "incomplete declared %s extent never dispatches",
+    async (ext) => {
+      const { deps, stt } = setup({ env: { DEEPGRAM_API_KEY: "dg" } });
+      const tmpDir = path.join(outputDir, "tmp");
+      mkdirSync(tmpDir);
+      const media = createMediaFetcher({
+        cwd: outputDir,
+        env: {},
+        tmpDir,
+        lookup: async () => [{ address: "93.184.216.34", family: 4 }],
+        run: async (req) => {
+          req.writeStdout?.(readFileSync(`test/fixtures-media/silence.${ext}`).subarray(0, -1));
+          return { outcome: "exited", exitCode: 0, stdout: "", stderr: "" };
+        },
+      });
+      const transcribe = createTranscribe({
+        ...deps,
+        media: { ...media, resolve: async () => ({ success: true, data: youtube }) },
+      });
+      expect(await transcribe({ input: YOUTUBE, provider: "deepgram", format: "json" })).toMatchObject({
+        success: false,
+        error: { code: "DOWNLOAD_FAILED" },
+      });
+      expect(stt.deepgram.requests).toHaveLength(0);
+    },
+  );
+
   test.skipIf(process.platform !== "win32").each(["create", "write"])(
     "private corrected-name %s failure never dispatches",
     async (fault) => {
@@ -749,7 +777,17 @@ describe("kept audio", () => {
   );
 
   test.skipIf(process.platform !== "win32").each([
-    ...["silence.ogg", "stereo.ogg", "5.1.ogg", "silence.flac", "silence.wav", "extensible.wav"].map((direct) => ({
+    ...[
+      "silence.ogg",
+      "stereo.ogg",
+      "5.1.ogg",
+      "silence.flac",
+      "silence.wav",
+      "extensible.wav",
+      "silence.mov",
+      "muxed.mov",
+      "silence.aac",
+    ].map((direct) => ({
       occupied: false,
       keep: true,
       fallback: false,

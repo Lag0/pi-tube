@@ -322,6 +322,21 @@ function completeFlac(bytes: Buffer) {
   return frames > 0 && (!total || samples === total);
 }
 
+// The metadata parser can resynchronize after gaps and report only complete frames.
+function completeAdts(bytes: Buffer) {
+  for (let at = 0; at < bytes.length; ) {
+    const sync = bytes.readUInt16BE(at);
+    if ((sync & 0xfff6) !== 0xfff0 || ((bytes.readUInt8(at + 2) >> 2) & 15) > 12) return false;
+    const length = (bytes.readUIntBE(at + 3, 3) >> 5) & 0x1fff;
+    const blocks = (bytes.readUInt8(at + 6) & 3) + 1;
+    // Protected multi-block frames add block positions and a CRC for each raw block.
+    const overhead = sync & 1 ? 7 : blocks === 1 ? 9 : 7 + 4 * blocks;
+    if (length < overhead + blocks || length > bytes.length - at) return false;
+    at += length;
+  }
+  return true;
+}
+
 function pageAudioMime(bytes: Buffer) {
   switch (bytes.toString("latin1", 0, 4)) {
     case "OggS":
@@ -332,12 +347,14 @@ function pageAudioMime(bytes: Buffer) {
       return "audio/wav";
   }
   if (bytes.readUInt32BE(0) === 0x1a45dfa3) return "audio/webm";
+  if ((bytes.readUInt16BE(0) & 0xfff6) === 0xfff0) return "audio/aac";
   return bytes.toString("latin1", 4, 8) === "ftyp" ? "audio/mp4" : "audio/mpeg";
 }
 
 async function pageAudioExtension(bytes: Buffer) {
   const mime = pageAudioMime(bytes);
   if (mime === "audio/mpeg" && !completeMp3(bytes)) throw new Error("Unsupported or incomplete MPEG audio");
+  if (mime === "audio/aac" && !completeAdts(bytes)) throw new Error("Incomplete ADTS frame");
   const { format, quality } = await parseBuffer(bytes, mime, {
     duration: true,
     skipCovers: true,
@@ -367,12 +384,14 @@ async function pageAudioExtension(bytes: Buffer) {
     webmHasAudioBlocks(bytes, audio[0]?.id)
   )
     return "webm";
+  if (!video && mime === "audio/aac" && format.container?.startsWith("ADTS/") && format.codec === "AAC") return "aac";
   if (mime === "audio/mpeg" && format.container === "MPEG" && format.codec?.endsWith("Layer 3")) return "mp3";
+  const quickTime = bytes.toString("latin1", 8, 12) === "qt  " && format.container?.split("/").includes("qt");
   if (
     mime === "audio/mp4" &&
     audio[0]?.codecName &&
     !audio[0].codecName.startsWith("<") &&
-    format.container?.split("/").some((brand) => /^(?:M4A|isom|iso[2-9]|mp4[12]|dash)$/u.test(brand)) &&
+    (quickTime || format.container?.split("/").some((brand) => /^(?:M4A|isom|iso[2-9]|mp4[12]|dash)$/u.test(brand))) &&
     tracks.every(
       (t) =>
         t.codecId &&
@@ -384,7 +403,7 @@ async function pageAudioExtension(bytes: Buffer) {
     ) &&
     mp4Payload(bytes) === tracks.reduce((sum, t) => sum + Math.round(((t.duration ?? 0) * (t.bitrate ?? 0)) / 8), 0)
   )
-    return video ? "mp4" : "m4a";
+    return quickTime ? "mov" : video ? "mp4" : "m4a";
   throw new Error("Unsupported or incomplete page audio");
 }
 

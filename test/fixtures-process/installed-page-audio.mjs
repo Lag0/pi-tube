@@ -14,7 +14,7 @@ if (mode === "intact") {
   const bytes = Buffer.from(data);
   for (let at = 0; at < bytes.length; at += 417) bytes.writeUInt32BE(0xfffb9000, at);
   assert.equal(await pageAudioExtension(data, Date.now() + 5000), "mp3");
-  for (const file of ["extensible.wav", "silence.ogg", "stereo.ogg", "5.1.ogg"]) {
+  for (const file of ["extensible.wav", "silence.ogg", "stereo.ogg", "5.1.ogg", "silence.mov", "silence.aac"]) {
     const bytes = readFileSync(path.join(process.argv[4], file));
     const input = new SharedArrayBuffer(bytes.length);
     Buffer.from(input).set(bytes);
