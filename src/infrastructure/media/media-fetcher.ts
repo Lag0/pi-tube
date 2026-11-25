@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
+import { setImmediate } from "node:timers/promises";
 import { pathToFileURL } from "node:url";
 import type { EnvironmentVariables } from "../../core/domain/config.ts";
 import { createError } from "../../core/domain/errors.ts";
@@ -374,16 +375,23 @@ export const createMediaFetcher = (deps: MediaFetcherDeps): MediaFetcher => {
           audio = remux;
         }
         const bytes = await audio.bytes(check);
-        const extension = await pageAudioExtension(bytes);
+        const extension = await pageAudioExtension(bytes.buffer, deadline, options?.signal);
         if (audio === remux && extension !== "m4a" && extension !== "mp4") throw new Error("Invalid remux output");
         check();
         let audioPath = audio.path;
         if (extension !== audio.extension) {
           const name = `audio.${extension}`;
-          const write = download.create(name);
-          for (let at = 0; at < bytes.length; at += 256 * 1024) {
+          try {
+            const write = download.create(name);
+            for (let at = 0; at < bytes.length; at += 256 * 1024) {
+              if (at) await setImmediate();
+              check();
+              write(bytes.subarray(at, at + 256 * 1024));
+            }
+          } catch {
             check();
-            write(bytes.subarray(at, at + 256 * 1024));
+            await release();
+            return err(createError("STORAGE_IO_FAILED", "Cannot store correctly named audio."));
           }
           audioPath = path.join(dir, name);
         }

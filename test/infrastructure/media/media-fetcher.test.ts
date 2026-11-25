@@ -456,6 +456,34 @@ describe("fetchAudio", () => {
       await result.data.release();
       expect(readdirSync(tmpDir)).toEqual([]);
     });
+    test.each(["Info", "Xing"])("%s totals must match the complete MPEG frames", async (tag) => {
+      const bytes = fixture("mp3");
+      const header = bytes.indexOf("Info");
+      bytes.write(tag, header);
+      const intact = await fetcherWith(
+        fakeRun((req) => {
+          req.writeStdout?.(bytes);
+          return exited("");
+        }).run,
+      ).fetchAudio(youtubeSource, SETTINGS);
+      if (!intact.success) throw new Error(intact.error.message);
+      await intact.data.release();
+      // This fixture ends in 108-byte MPEG-2 frames; keep the last surviving frame complete.
+      for (const flags of [1, 2, 3]) {
+        const declared = Buffer.from(bytes.subarray(0, -108));
+        declared.writeUInt32BE(flags, header + 4);
+        if (flags === 2) declared.writeUInt32BE(bytes.readUInt32BE(header + 12), header + 8);
+        const { run } = fakeRun((req) => {
+          req.writeStdout?.(declared);
+          return exited("");
+        });
+        expect(await fetcherWith(run).fetchAudio(youtubeSource, SETTINGS)).toMatchObject({
+          success: false,
+          error: { code: "DOWNLOAD_FAILED" },
+        });
+        expect(readdirSync(tmpDir)).toEqual([]);
+      }
+    });
     test.each(directFormats)("truncated %s is refused", async (file) => {
       const { run } = fakeRun((req) => {
         req.writeStdout?.(readFileSync(`test/fixtures-media/${file}`).subarray(0, -1));

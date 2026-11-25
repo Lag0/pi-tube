@@ -704,14 +704,59 @@ describe("kept audio", () => {
     },
   );
 
+  test.skipIf(process.platform !== "win32").each(["create", "write"])(
+    "private corrected-name %s failure never dispatches",
+    async (fault) => {
+      const { deps, stt } = setup({ env: { DEEPGRAM_API_KEY: "dg" } });
+      const tmpDir = path.join(outputDir, "tmp");
+      const win = await import("../../../src/infrastructure/library/windows-audio.ts");
+      const acquire = win.privateDownload;
+      vi.spyOn(win, "privateDownload").mockImplementation((...args) => {
+        const download = acquire(...args);
+        const create = download.create;
+        download.create = (name) => {
+          if (name !== "audio.mp3") return create(name);
+          if (fault === "create") throw new Error("test create fault");
+          const write = create(name);
+          return (chunk) => {
+            write(chunk.subarray(0, 1));
+            throw new Error("test write fault");
+          };
+        };
+        return download;
+      });
+      const media = createMediaFetcher({
+        cwd: outputDir,
+        env: {},
+        tmpDir,
+        lookup: async () => [{ address: "93.184.216.34", family: 4 }],
+        run: async (req) => {
+          req.writeStdout?.(readFileSync("test/fixtures-media/silence.mp3"));
+          return { outcome: "exited", exitCode: 0, stdout: "", stderr: "" };
+        },
+      });
+      const transcribe = createTranscribe({
+        ...deps,
+        media: { ...media, resolve: async () => ({ success: true, data: youtube }) },
+      });
+      expect(await transcribe({ input: YOUTUBE, provider: "deepgram", format: "json" })).toMatchObject({
+        success: false,
+        error: { code: "STORAGE_IO_FAILED" },
+      });
+      expect(stt.deepgram.requests).toHaveLength(0);
+      expect(readdirSync(tmpDir)).toEqual([]);
+    },
+  );
+
   test.skipIf(process.platform !== "win32").each([
+    { occupied: true, keep: true, fallback: false, ts: true },
     { occupied: false, keep: true, fallback: false },
     { occupied: true, keep: true, fallback: false },
     { occupied: true, keep: true, fallback: true },
     { occupied: false, keep: false, fallback: true },
   ])(
     "private provider input and ordinary retry ($occupied, $keep, $fallback)",
-    async ({ occupied, keep, fallback }) => {
+    async ({ occupied, keep, fallback, ts }) => {
       const { stt, deps } = setup({
         env: { DEEPGRAM_API_KEY: "dg" },
         config: config({ library: { keep_audio: keep } }),
@@ -721,7 +766,7 @@ describe("kept audio", () => {
       const warning = vi.spyOn(process, "emitWarning").mockImplementation(() => {});
       const fixture = fallback && occupied ? "muxed.mp4" : "silence.m4a";
       const bytes = readFileSync(`test/fixtures-media/${fixture}`);
-      const producer = occupied ? bytes : readFileSync("test/fixtures-media/silence.ts.bin");
+      const producer = occupied && !ts ? bytes : readFileSync("test/fixtures-media/silence.ts.bin");
       const residue = fallback && occupied;
       const unusable = path.join(outputDir, "not-a-directory");
       writeFileSync(unusable, "fixture");
@@ -773,6 +818,7 @@ describe("kept audio", () => {
         expect(readFileSync(result.data.paths.markdown, "utf8").length).toBeGreaterThan(0);
         expect(result.data.audioRetention).toBe(keep ? (occupied ? "skipped" : "kept") : undefined);
         if (keep) expect(readFileSync(retained)).toEqual(occupied ? Buffer.from("incumbent") : producer);
+        if (ts) expect(readdirSync(dir)).not.toContain("audio.ts");
         expect(local).toHaveBeenCalledTimes(fallback ? 1 : 0);
         if (residue) {
           const [left] = readdirSync(tmpDir);
