@@ -679,6 +679,31 @@ describe("kept audio", () => {
     expect(stt.groq.requests).toHaveLength(1);
   });
 
+  test.skipIf(process.platform === "win32")(
+    "failed POSIX keep falls back to the downloaded file without retention status",
+    async () => {
+      const { deps, stt } = setup({
+        env: { DEEPGRAM_API_KEY: "dg" },
+        config: config({ library: { max_audio_bytes: 1 } }),
+      });
+      const audio = { kind: "file", path: path.join(outputDir, "download.mp3") } as const;
+      writeFileSync(audio.path, "synthetic");
+      vi.spyOn(deps.library, "keepAudio").mockResolvedValue({
+        success: false,
+        error: createError("STORAGE_IO_FAILED", "fixture"),
+      });
+      const transcribe = createTranscribe({
+        ...deps,
+        media: createFakeMediaFetcher({ source: youtube, audio }).fetcher,
+      });
+      const result = await transcribe({ input: YOUTUBE, provider: "deepgram", format: "json" });
+      if (!result.success) throw new Error(result.error.message);
+      expect(stt.deepgram.requests[0]?.audio).toEqual(audio);
+      expect(result.data).not.toHaveProperty("audioRetention");
+      expect(result.data).not.toHaveProperty("audioCap");
+    },
+  );
+
   test.skipIf(process.platform !== "win32").each([
     { occupied: false, keep: true, fallback: false },
     { occupied: true, keep: true, fallback: false },
@@ -695,6 +720,7 @@ describe("kept audio", () => {
       mkdirSync(tmpDir);
       const warning = vi.spyOn(process, "emitWarning").mockImplementation(() => {});
       const bytes = readFileSync("test/fixtures-media/silence.m4a");
+      const producer = occupied ? bytes : readFileSync("test/fixtures-media/silence.ts.bin");
       const residue = fallback && occupied;
       const unusable = path.join(outputDir, "not-a-directory");
       writeFileSync(unusable, "fixture");
@@ -707,8 +733,8 @@ describe("kept audio", () => {
           cwd: outputDir,
           tmpDir: fallback ? unusable : tmpDir,
           lookup: async () => [{ address: "93.184.216.34", family: 4 }],
-          run: async ({ writeStdout }) => {
-            writeStdout?.(bytes);
+          run: async ({ command, writeStdout }) => {
+            writeStdout?.(command === "ffmpeg" ? bytes : producer);
             if (residue) {
               const [privateDir] = readdirSync(tmpDir);
               if (!privateDir) throw new Error("Missing private directory");
@@ -718,7 +744,7 @@ describe("kept audio", () => {
           },
         });
         const dir = path.join(outputDir, sourceDirName("youtube:jNQXAC9IVRw"));
-        const retained = path.join(dir, "audio.m4a");
+        const retained = path.join(dir, occupied ? "audio.m4a" : "audio.ts");
         if (occupied) {
           mkdirSync(dir);
           writeFileSync(retained, "incumbent");
@@ -744,7 +770,7 @@ describe("kept audio", () => {
         expect(JSON.parse(readFileSync(result.data.paths.json, "utf8"))).toBeTruthy();
         expect(readFileSync(result.data.paths.markdown, "utf8").length).toBeGreaterThan(0);
         expect(result.data.audioRetention).toBe(keep ? (occupied ? "skipped" : "kept") : undefined);
-        if (keep) expect(readFileSync(retained)).toEqual(occupied ? Buffer.from("incumbent") : bytes);
+        if (keep) expect(readFileSync(retained)).toEqual(occupied ? Buffer.from("incumbent") : producer);
         expect(local).toHaveBeenCalledTimes(fallback ? 1 : 0);
         if (residue) {
           const [left] = readdirSync(tmpDir);

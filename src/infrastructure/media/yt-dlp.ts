@@ -73,6 +73,8 @@ export const interpretYtDlpRun = (
           hint: "Install yt-dlp (`brew install yt-dlp` or `pipx install yt-dlp`) and make sure it is on PATH, or run `pi-tube setup yt-dlp`.",
         }),
       );
+    case "sink_failed":
+      return err(createError("STORAGE_IO_FAILED", "Cannot store downloaded audio."));
     case "spawn_failed":
       if (result.stderr === "EACCES" || result.stderr === "EPERM") {
         return err(

@@ -1085,6 +1085,19 @@ describe("audio", () => {
     expect(readFileSync(downloaded, "utf8")).toBe("x".repeat(10));
   });
 
+  test.skipIf(!isWindows)("first keep copies original TS bytes without a provider remux", async () => {
+    const store = createFileLibraryStore({ libraryDir });
+    const { dir } = await seedSource(store, "aaaaaaaaaaa");
+    const downloaded = audioFile("abc.ts");
+    const bytes = readFileSync("test/fixtures-media/silence.ts.bin");
+    writeFileSync(downloaded, bytes);
+    const kept = await store.keepAudio("youtube:aaaaaaaaaaa", downloaded);
+    expect(kept.success).toBe(true);
+    expect(readFileSync(path.join(dir, "audio.ts"))).toEqual(bytes);
+    expect(readFileSync(downloaded)).toEqual(bytes);
+    expect(existsSync(path.join(dir, "audio.m4a"))).toBe(false);
+  });
+
   test("keepAudio publishes the download and only enables reuse on the legacy backend", async () => {
     const store = createFileLibraryStore({ libraryDir });
     const { dir } = await seedSource(store, "aaaaaaaaaaa");

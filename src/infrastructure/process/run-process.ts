@@ -56,7 +56,14 @@ export interface ProcessRequest {
 }
 
 /** `spawn_failed`: the command exists but could not start (EACCES, EPERM, or an argument spawn refuses). */
-export type ProcessOutcome = "exited" | "timed_out" | "aborted" | "not_found" | "spawn_failed" | "output_too_large";
+export type ProcessOutcome =
+  | "exited"
+  | "timed_out"
+  | "aborted"
+  | "not_found"
+  | "spawn_failed"
+  | "output_too_large"
+  | "sink_failed";
 
 export interface ProcessResult {
   readonly outcome: ProcessOutcome;
@@ -167,9 +174,16 @@ export const runProcess = (request: ProcessRequest): Promise<ProcessResult> =>
     const stop = (outcome: ProcessOutcome): void => {
       if (stoppedWith !== undefined) return;
       stoppedWith = outcome;
-      if (child.exitCode === null && child.signalCode === null) graceTimer = killTree(child);
-      else if (request.writeStdout) {
-        // Do not signal a recycled PID if a descendant is still holding a pipe.
+      if (child.exitCode === null && child.signalCode === null) {
+        // Binary Windows runs can stop the launcher by handle, not an owned process tree.
+        if (request.writeStdout && process.platform === "win32") child.kill();
+        else graceTimer = killTree(child);
+      }
+      if (
+        request.writeStdout &&
+        (process.platform === "win32" || child.exitCode !== null || child.signalCode !== null)
+      ) {
+        // Release our pipe ends on stop. This is not descendant termination.
         child.stdout?.destroy();
         child.stderr?.destroy();
       }
@@ -191,12 +205,12 @@ export const runProcess = (request: ProcessRequest): Promise<ProcessResult> =>
         try {
           write(chunk);
         } catch {
-          stop("spawn_failed");
+          stop("sink_failed");
         }
       });
-      child.stdout?.on("error", () => stop("spawn_failed"));
+      child.stdout?.on("error", () => stop("sink_failed"));
       child.stdout?.on("close", () => {
-        if (!child.stdout?.readableEnded) stop("spawn_failed");
+        if (!child.stdout?.readableEnded) stop("sink_failed");
       });
     } else child.stdout?.on("data", collect("stdout"));
     child.stderr?.on("data", collect("stderr"));
@@ -222,7 +236,13 @@ export const runProcess = (request: ProcessRequest): Promise<ProcessResult> =>
         outcome: stoppedWith ?? "exited",
         exitCode,
         stdout,
-        stderr: spawnFailure ? spawnFailure.message : stderr,
+        stderr: request.writeStdout
+          ? stoppedWith || !stderr.trim()
+            ? ""
+            : "Child reported diagnostics"
+          : spawnFailure
+            ? spawnFailure.message
+            : stderr,
       });
     });
   });

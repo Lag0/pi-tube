@@ -253,6 +253,20 @@ test("binary stdout is delivered intact and separately from stderr", async () =>
       blocks.push(b);
     },
   });
-  expect(result).toMatchObject({ outcome: "exited", exitCode: 0, stdout: "", stderr: "side" });
+  expect(result).toMatchObject({ outcome: "exited", exitCode: 0, stdout: "", stderr: "Child reported diagnostics" });
   expect(Buffer.concat(blocks)).toEqual(Buffer.from([0, 255, 128]));
+});
+
+test("a rejected binary sink reports storage failure without diagnostics", async () => {
+  const result = await runProcess({
+    command: NODE,
+    args: ["-e", "process.stderr.write('benign-marker');process.stdout.write('x')"],
+    env: baseEnv,
+    timeoutMs: 10000,
+    writeStdout: () => {
+      throw new Error("benign-marker");
+    },
+  });
+  expect(result.outcome).toBe("sink_failed");
+  expect(JSON.stringify(result)).not.toContain("benign-marker");
 });

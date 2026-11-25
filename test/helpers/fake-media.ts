@@ -12,6 +12,7 @@ export interface FakeMediaOptions {
   readonly source?: ResolvedSource;
   readonly resolveError?: PiTubeError;
   readonly audio?: AudioInput;
+  readonly producerPath?: string;
   readonly audioError?: PiTubeError;
   readonly downloadPath?: string;
   readonly downloadError?: PiTubeError;
@@ -82,6 +83,7 @@ export const createFakeMediaFetcher = (options: FakeMediaOptions = {}): FakeMedi
           : { kind: "url", url: source.kind === "direct_url" ? source.mediaUrl : source.normalizedUrl });
       return ok({
         audio,
+        ...(options.producerPath && { producerPath: options.producerPath }),
         release: async () => {
           released += 1;
         },

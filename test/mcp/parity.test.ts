@@ -131,11 +131,16 @@ describe("CLI and MCP agree on results", () => {
     const temp = mkdtempSync(path.join(os.tmpdir(), "pi-tube-status-"));
     try {
       const file = path.join(temp, "input.m4a");
-      writeFileSync(file, "audio");
+      const producerPath = path.join(temp, "input.ts");
+      const producer = readFileSync("test/fixtures-media/silence.ts.bin");
+      const bytes = readFileSync("test/fixtures-media/silence.m4a");
+      writeFileSync(producerPath, producer);
+      writeFileSync(file, bytes);
       const provider = createFakeSttProvider("deepgram", { ...TRANSCRIPT_HELLO, durationSeconds: 19 });
       const { cli, mcp } = await both(PROVIDER_KEYS, {
         stt: { ...fakeProviders(), deepgram: provider },
-        media: createFakeMediaFetcher({ source: PAGE, audio: { kind: "file", path: file } }).fetcher,
+        media: createFakeMediaFetcher({ source: PAGE, producerPath, audio: { kind: "file", path: file, bytes } })
+          .fetcher,
       });
       const args = ["transcribe", YOUTUBE, "--provider", "deepgram"];
       if (mode === "CLI") {
@@ -155,6 +160,8 @@ describe("CLI and MCP agree on results", () => {
       }
       expect(json((await cli([...args, "--json"])).stdout)).toMatchObject({ cache_hit: true });
       expect(provider.requests).toHaveLength(1);
+      expect(provider.requests[0]?.audio).toEqual({ kind: "file", path: file, bytes });
+      expect(readFileSync(publish.mock.calls[0]?.[0] ?? "")).toEqual(producer);
       expect(publish).toHaveBeenCalledOnce();
     } finally {
       publish.mockRestore();

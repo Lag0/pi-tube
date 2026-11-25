@@ -184,7 +184,8 @@ const runTranscribe =
     ): Promise<FetchedAudio & Pick<TranscribeOutput, "audioCap" | "audioRetention">> => {
       const { keepAudio, maxAudioBytes } = resolveLibrarySettings(config.data);
       if (!keepAudio || !isSiteSource(fetchedSource) || fetched.audio.kind !== "file") return fetched;
-      const kept = await deps.library.keepAudio(sourceKey, fetched.audio.path, maxAudioBytes);
+      const kept = await deps.library.keepAudio(sourceKey, fetched.producerPath ?? fetched.audio.path, maxAudioBytes);
+      if (!kept.success && !fetched.producerPath) return fetched;
       return kept.success
         ? {
             ...fetched,

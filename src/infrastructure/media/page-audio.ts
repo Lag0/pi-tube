@@ -1,4 +1,4 @@
-import { closeSync, fstatSync, lstatSync, openSync, read, unlinkSync, writeSync } from "node:fs";
+import { closeSync, openSync, read } from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
 import { parseBuffer } from "music-metadata";
@@ -62,9 +62,8 @@ export async function validatePageAudio(bytes: Buffer, extension: string) {
 export function pageAudioSink(
   dir: string,
   limit: number,
-  privateDownload?: { create(name: string): (chunk: Buffer) => void },
+  privateDownload: { create(name: string): (chunk: Buffer) => void },
 ) {
-  let fd: number | undefined;
   let file = "",
     extension = "",
     size = 0,
@@ -94,28 +93,16 @@ export function pageAudioSink(
         extension = chunk[0] === 0x47 ? "ts" : chunk[0] === 0x1a ? "webm" : "m4a";
         const name = `audio.${extension}`;
         file = path.join(dir, name);
-        if (privateDownload) write = privateDownload.create(name);
-        else {
-          const opened = openSync(file, "wx+", 0o600);
-          fd = opened;
-          write = (b) => {
-            if (writeSync(opened, b) !== b.length) throw new Error("Incomplete page audio write");
-          };
-        }
+        write = privateDownload.create(name);
       }
       write(chunk);
       size += chunk.length;
     },
     openReader() {
-      const reader = openSync(file, "r");
-      if (fd !== undefined && !sameFile(fstatSync(reader), fstatSync(fd))) {
-        closeSync(reader);
-        throw new Error("Private input changed");
-      }
-      return reader;
+      return openSync(file, "r");
     },
     async bytes(check: () => void) {
-      const reader = fd ?? openSync(file, "r");
+      const reader = openSync(file, "r");
       try {
         const bytes = Buffer.allocUnsafe(size);
         for (let at = 0; at < size; ) {
@@ -126,24 +113,8 @@ export function pageAudioSink(
         }
         return bytes;
       } finally {
-        if (fd === undefined) closeSync(reader);
-      }
-    },
-    close() {
-      if (fd !== undefined) {
-        try {
-          const entry = lstatSync(file, { throwIfNoEntry: false });
-          if (entry && sameFile(entry, fstatSync(fd))) unlinkSync(file);
-        } catch {
-          /* An unremovable entry is preserved. */
-        } finally {
-          closeSync(fd);
-        }
+        closeSync(reader);
       }
     },
   };
-}
-
-function sameFile(a: { dev: number; ino: number }, b: { dev: number; ino: number }) {
-  return a.dev === b.dev && a.ino === b.ino;
 }
