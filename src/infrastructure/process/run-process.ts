@@ -50,6 +50,8 @@ export interface ProcessRequest {
   readonly signal?: AbortSignal;
   /** A synchronous sink backpressures the pipe; media is never accumulated or decoded here. */
   readonly writeStdout?: (chunk: Buffer) => void;
+  /** Inspect bounded stderr privately before a failed binary run discards it. */
+  readonly onBinaryFailureStderr?: (stderr: string) => void;
   readonly stdinFd?: number;
   /** Per stream; going over it kills the process. */
   readonly maxOutputBytes?: number;
@@ -232,6 +234,9 @@ export const runProcess = (request: ProcessRequest): Promise<ProcessResult> =>
     child.on("close", (exitCode) => {
       const stdout = Buffer.concat(chunks.stdout).toString("utf8");
       const stderr = Buffer.concat(chunks.stderr).toString("utf8");
+      if (request.writeStdout && !stoppedWith && !spawnFailure && exitCode !== 0) {
+        request.onBinaryFailureStderr?.(stderr);
+      }
       settle({
         outcome: stoppedWith ?? "exited",
         exitCode,

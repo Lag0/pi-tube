@@ -23,6 +23,7 @@ import { checkCookies, prepareCookies } from "./cookies.ts";
 import { checkHost, defaultLookup, type LookupHost } from "./host-guard.ts";
 import {
   AUDIO_FORMAT_SELECTOR,
+  classifyYtDlpStderr,
   DOWNLOAD_TEMPLATE,
   interpretYtDlpRun,
   MEDIA_TIMEOUT_MS,
@@ -128,15 +129,22 @@ export const createMediaFetcher = (deps: MediaFetcherDeps): MediaFetcher => {
     if (!cookies.success) return cookies;
     try {
       const timeoutMs = resolveYtDlpTimeoutMs(deps.env, defaultTimeoutMs);
+      let reason: ReturnType<typeof classifyYtDlpStderr>;
       const result = await run({
         command: "yt-dlp",
-        ...(writeStdout && { writeStdout }),
+        ...(writeStdout && {
+          writeStdout,
+          onBinaryFailureStderr: (stderr: string) => {
+            reason = classifyYtDlpStderr(stderr);
+          },
+        }),
         args: withUrl([...cookies.data.args, ...args], url),
         env: deps.env,
         timeoutMs,
         signal: options?.signal,
       });
-      return interpretYtDlpRun(writeStdout ? { ...result, stderr: "" } : result, purpose, {
+      return interpretYtDlpRun(result, purpose, {
+        ...(writeStdout && { binaryFailure: { reason } }),
         url,
         timeoutMs,
         ...(settings.cookies ? { cookies: settings.cookies.origin } : {}),

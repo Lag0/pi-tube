@@ -13,6 +13,7 @@ import {
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import type { ErrorCode } from "../../../src/core/domain/errors.ts";
 import type { SiteSource } from "../../../src/core/domain/source.ts";
 import type { SourceSettings } from "../../../src/core/domain/source-settings.ts";
 import { createMediaFetcher } from "../../../src/infrastructure/media/media-fetcher.ts";
@@ -502,6 +503,57 @@ describe("fetchAudio", () => {
         expect(readdirSync(tmpDir)).toEqual([]);
       },
     );
+    test.each([
+      ["not_found", "private-marker", "YTDLP_NOT_FOUND", "Install yt-dlp"],
+      ["aborted", "private-marker login required", "CANCELLED", "Run the command again"],
+      ["timed_out", "private-marker login required", "DOWNLOAD_FAILED", "Check that the page opens"],
+      ["spawn_failed", "EACCES", "YTDLP_NOT_FOUND", "Make yt-dlp executable"],
+      ["spawn_failed", "EPERM", "YTDLP_NOT_FOUND", "Make yt-dlp executable"],
+      ["spawn_failed", "private-marker", "DOWNLOAD_FAILED", "Check that the page opens"],
+      ["exited", "private-marker login required", "SOURCE_AUTH_REQUIRED", "Export cookies"],
+      ["exited", "private-marker Unsupported URL", "SOURCE_UNSUPPORTED", "Pass a page"],
+      ["exited", "private-marker Cookies file must be Netscape formatted", "COOKIES_FILE_INVALID", "Netscape format"],
+      ["exited", "private-marker", "DOWNLOAD_FAILED", "Check that the page opens"],
+      [
+        "exited",
+        "skipping cookie file entry: private-marker login required",
+        "DOWNLOAD_FAILED",
+        "Check that the page opens",
+      ],
+    ] satisfies [ProcessResult["outcome"], string, ErrorCode, string][])(
+      "maps %s %s without private detail",
+      async (outcome, stderr, code, hint) => {
+        const { run } = fakeRun(() => ({ ...exited("private-marker", 1, stderr), outcome }));
+        const result = await fetcherWith(run).fetchAudio(youtubeSource, SETTINGS);
+        expect(result).toMatchObject({ success: false, error: { code, hint: expect.stringContaining(hint) } });
+        if (outcome === "timed_out")
+          expect(result).toMatchObject({ error: { message: expect.stringContaining("timed out") } });
+        expect(JSON.stringify(result)).not.toContain("private-marker");
+      },
+    );
+    test("classifies private child diagnostics before the binary runner discards them", async () => {
+      const cookies = path.join(root, "private-marker.txt");
+      writeFileSync(cookies, "# Netscape HTTP Cookie File\n");
+      const { run } = fakeRun(async (request) => {
+        const result = await runProcess({
+          ...request,
+          command: process.execPath,
+          env: process.env,
+          args: ["-e", "process.stderr.write('private-marker challenge_required');process.exitCode=1"],
+        });
+        expect(result.stderr).not.toContain("private-marker");
+        return result;
+      });
+      const result = await fetcherWith(run).fetchAudio(youtubeSource, {
+        ...SETTINGS,
+        cookies: { file: cookies, origin: "config" },
+      });
+      expect(result).toMatchObject({
+        success: false,
+        error: { code: "SOURCE_AUTH_REQUIRED", hint: expect.stringContaining("export fresh cookies") },
+      });
+      expect(JSON.stringify(result)).not.toContain("private-marker");
+    });
     test("a sink failure does not expose diagnostics", async () => {
       const { run } = fakeRun(() => ({ ...exited("", 1), outcome: "sink_failed", stderr: "benign-marker" }));
       const result = await fetcherWith(run).fetchAudio(youtubeSource, SETTINGS);
