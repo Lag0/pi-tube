@@ -1,5 +1,8 @@
 import { type ChildProcess, spawn, spawnSync } from "node:child_process";
+import { win32 } from "node:path";
 import type { EnvironmentVariables } from "../../core/domain/config.ts";
+
+import { windowsExecutableCandidates } from "./windows-executable.ts";
 
 /** Env vars a child process may see. Everything else (provider keys, `PI_TUBE_*`) stays in pi-tube. */
 export const CHILD_ENV_ALLOWLIST: readonly string[] = [
@@ -48,12 +51,25 @@ export interface ProcessRequest {
   readonly env: EnvironmentVariables;
   readonly timeoutMs: number;
   readonly signal?: AbortSignal;
+  /** A synchronous sink backpressures the pipe; media is never accumulated or decoded here. */
+  readonly writeStdout?: (chunk: Buffer) => void;
+  /** Inspect bounded stderr privately before a failed binary run discards it. */
+  readonly onBinaryFailureStderr?: (stderr: string) => void;
+  readonly stdinFd?: number;
+  readonly windowsBinaryStdinPath?: string;
   /** Per stream; going over it kills the process. */
   readonly maxOutputBytes?: number;
 }
 
 /** `spawn_failed`: the command exists but could not start (EACCES, EPERM, or an argument spawn refuses). */
-export type ProcessOutcome = "exited" | "timed_out" | "aborted" | "not_found" | "spawn_failed" | "output_too_large";
+export type ProcessOutcome =
+  | "exited"
+  | "timed_out"
+  | "aborted"
+  | "not_found"
+  | "spawn_failed"
+  | "output_too_large"
+  | "sink_failed";
 
 export interface ProcessResult {
   readonly outcome: ProcessOutcome;
@@ -119,6 +135,25 @@ export const runProcess = (request: ProcessRequest): Promise<ProcessResult> =>
     }
 
     const limit = request.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES;
+    if (process.platform === "win32" && request.writeStdout) {
+      const run = async () => {
+        const deadline = performance.now() + request.timeoutMs;
+        const cwd = process.cwd();
+        const env = buildChildEnv(request.env);
+        const searchPath = Object.entries(env).find(([name]) => name.toUpperCase() === "PATH")?.[1];
+        // Drive-relative paths can depend on the host's per-drive directory as well as cwd.
+        const paths = {
+          cwd,
+          stdinPath:
+            request.windowsBinaryStdinPath === undefined ? "NUL" : win32.resolve(cwd, request.windowsBinaryStdinPath),
+          candidates: windowsExecutableCandidates(request.command, cwd, searchPath),
+        };
+        const { runWindowsBinary } = await import("./windows-binary-process.ts");
+        return runWindowsBinary(request, env, limit, deadline, paths);
+      };
+      run().then(resolve, () => resolve({ outcome: "spawn_failed", exitCode: null, stdout: "", stderr: "" }));
+      return;
+    }
     // Only the error code: spawn's own messages quote the argument they refused.
     const spawnFailed = (error: unknown): ProcessResult => ({
       outcome: "spawn_failed",
@@ -132,7 +167,7 @@ export const runProcess = (request: ProcessRequest): Promise<ProcessResult> =>
     let child: ChildProcess;
     try {
       child = spawn(request.command, [...request.args], {
-        stdio: ["ignore", "pipe", "pipe"],
+        stdio: [request.stdinFd ?? "ignore", "pipe", "pipe"],
         env: buildChildEnv(request.env),
         detached: process.platform !== "win32",
         windowsHide: true,
@@ -164,7 +199,14 @@ export const runProcess = (request: ProcessRequest): Promise<ProcessResult> =>
     const stop = (outcome: ProcessOutcome): void => {
       if (stoppedWith !== undefined) return;
       stoppedWith = outcome;
-      graceTimer = killTree(child);
+      if (child.exitCode === null && child.signalCode === null) {
+        graceTimer = killTree(child);
+      }
+      if (request.writeStdout && (child.exitCode !== null || child.signalCode !== null)) {
+        // Release our pipe ends on stop. This is not descendant termination.
+        child.stdout?.destroy();
+        child.stderr?.destroy();
+      }
     };
     const collect = (stream: "stdout" | "stderr") => (chunk: Buffer) => {
       sizes[stream] += chunk.length;
@@ -176,7 +218,21 @@ export const runProcess = (request: ProcessRequest): Promise<ProcessResult> =>
     };
     const onAbort = (): void => stop("aborted");
 
-    child.stdout?.on("data", collect("stdout"));
+    if (request.writeStdout) {
+      const write = request.writeStdout;
+      child.stdout?.on("data", (chunk: Buffer) => {
+        if (stoppedWith) return;
+        try {
+          write(chunk);
+        } catch {
+          stop("sink_failed");
+        }
+      });
+      child.stdout?.on("error", () => stop("sink_failed"));
+      child.stdout?.on("close", () => {
+        if (!child.stdout?.readableEnded) stop("sink_failed");
+      });
+    } else child.stdout?.on("data", collect("stdout"));
     child.stderr?.on("data", collect("stderr"));
     request.signal?.addEventListener("abort", onAbort, { once: true });
     const timer = setTimeout(() => stop("timed_out"), request.timeoutMs);
@@ -188,18 +244,28 @@ export const runProcess = (request: ProcessRequest): Promise<ProcessResult> =>
       else if (error.code === "EACCES" || error.code === "EPERM") settle(spawnFailed(error));
     });
     child.on("exit", () => {
-      disarm();
+      clearTimeout(graceTimer);
+      if (!request.writeStdout) disarm();
       // Grandchildren that outlive the child would keep the pipes open; the group goes with the child.
       if (child.pid !== undefined && process.platform !== "win32") signalGroup(child.pid, "SIGKILL");
     });
     child.on("close", (exitCode) => {
       const stdout = Buffer.concat(chunks.stdout).toString("utf8");
       const stderr = Buffer.concat(chunks.stderr).toString("utf8");
+      if (request.writeStdout && !stoppedWith && !spawnFailure && exitCode !== 0) {
+        request.onBinaryFailureStderr?.(stderr);
+      }
       settle({
         outcome: stoppedWith ?? "exited",
         exitCode,
         stdout,
-        stderr: spawnFailure ? spawnFailure.message : stderr,
+        stderr: request.writeStdout
+          ? stoppedWith || !stderr.trim()
+            ? ""
+            : "Child reported diagnostics"
+          : spawnFailure
+            ? spawnFailure.message
+            : stderr,
       });
     });
   });

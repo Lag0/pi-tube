@@ -7,8 +7,12 @@ const SRC_DIR = path.resolve("src");
 const INHERITED_STDIN = /stdin:\s*"inherit"|stdio:\s*"inherit"|stdio:\s*\[\s*"inherit"/;
 // `pi-tube setup` runs interactive installers (brew, npx skills) in the user's terminal; never reachable from MCP.
 const INTERACTIVE_PASSTHROUGH = new Set(["src/infrastructure/interactive-command.ts"]);
-const SPAWNS_PROCESS = /["'](node:)?child_process["']|Bun\.spawn(Sync)?\b/;
-const SPAWNERS = new Set(["src/infrastructure/process/run-process.ts", "src/infrastructure/interactive-command.ts"]);
+const SPAWNS_PROCESS = /["'](node:)?child_process["']|Bun\.spawn(Sync)?\b|\bCreateProcess[AW]\b/;
+const SPAWNERS = new Set([
+  "src/infrastructure/process/run-process.ts",
+  "src/infrastructure/process/windows-binary-process.ts",
+  "src/infrastructure/interactive-command.ts",
+]);
 
 function listTypeScriptFiles(dir: string): string[] {
   return readdirSync(dir, { recursive: true, encoding: "utf8" })

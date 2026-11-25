@@ -7,6 +7,8 @@ import type { SourceSettings } from "../domain/source-settings.ts";
 /** Audio ready for a provider; `release` deletes any temporary file and is safe to call once. */
 export interface FetchedAudio {
   readonly audio: AudioInput;
+  /** Original Windows download, before any provider remux. */
+  readonly producerPath?: string;
   readonly release: () => Promise<void>;
 }
 

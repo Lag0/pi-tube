@@ -569,6 +569,8 @@ export const createFileLibraryStore = (deps: {
       }
       const source = isRecord(saved) ? pageSourceOf(saved) : undefined;
       if (!source) return ok(undefined);
+      // A library pathname is not provenance for a paid upload. Windows fetches a new private download.
+      if (process.platform === "win32") return ok({ source });
       const audio = (await listDir(dir)).find(isAudioName);
       const stored: StoredSource = audio === undefined ? { source } : { source, audioPath: path.join(dir, audio) };
       return ok(stored);
@@ -578,6 +580,15 @@ export const createFileLibraryStore = (deps: {
       const dir = dirOf(sourceKey);
       const target = path.join(dir, `audio${path.extname(filePath) || ".m4a"}`);
       try {
+        if (process.platform === "win32") {
+          const { publishDownloadedAudio } = await import("./windows-audio.ts");
+          publishDownloadedAudio(filePath, dir, path.basename(target), now());
+          return ok({
+            audioPath: target,
+            originalPreserved: true,
+            ...(maxAudioBytes === undefined ? {} : { audioCap: "unenforced" as const }),
+          });
+        }
         await mkdir(dir, { recursive: true, mode: 0o700 });
         for (const name of await listDir(dir)) {
           if (isAudioName(name) && path.join(dir, name) !== target) await rm(path.join(dir, name), { force: true });
@@ -598,7 +609,10 @@ export const createFileLibraryStore = (deps: {
         }
         await chmod(target, 0o600).catch(() => undefined);
       } catch (error) {
-        return err(ioError("write", target, error));
+        const failure = ioError("write", target, error);
+        if (process.platform === "win32" && ["ENOTSUP", "ELOOP", "EBUSY"].includes(errnoOf(error)))
+          return err({ ...failure, details: { audioRetention: "skipped" } });
+        return err(failure);
       }
       return ok({ audioPath: target, ...(maxAudioBytes === undefined ? {} : { audioCap: "unenforced" as const }) });
     },

@@ -60,11 +60,35 @@ export const extractionError = (purpose: YtDlpPurpose, detail: string): PiTubeEr
 const COOKIES_DID_NOT_WORK_HINT =
   "The configured cookies did not grant access: export fresh cookies from a browser where you are logged in and replace the file.";
 
+const ytDlpDetail = (stderr: string): string =>
+  scrubUrlCredentials(
+    stderr
+      .split(/\r?\n/)
+      .filter((line) => line.trim().length > 0 && !line.includes("skipping cookie file entry"))
+      .join("\n")
+      .trim(),
+  );
+
+const ytDlpFailureReason = (detail: string) => {
+  if (/does not look like a Netscape format cookies file|Cookies file must be Netscape formatted/.test(detail))
+    return "COOKIES_FILE_INVALID";
+  if (/Unsupported URL|No suitable extractor found/.test(detail)) return "SOURCE_UNSUPPORTED";
+  if (isAuthRequiredFailure(detail)) return "SOURCE_AUTH_REQUIRED";
+  return undefined;
+};
+
+export const classifyYtDlpStderr = (stderr: string) => ytDlpFailureReason(ytDlpDetail(stderr));
+
 /** Maps a finished yt-dlp run to `ok(stdout)` or the error for its purpose. */
 export const interpretYtDlpRun = (
   result: ProcessResult,
   purpose: YtDlpPurpose,
-  input: { readonly url: string; readonly timeoutMs: number; readonly cookies?: "env" | "config" },
+  input: {
+    readonly url: string;
+    readonly timeoutMs: number;
+    readonly cookies?: "env" | "config";
+    readonly binaryFailure?: { reason?: ReturnType<typeof classifyYtDlpStderr> };
+  },
 ): Result<string> => {
   switch (result.outcome) {
     case "not_found":
@@ -73,6 +97,8 @@ export const interpretYtDlpRun = (
           hint: "Install yt-dlp (`brew install yt-dlp` or `pipx install yt-dlp`) and make sure it is on PATH, or run `pi-tube setup yt-dlp`.",
         }),
       );
+    case "sink_failed":
+      return err(createError("STORAGE_IO_FAILED", "Cannot store downloaded audio."));
     case "spawn_failed":
       if (result.stderr === "EACCES" || result.stderr === "EPERM") {
         return err(
@@ -81,7 +107,12 @@ export const interpretYtDlpRun = (
           }),
         );
       }
-      return err(extractionError(purpose, `yt-dlp could not be started: ${result.stderr}`));
+      return err(
+        extractionError(
+          purpose,
+          input.binaryFailure ? "yt-dlp could not be started" : `yt-dlp could not be started: ${result.stderr}`,
+        ),
+      );
     case "aborted":
       return err(createError("CANCELLED", "Operation cancelled."));
     case "output_too_large":
@@ -93,30 +124,36 @@ export const interpretYtDlpRun = (
       // Only stderr: on a failed `-J`, stdout holds `null` or a whole JSON with format cookies and signed URLs.
       // yt-dlp prints each skipped cookie line, value included, on stderr even with --no-warnings: those go too.
       // yt-dlp echoes the URL it was given, `user:password@` included: errors never show it.
-      const detail = scrubUrlCredentials(
-        result.stderr
-          .split(/\r?\n/)
-          .filter((line) => line.trim().length > 0 && !line.includes("skipping cookie file entry"))
-          .join("\n")
-          .trim() || `exit code ${result.exitCode}`,
-      );
+      const detail = ytDlpDetail(result.stderr) || `exit code ${result.exitCode}`;
+      const reason = input.binaryFailure?.reason ?? ytDlpFailureReason(detail);
       const shownUrl = withoutCredentials(input.url);
       // The detail names the temporary copy, never the user's file, but it is still left out of the message.
-      if (/does not look like a Netscape format cookies file|Cookies file must be Netscape formatted/.test(detail)) {
+      if (reason === "COOKIES_FILE_INVALID") {
         const origin = cookiesOriginName(input.cookies ?? "config");
         return err(createError("COOKIES_FILE_INVALID", `yt-dlp rejected the cookies file set by \`${origin}\`.`));
       }
-      if (/Unsupported URL|No suitable extractor found/.test(detail)) {
-        return err(createError("SOURCE_UNSUPPORTED", `yt-dlp cannot read \`${shownUrl}\` (${detail}).`));
-      }
-      if (isAuthRequiredFailure(detail)) {
+      if (reason === "SOURCE_UNSUPPORTED") {
         return err(
-          createError("SOURCE_AUTH_REQUIRED", `\`${shownUrl}\` requires a logged-in session (${detail}).`, {
-            ...(input.cookies ? { hint: COOKIES_DID_NOT_WORK_HINT } : {}),
-          }),
+          createError(
+            "SOURCE_UNSUPPORTED",
+            input.binaryFailure ? "yt-dlp cannot read this source." : `yt-dlp cannot read \`${shownUrl}\` (${detail}).`,
+          ),
         );
       }
-      return err(extractionError(purpose, detail));
+      if (reason === "SOURCE_AUTH_REQUIRED") {
+        return err(
+          createError(
+            "SOURCE_AUTH_REQUIRED",
+            input.binaryFailure
+              ? "This source requires a logged-in session."
+              : `\`${shownUrl}\` requires a logged-in session (${detail}).`,
+            {
+              ...(input.cookies ? { hint: COOKIES_DID_NOT_WORK_HINT } : {}),
+            },
+          ),
+        );
+      }
+      return err(extractionError(purpose, input.binaryFailure ? `exit code ${result.exitCode}` : detail));
     }
   }
 };

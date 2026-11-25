@@ -36,7 +36,7 @@ const DELETE = 0x10000,
   OPEN_EXISTING = 3;
 const OPEN_REPARSE_POINT = 0x200000,
   BACKUP_SEMANTICS = 0x2000000;
-function filesystemError(code: string, message: string): Error {
+export function filesystemError(code: string, message: string): Error {
   return Object.assign(new Error(message), { code });
 }
 function failure(): Error {
@@ -68,6 +68,7 @@ export function pin(file: string, kind: "ancestor" | "activity" | "prune-root" |
     const inode = (BigInt(data.readUInt32LE(44)) << 32n) | BigInt(data.readUInt32LE(48));
     const birthtimeNs = (data.readBigUInt64LE(4) - 116444736000000000n) * 100n; // FILETIME to Unix ns
     return {
+      handle,
       linkCount: data.readUInt32LE(40),
       identity: `${data.readUInt32LE(28)}:${inode}:${birthtimeNs}`,
       close: () => {
@@ -85,15 +86,19 @@ export function pin(file: string, kind: "ancestor" | "activity" | "prune-root" |
   }
 }
 
-export async function withPinnedRoot<T>(root: string, run: () => Promise<T>): Promise<T> {
-  const dir = path.resolve(root);
+export function localVolumeFlags(dir: string) {
   const drive = path.parse(dir).root;
   // Drive-relative aliases, remote shares and volumes lacking POSIX disposition cannot use this backend.
   if (!/^[a-z]:\\$/i.test(drive) || ![2, 3].includes(driveType(drive)))
     throw filesystemError("ENOTSUP", "Not a local drive");
   const flags = Buffer.alloc(4);
   if (!volumeInfo(drive, null, 0, null, null, flags, null, 0)) throw failure();
-  if (!(flags.readUInt32LE() & 0x400)) throw filesystemError("ENOTSUP", "Volume lacks POSIX disposition");
+  return flags.readUInt32LE();
+}
+
+export async function withPinnedRoot<T>(root: string, run: () => Promise<T>): Promise<T> {
+  const dir = path.resolve(root);
+  if (!(localVolumeFlags(dir) & 0x400)) throw filesystemError("ENOTSUP", "Volume lacks POSIX disposition");
   const parent = path.dirname(dir);
   // Verify every component while its parent remains pinned. Never open a child of a reparse point.
   const ancestors: string[] = [];

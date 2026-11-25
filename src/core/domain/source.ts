@@ -77,5 +77,5 @@ export const isSiteSource = (source: ResolvedSource): source is SiteSource =>
 
 /** Audio handed to a speech-to-text provider: a local file or a URL the provider fetches itself. */
 export type AudioInput =
-  | { readonly kind: "file"; readonly path: string }
+  | { readonly kind: "file"; readonly path: string; readonly bytes?: Uint8Array }
   | { readonly kind: "url"; readonly url: string };

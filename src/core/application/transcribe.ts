@@ -56,6 +56,8 @@ export interface TranscribeOutput {
   readonly audioSeconds?: number;
   /** Estimated cost of this call: 0 on a cache hit; absent when the duration or the model's price is unknown. */
   readonly cost?: AuditCost;
+  readonly retainedAudioPath?: string;
+  readonly audioRetention?: "kept" | "skipped" | "incomplete";
   readonly audioCap?: KeptAudio["audioCap"];
 }
 
@@ -175,22 +177,28 @@ const runTranscribe =
       };
     };
 
-    /** Moves a page's downloaded audio into the library; if that fails, the transcription goes on without keeping it. */
+    /** Keeps a page's downloaded audio in the library; if that fails, the transcription goes on without keeping it. */
     const keepFetchedAudio = async (
       fetched: FetchedAudio,
       fetchedSource: ResolvedSource,
       sourceKey: string,
-    ): Promise<FetchedAudio & Pick<KeptAudio, "audioCap">> => {
+    ): Promise<FetchedAudio & Pick<TranscribeOutput, "audioCap" | "audioRetention" | "retainedAudioPath">> => {
       const { keepAudio, maxAudioBytes } = resolveLibrarySettings(config.data);
       if (!keepAudio || !isSiteSource(fetchedSource) || fetched.audio.kind !== "file") return fetched;
-      const kept = await deps.library.keepAudio(sourceKey, fetched.audio.path, maxAudioBytes);
+      const kept = await deps.library.keepAudio(sourceKey, fetched.producerPath ?? fetched.audio.path, maxAudioBytes);
+      if (!kept.success && !fetched.producerPath) return fetched;
       return kept.success
         ? {
             ...fetched,
-            audio: { kind: "file", path: kept.data.audioPath },
+            ...(kept.data.originalPreserved && { audioRetention: "kept", retainedAudioPath: kept.data.audioPath }),
+            audio: kept.data.originalPreserved ? fetched.audio : { ...fetched.audio, path: kept.data.audioPath },
             ...(kept.data.audioCap && { audioCap: kept.data.audioCap }),
           }
-        : fetched;
+        : {
+            ...fetched,
+            audioRetention: kept.error.details?.audioRetention === "skipped" ? "skipped" : "incomplete",
+            ...(maxAudioBytes === undefined ? {} : { audioCap: "unenforced" }),
+          };
     };
     // YouTube and Instagram keys come from the URL, so a cache hit, or a reuse of kept audio, runs no yt-dlp.
     const inputKey = sourceKeyFromInput(input.input);
@@ -230,7 +238,7 @@ const runTranscribe =
       const keptAudio = reusedEarly?.audioPath ?? storedLate?.data?.audioPath;
 
       options?.onProgress?.({ label: "Transcribing audio...", detail: `(${sourceDetail(source)})` });
-      let audio: FetchedAudio & Pick<KeptAudio, "audioCap">;
+      let audio: FetchedAudio & Pick<TranscribeOutput, "audioCap" | "audioRetention" | "retainedAudioPath">;
       if (keptAudio !== undefined) {
         audio = { audio: { kind: "file", path: keptAudio }, release: async () => {} };
       } else {
@@ -274,6 +282,8 @@ const runTranscribe =
       return ok({
         transcriptId: saved.data.transcriptId,
         cacheHit: false,
+        ...(audio.retainedAudioPath && { retainedAudioPath: audio.retainedAudioPath }),
+        ...(audio.audioRetention && { audioRetention: audio.audioRetention }),
         ...(audio.audioCap && { audioCap: audio.audioCap }),
         paths: saved.data.paths,
         format: input.format,

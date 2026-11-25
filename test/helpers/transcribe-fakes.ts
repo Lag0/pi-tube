@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import type { PiTubeError } from "../../src/core/domain/errors.ts";
 import type { TranscriptionSegment } from "../../src/core/domain/transcript/types.ts";
@@ -51,6 +51,10 @@ export const fakeYtDlp =
     if (request.args.includes("--dump-single-json")) {
       if (options.metadataFailure) return { ...exited("", 1), ...options.metadataFailure };
       return exited(JSON.stringify(options.metadata ?? { url: "https://media.example.com/a.m4a" }));
+    }
+    if (request.writeStdout) {
+      request.writeStdout(readFileSync("test/fixtures-media/silence.m4a"));
+      return exited("");
     }
     const template = request.args[request.args.indexOf("-o") + 1] ?? "";
     const file = template.replace("%(id)s.%(ext)s", "media.m4a");

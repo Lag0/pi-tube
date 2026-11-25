@@ -1023,7 +1023,82 @@ describe("audio", () => {
     utimesSync(target, when, when);
   };
 
-  test("keepAudio moves the file into the source directory, and storedSource gives source and audio back", async () => {
+  test.skipIf(!isWindows).each(["audio.m4a", "audio.wav"])(
+    "fresh keep preserves incumbent %s and download",
+    async (name) => {
+      const store = createFileLibraryStore({ libraryDir });
+      const { dir } = await seedSource(store, "aaaaaaaaaaa");
+      const downloaded = audioFile("fresh.m4a");
+      writeFileSync(path.join(dir, name), "incumbent");
+      const result = await store.keepAudio("youtube:aaaaaaaaaaa", downloaded);
+      expect(result.success).toBe(false);
+      expect(readFileSync(path.join(dir, name), "utf8")).toBe("incumbent");
+      expect(readFileSync(downloaded, "utf8")).toBe("x".repeat(10));
+    },
+  );
+
+  test.skipIf(!isWindows)(
+    "a same-name arrival at commit survives native no-replace; only the stage disappears",
+    async () => {
+      const { dir } = await seedSource(createFileLibraryStore({ libraryDir }), "aaaaaaaaaaa");
+      const before = readdirSync(dir);
+      const target = path.join(dir, "audio.m4a");
+      const downloaded = audioFile("fresh.m4a");
+      const keptAt = new Date();
+      vi.spyOn(keptAt, "getTime").mockImplementation(() => {
+        writeFileSync(target, "arrival", { flag: "wx" });
+        return 0;
+      });
+      const store = createFileLibraryStore({ libraryDir, now: () => keptAt });
+      expect((await store.keepAudio("youtube:aaaaaaaaaaa", downloaded)).success).toBe(false);
+      expect(readFileSync(target, "utf8")).toBe("arrival");
+      expect(readFileSync(downloaded, "utf8")).toBe("x".repeat(10));
+      expect(readdirSync(dir).sort()).toEqual([...before, "audio.m4a"].sort());
+    },
+  );
+
+  test.skipIf(!isWindows)("a linked input, reparse parent or volume without private ACLs cannot publish", async () => {
+    const store = createFileLibraryStore({ libraryDir });
+    const { dir } = await seedSource(store, "aaaaaaaaaaa");
+    const downloaded = audioFile("fresh.m4a"),
+      other = path.join(root, "other.m4a");
+    linkSync(downloaded, other);
+    const keep = () => store.keepAudio("youtube:aaaaaaaaaaa", downloaded);
+    expect((await keep()).success).toBe(false);
+    expect(readFileSync(other, "utf8")).toBe("x".repeat(10));
+    rmSync(other);
+    const plain = path.join(root, "plain");
+    renameSync(dir, plain);
+    symlinkSync(plain, dir, "junction");
+    expect((await keep()).success).toBe(false);
+    expect(existsSync(path.join(plain, "audio.m4a"))).toBe(false);
+    rmSync(dir);
+    renameSync(plain, dir);
+    const volume = await import("../../../src/infrastructure/library/windows-handle.ts");
+    const probe = vi.spyOn(volume, "localVolumeFlags").mockReturnValue(0);
+    try {
+      expect((await keep()).success).toBe(false);
+    } finally {
+      probe.mockRestore();
+    }
+    expect(existsSync(path.join(dir, "audio.m4a"))).toBe(false);
+    expect(readFileSync(downloaded, "utf8")).toBe("x".repeat(10));
+  });
+
+  test.skipIf(!isWindows)("first keep copies original TS bytes without a provider remux", async () => {
+    const store = createFileLibraryStore({ libraryDir });
+    const { dir } = await seedSource(store, "aaaaaaaaaaa");
+    const downloaded = audioFile("abc.ts");
+    const bytes = readFileSync("test/fixtures-media/silence.ts.bin");
+    writeFileSync(downloaded, bytes);
+    const kept = await store.keepAudio("youtube:aaaaaaaaaaa", downloaded);
+    expect(kept.success).toBe(true);
+    expect(readFileSync(path.join(dir, "audio.ts"))).toEqual(bytes);
+    expect(readFileSync(downloaded)).toEqual(bytes);
+    expect(existsSync(path.join(dir, "audio.m4a"))).toBe(false);
+  });
+
+  test("keepAudio publishes the download and only enables reuse on the legacy backend", async () => {
     const store = createFileLibraryStore({ libraryDir });
     const { dir } = await seedSource(store, "aaaaaaaaaaa");
     const downloaded = audioFile("abc.m4a");
@@ -1031,8 +1106,11 @@ describe("audio", () => {
     const kept = await store.keepAudio("youtube:aaaaaaaaaaa", downloaded);
     const stored = await store.storedSource("youtube:aaaaaaaaaaa");
 
-    expect(kept).toEqual({ success: true, data: { audioPath: path.join(dir, "audio.m4a") } });
-    expect(existsSync(downloaded)).toBe(false);
+    expect(kept).toEqual({
+      success: true,
+      data: { audioPath: path.join(dir, "audio.m4a"), ...(isWindows && { originalPreserved: true }) },
+    });
+    expect(existsSync(downloaded)).toBe(isWindows);
     if (!isWindows) expect(statSync(path.join(dir, "audio.m4a")).mode & 0o777).toBe(0o600);
     expect(stored.success ? stored.data : undefined).toEqual({
       source: {
@@ -1041,7 +1119,7 @@ describe("audio", () => {
         normalizedUrl: "https://www.youtube.com/watch?v=aaaaaaaaaaa",
         metadata: { platform: "Youtube", mediaId: "aaaaaaaaaaa", title: "Video aaaaaaaaaaa" },
       },
-      audioPath: path.join(dir, "audio.m4a"),
+      ...(!isWindows && { audioPath: path.join(dir, "audio.m4a") }),
     });
   });
 
@@ -1070,7 +1148,10 @@ describe("audio", () => {
     expect(readFileSync(path.join(old.dir, "note.txt"), "utf8")).toBe("personal note");
     const audioPath = path.join(fresh.dir, "audio.m4a");
     expect(readFileSync(audioPath, "utf8")).toBe("xxxx");
-    expect(kept).toEqual({ success: true, data: { audioPath, audioCap: "unenforced" } });
+    expect(kept).toEqual({
+      success: true,
+      data: { audioPath, audioCap: "unenforced", ...(isWindows && { originalPreserved: true }) },
+    });
     expect(transcriptsLeft()).toBe(2);
   });
 
@@ -1084,7 +1165,28 @@ describe("audio", () => {
     expect(audioLeft()).toHaveLength(1);
   });
 
-  test("across file systems (EXDEV) the audio is copied through a temp file and nothing partial is left", async () => {
+  test.skipIf(!isWindows)(
+    "native same-volume copy preserves nonuniform bytes across multiple chunks and keep time",
+    async () => {
+      const now = new Date("2026-06-01T00:00:00Z");
+      const store = createFileLibraryStore({ libraryDir, now: () => now });
+      await store.prepare();
+      const downloaded = path.join(root, "large.m4a");
+      const bytes = Buffer.alloc(2 * 256 * 1024 + 91);
+      for (let i = 0; i < bytes.length; i++) bytes[i] = (i % 251) ^ ((i >>> 18) * 31);
+      writeFileSync(downloaded, bytes);
+      const kept = await store.keepAudio("youtube:aaaaaaaaaaa", downloaded);
+      expect(kept.success).toBe(true);
+      if (!kept.success) throw new Error(kept.error.message);
+      expect(readFileSync(kept.data.audioPath).equals(bytes)).toBe(true);
+      expect(statSync(kept.data.audioPath).mtime.toISOString()).toBe(now.toISOString());
+      expect(readFileSync(downloaded).equals(bytes)).toBe(true);
+      const { dir } = await seedSource(store, "aaaaaaaaaaa");
+      expect(readdirSync(dir)).toContain("audio.m4a");
+    },
+  );
+
+  test.skipIf(isWindows)("legacy injected EXDEV copies through a temp file and leaves nothing partial", async () => {
     const crossDevice = {
       rename: async (from: string, to: string) => {
         if (path.dirname(from) !== path.dirname(to)) throw Object.assign(new Error("EXDEV"), { code: "EXDEV" });
@@ -1097,10 +1199,13 @@ describe("audio", () => {
 
     const kept = await store.keepAudio("youtube:aaaaaaaaaaa", downloaded);
 
-    expect(kept).toEqual({ success: true, data: { audioPath: path.join(dir, "audio.m4a") } });
+    expect(kept).toEqual({
+      success: true,
+      data: { audioPath: path.join(dir, "audio.m4a"), ...(isWindows && { originalPreserved: true }) },
+    });
     expect(readFileSync(path.join(dir, "audio.m4a"), "utf8")).toBe("x".repeat(10));
     expect(readdirSync(dir).filter((name) => name.endsWith(".tmp"))).toEqual([]);
-    expect(existsSync(downloaded)).toBe(false);
+    expect(existsSync(downloaded)).toBe(isWindows);
   });
 
   test("audio prune preserves even audio created by keepAudio without independent evidence", async () => {
