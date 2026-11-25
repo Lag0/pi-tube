@@ -13,7 +13,7 @@ ffmpeg -f lavfi -i color=size=16x16:rate=10 -i silence.m4a -shortest -c:v libx26
 ffmpeg -i muxed.mp4 -c copy -f mpegts muxed.ts.bin
 ffmpeg -i muxed.mp4 -an -c copy video-only.mp4
 ffmpeg -i muxed.mp4 -c:v libvpx-vp9 -c:a libopus muxed.webm
-ffmpeg -i silence.webm -c copy unsupported.ogg
-ffmpeg -i silence.m4a -c:a flac -metadata_header_padding 0 unsupported.flac
-ffmpeg -i silence.m4a -c:a pcm_s16le unsupported.wav
+ffmpeg -i silence.webm -c copy silence.ogg
+ffmpeg -i silence.m4a -c:a flac -metadata_header_padding 0 silence.flac
+ffmpeg -i silence.m4a -c:a pcm_s16le silence.wav
 ```

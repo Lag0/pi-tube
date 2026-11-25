@@ -432,6 +432,9 @@ describe("fetchAudio", () => {
       "silence.m4a",
       "silence.webm",
       "silence.mp3",
+      "silence.ogg",
+      "silence.flac",
+      "silence.wav",
       "alac.m4a",
       "vorbis.webm",
       "streaming.webm",
@@ -518,6 +521,21 @@ describe("fetchAudio", () => {
       });
       expect(readdirSync(tmpDir)).toEqual([]);
     });
+    test.each(["flac", "ogg", "wav"])("%s rejects contradictions even with intact outer extents", async (ext) => {
+      const bytes = fixture(ext);
+      if (ext === "flac") bytes.writeUInt32BE(3199, 22); // STREAMINFO promises fewer samples than the complete frames.
+      if (ext === "ogg") bytes.writeUInt8(bytes.readUInt8(bytes.length - 1) ^ 1, bytes.length - 1); // Invalid page CRC.
+      if (ext === "wav") bytes.writeUInt32LE(6399, bytes.indexOf("data") + 4); // Fits with padding, not a whole PCM frame.
+      const { run } = fakeRun((req) => {
+        req.writeStdout?.(bytes);
+        return exited("");
+      });
+      expect(await fetcherWith(run).fetchAudio(youtubeSource, SETTINGS)).toMatchObject({
+        success: false,
+        error: { code: "DOWNLOAD_FAILED" },
+      });
+      expect(readdirSync(tmpDir)).toEqual([]);
+    });
     test.each([0, 3])("checks cap before whole block after %i bytes", async (prefix) => {
       const { run } = fakeRun((req) => {
         req.writeStdout?.(Buffer.alloc(prefix));
@@ -535,20 +553,17 @@ describe("fetchAudio", () => {
       });
       expect(readdirSync(tmpDir)).toEqual([]);
     });
-    test.each(["two-tracks.webm", "video-only.mp4", "unsupported.ogg", "unsupported.flac", "unsupported.wav"])(
-      "refuses %s before handoff",
-      async (file) => {
-        const { run } = fakeRun((req) => {
-          req.writeStdout?.(readFileSync(`test/fixtures-media/${file}`));
-          return exited("audio.webm");
-        });
-        expect(await fetcherWith(run).fetchAudio(youtubeSource, SETTINGS)).toMatchObject({
-          success: false,
-          error: { code: "DOWNLOAD_FAILED" },
-        });
-        expect(readdirSync(tmpDir)).toEqual([]);
-      },
-    );
+    test.each(["two-tracks.webm", "video-only.mp4"])("refuses %s before handoff", async (file) => {
+      const { run } = fakeRun((req) => {
+        req.writeStdout?.(readFileSync(`test/fixtures-media/${file}`));
+        return exited("audio.webm");
+      });
+      expect(await fetcherWith(run).fetchAudio(youtubeSource, SETTINGS)).toMatchObject({
+        success: false,
+        error: { code: "DOWNLOAD_FAILED" },
+      });
+      expect(readdirSync(tmpDir)).toEqual([]);
+    });
     test.skipIf(spawnSync("ffmpeg", ["-version"], { stdio: "ignore" }).status !== 0).each([
       ["silence.ts.bin", ".m4a"],
       ["muxed.ts.bin", ".mp4"],

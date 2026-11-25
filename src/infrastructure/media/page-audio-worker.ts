@@ -119,13 +119,195 @@ function completeMp3(bytes: Buffer) {
   );
 }
 
+function completeWave(bytes: Buffer) {
+  if (bytes.toString("latin1", 8, 12) !== "WAVE" || bytes.readUInt32LE(4) !== bytes.length - 8) return false;
+  let align = 0;
+  let data = false;
+  for (let at = 12; at < bytes.length; ) {
+    const id = bytes.toString("latin1", at, at + 4);
+    const size = bytes.readUInt32LE(at + 4);
+    at += 8;
+    if (at + size + (size % 2) > bytes.length) return false;
+    if (id === "fmt ") {
+      if (align || size < 16 || bytes.readUInt16LE(at) !== 1) return false;
+      const channels = bytes.readUInt16LE(at + 2);
+      const rate = bytes.readUInt32LE(at + 4);
+      align = bytes.readUInt16LE(at + 12);
+      if (
+        !align ||
+        !rate ||
+        align !== channels * Math.ceil(bytes.readUInt16LE(at + 14) / 8) ||
+        bytes.readUInt32LE(at + 8) !== align * rate
+      )
+        return false;
+    } else if (id === "data") {
+      if (data || !align || !size || size % align) return false;
+      data = true;
+    }
+    at += size + (size % 2);
+  }
+  return data;
+}
+
+// Left-align the polynomial so the same byte update works for CRC-8, -16 and -32.
+function crcTable(polynomial: number) {
+  return Uint32Array.from({ length: 256 }, (_, byte) => {
+    let crc = byte << 24;
+    for (let bit = 0; bit < 8; bit++) crc = (crc << 1) ^ (crc < 0 ? polynomial : 0);
+    return crc;
+  });
+}
+const oggCrc = crcTable(0x04c11db7);
+const frameCrc = crcTable(0x80050000);
+const headerCrc = crcTable(0x07000000);
+function crcByte(table: Uint32Array, crc: number, byte: number) {
+  return ((crc << 8) ^ (table[(crc >>> 24) ^ byte] ?? 0)) >>> 0;
+}
+
+function completeOpus(bytes: Buffer) {
+  const serial = bytes.readUInt32LE(14);
+  let lastGranule = 0n;
+  let sequence = 0,
+    packets = 0,
+    continued = false;
+  for (let at = 0; at < bytes.length; ) {
+    const flags = bytes.readUInt8(at + 5);
+    if (
+      bytes.toString("latin1", at, at + 4) !== "OggS" ||
+      bytes[at + 4] !== 0 ||
+      flags > 7 ||
+      Boolean(flags & 1) !== continued ||
+      Boolean(flags & 2) !== (sequence === 0) ||
+      bytes.readUInt32LE(at + 14) !== serial ||
+      bytes.readUInt32LE(at + 18) !== sequence++
+    )
+      return false;
+    const priorPackets = packets;
+    const segments = bytes.readUInt8(at + 26);
+    let end = at + 27 + segments;
+    for (let i = at + 27; i < at + 27 + segments; i++) {
+      const length = bytes.readUInt8(i);
+      if (
+        !continued &&
+        (!length || (packets < 2 && bytes.toString("latin1", end, end + 8) !== (packets ? "OpusTags" : "OpusHead")))
+      )
+        return false;
+      end += length;
+      continued = length === 255;
+      if (!continued) packets++;
+    }
+    if (end > bytes.length || Boolean(flags & 4) !== (end === bytes.length)) return false;
+    const granule = bytes.readBigInt64LE(at + 6);
+    if (sequence === 1 && (packets !== 1 || continued || granule !== 0n)) return false;
+    if (packets === priorPackets) {
+      if (granule !== -1n) return false;
+    } else {
+      if (granule < lastGranule || (packets <= 2 && granule !== 0n)) return false;
+      lastGranule = granule;
+    }
+    let crc = 0;
+    for (let i = at; i < end; i++) crc = crcByte(oggCrc, crc, i >= at + 22 && i < at + 26 ? 0 : bytes.readUInt8(i));
+    if (crc !== bytes.readUInt32LE(at + 22)) return false;
+    at = end;
+  }
+  return !continued && packets > 2 && lastGranule > 0n;
+}
+
+// Use frame/header CRCs and block counts, not STREAMINFO duration alone. No sample decoding.
+function completeFlac(bytes: Buffer) {
+  if ((bytes.readUInt8(4) & 127) !== 0 || bytes.readUIntBE(5, 3) !== 34) return false;
+  const minBlock = bytes.readUInt16BE(8),
+    maxBlock = bytes.readUInt16BE(10);
+  const sampleRate = bytes.readUIntBE(18, 3) >> 4;
+  const channels = ((bytes.readUInt8(20) >> 1) & 7) + 1;
+  const depth = ((bytes.readUInt16BE(20) >> 4) & 31) + 1;
+  if (minBlock < 16 || minBlock > maxBlock || !sampleRate || depth < 4) return false;
+  const total = bytes.readUIntBE(21, 5) % 2 ** 36;
+  const minSize = bytes.readUIntBE(12, 3),
+    maxSize = bytes.readUIntBE(15, 3);
+  let at = 4;
+  for (;;) {
+    const type = bytes.readUInt8(at);
+    if ((type & 127) === 127 || (at > 4 && !(type & 127))) return false;
+    at += 4 + bytes.readUIntBE(at + 1, 3);
+    if (type & 128) break;
+  }
+  let samples = 0,
+    frames = 0;
+  while (at < bytes.length) {
+    const start = at;
+    const sync = bytes.readUInt16BE(at);
+    const spec = bytes.readUInt8(at + 2),
+      block = spec >> 4,
+      rate = spec & 15;
+    const channel = bytes.readUInt8(at + 3);
+    if ((sync & 0xfffe) !== 0xfff8 || !block || rate === 15 || channel >> 4 > 10 || channel & 1 || (channel & 14) === 6)
+      return false;
+    const assignment = channel >> 4;
+    const frameDepth = [depth, 8, 12, 0, 16, 20, 24, 32][(channel >> 1) & 7];
+    if (channels !== (assignment < 8 ? assignment + 1 : 2) || depth !== frameDepth) return false;
+    at += 4;
+    const first = bytes.readUInt8(at++);
+    const width = Math.clz32((~first & 255) << 24);
+    if (width === 1 || width > 7) return false;
+    let number = first & (127 >> width);
+    for (let i = 1; i < width; i++) {
+      const next = bytes.readUInt8(at++);
+      if ((next & 192) !== 128) return false;
+      number = number * 64 + (next & 63);
+    }
+    if (number !== (sync & 1 ? samples : frames)) return false;
+    const count =
+      block === 6 || block === 7
+        ? bytes.readUIntBE(at, block - 5) + 1
+        : block === 1
+          ? 192
+          : block < 6
+            ? 576 << (block - 2)
+            : 256 << (block - 8);
+    at += block === 6 || block === 7 ? block - 5 : 0;
+    const frameRate =
+      rate === 12
+        ? bytes.readUInt8(at) * 1000
+        : rate >= 13
+          ? bytes.readUInt16BE(at) * (rate === 14 ? 10 : 1)
+          : [sampleRate, 88200, 176400, 192000, 8000, 16000, 22050, 24000, 32000, 44100, 48000, 96000][rate];
+    if (count > maxBlock || frameRate !== sampleRate) return false;
+    at += rate === 12 ? 1 : rate >= 13 ? 2 : 0;
+    let header = 0,
+      crc = 0;
+    for (let i = start; i <= at; i++) header = crcByte(headerCrc, header, bytes.readUInt8(i));
+    if (header || at + 4 > bytes.length) return false;
+    // A frame ends at EOF or the next sync, with a matching CRC-16 footer.
+    const minEnd = Math.max(at + 4, start + minSize);
+    for (at = start; at < bytes.length; ) {
+      crc = crcByte(frameCrc, crc, bytes.readUInt8(at++));
+      if (maxSize && at - start > maxSize) return false;
+      if (!crc && at >= minEnd && (at === bytes.length || (bytes[at] === 255 && ((bytes[at + 1] ?? 0) & 254) === 248)))
+        break;
+    }
+    if (crc || at < minEnd || (at < bytes.length && count < minBlock)) return false;
+    frames++;
+    samples += count;
+  }
+  return frames > 0 && (!total || samples === total);
+}
+
+function pageAudioMime(bytes: Buffer) {
+  switch (bytes.toString("latin1", 0, 4)) {
+    case "OggS":
+      return "audio/ogg";
+    case "fLaC":
+      return "audio/flac";
+    case "RIFF":
+      return "audio/wav";
+  }
+  if (bytes.readUInt32BE(0) === 0x1a45dfa3) return "audio/webm";
+  return bytes.toString("latin1", 4, 8) === "ftyp" ? "audio/mp4" : "audio/mpeg";
+}
+
 async function pageAudioExtension(bytes: Buffer) {
-  const mime =
-    bytes.readUInt32BE(0) === 0x1a45dfa3
-      ? "audio/webm"
-      : bytes.toString("latin1", 4, 8) === "ftyp"
-        ? "audio/mp4"
-        : "audio/mpeg";
+  const mime = pageAudioMime(bytes);
   if (mime === "audio/mpeg" && !completeMp3(bytes)) throw new Error("Unsupported or incomplete MPEG audio");
   const { format, quality } = await parseBuffer(bytes, mime, {
     duration: true,
@@ -143,6 +325,12 @@ async function pageAudioExtension(bytes: Buffer) {
     tracks.some((t) => t.type !== 1 && t.type !== 2)
   )
     throw new Error("Missing or ambiguous page audio");
+  if (!video && mime === "audio/ogg" && format.container === "Ogg" && format.codec === "Opus" && completeOpus(bytes))
+    return "ogg";
+  if (!video && mime === "audio/flac" && format.container === "FLAC" && format.codec === "FLAC" && completeFlac(bytes))
+    return "flac";
+  if (!video && mime === "audio/wav" && format.container === "WAVE" && format.codec === "PCM" && completeWave(bytes))
+    return "wav";
   if (
     mime === "audio/webm" &&
     format.container === "EBML/webm" &&

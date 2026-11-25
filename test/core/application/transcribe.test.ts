@@ -749,14 +749,21 @@ describe("kept audio", () => {
   );
 
   test.skipIf(process.platform !== "win32").each([
-    { occupied: true, keep: true, fallback: false, ts: true },
+    ...["silence.ogg", "silence.flac", "silence.wav"].map((direct) => ({
+      occupied: false,
+      keep: true,
+      fallback: false,
+      ts: false,
+      direct,
+    })),
+    { occupied: true, keep: true, fallback: false, ts: true, direct: undefined },
     { occupied: false, keep: true, fallback: false },
     { occupied: true, keep: true, fallback: false },
     { occupied: true, keep: true, fallback: true },
     { occupied: false, keep: false, fallback: true },
   ])(
     "private provider input and ordinary retry ($occupied, $keep, $fallback)",
-    async ({ occupied, keep, fallback, ts }) => {
+    async ({ occupied, keep, fallback, ts, direct }) => {
       const { stt, deps } = setup({
         env: { DEEPGRAM_API_KEY: "dg" },
         config: config({ library: { keep_audio: keep } }),
@@ -764,9 +771,9 @@ describe("kept audio", () => {
       const tmpDir = path.join(outputDir, "tmp");
       mkdirSync(tmpDir);
       const warning = vi.spyOn(process, "emitWarning").mockImplementation(() => {});
-      const fixture = fallback && occupied ? "muxed.mp4" : "silence.m4a";
+      const fixture = direct ?? (fallback && occupied ? "muxed.mp4" : "silence.m4a");
       const bytes = readFileSync(`test/fixtures-media/${fixture}`);
-      const producer = occupied && !ts ? bytes : readFileSync("test/fixtures-media/silence.ts.bin");
+      const producer = direct || (occupied && !ts) ? bytes : readFileSync("test/fixtures-media/silence.ts.bin");
       const residue = fallback && occupied;
       const unusable = path.join(outputDir, "not-a-directory");
       writeFileSync(unusable, "fixture");
@@ -790,7 +797,7 @@ describe("kept audio", () => {
           },
         });
         const dir = path.join(outputDir, sourceDirName("youtube:jNQXAC9IVRw"));
-        const retained = path.join(dir, occupied ? "audio.m4a" : "audio.ts");
+        const retained = path.join(dir, direct ? `audio${path.extname(direct)}` : occupied ? "audio.m4a" : "audio.ts");
         if (occupied) {
           mkdirSync(dir);
           writeFileSync(retained, "incumbent");
